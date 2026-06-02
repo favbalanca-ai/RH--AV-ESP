@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 // ── Cole aqui a URL do seu Google Apps Script publicado ──────────
-https://script.google.com/macros/s/AKfycbxayJeiQeUeHNfl0oz1xcJh6xzymXLREH-wosmRaLHTazaV6fo62y0bMgivnJTyv1oP/exec
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxayJeiQeUeHNfl0oz1xcJh6xzymXLREH-wosmRaLHTazaV6fo62y0bMgivnJTyv1oP/exec'
 
 // ── Estado global ────────────────────────────────────────────────
 let USUARIO   = null
