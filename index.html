@@ -11,21 +11,14 @@
 </head>
 <body>
 
-<!-- LOGIN -->
 <div id="tela-login">
   <div class="login-wrap">
     <div class="login-logo">🌿</div>
     <h1 class="login-titulo">Fazenda Água Viva</h1>
     <p class="login-sub">Sistema SST — Acesso Restrito</p>
     <form id="form-login" style="display:flex;flex-direction:column;gap:10px">
-      <div class="campo-grupo">
-        <label>Usuário</label>
-        <input type="text" id="login-user" placeholder="seu usuário" autocomplete="username" required>
-      </div>
-      <div class="campo-grupo">
-        <label>Senha</label>
-        <input type="password" id="login-senha" placeholder="••••••••" autocomplete="current-password" required>
-      </div>
+      <div class="campo-grupo"><label>Usuário</label><input type="text" id="login-user" placeholder="seu usuário" autocomplete="username" required></div>
+      <div class="campo-grupo"><label>Senha</label><input type="password" id="login-senha" placeholder="••••••••" autocomplete="current-password" required></div>
       <div id="login-erro" class="alerta erro" style="display:none"></div>
       <button type="submit" class="btn-primario w-full" id="btn-login" style="margin-top:4px">
         <i class="ti ti-login" aria-hidden="true"></i> Entrar
@@ -34,18 +27,14 @@
   </div>
 </div>
 
-<!-- APP -->
 <div id="tela-app" style="display:none">
-
   <header class="app-header">
     <div>
       <p class="app-sub">Fazenda Água Viva — SST</p>
       <h1 class="app-titulo" id="titulo-pagina">Início</h1>
     </div>
     <div class="header-actions">
-      <button onclick="sincronizarManual()" id="btn-sync" class="btn-sync" title="Sincronizar assinaturas">
-        <i class="ti ti-refresh" aria-hidden="true"></i>
-      </button>
+      <button onclick="sincronizarManual()" id="btn-sync" class="btn-sync" title="Sincronizar assinaturas"><i class="ti ti-refresh" aria-hidden="true"></i></button>
       <button onclick="logout()" class="btn-sair">Sair</button>
     </div>
   </header>
@@ -60,68 +49,29 @@
 
     <!-- INÍCIO -->
     <div id="pg-inicio" class="pagina ativa">
-      <!-- Lembretes de assinaturas pendentes -->
       <div id="lembretes-wrap" style="display:none;margin-bottom:10px"></div>
-
       <div class="cards-grid">
-        <div class="card-stat verde">
-          <i class="ti ti-users stat-icone" aria-hidden="true"></i>
-          <span class="stat-num" id="num-funcs">—</span>
-          <span class="stat-label">Ativos</span>
-        </div>
-        <div class="card-stat vermelho">
-          <i class="ti ti-circle-x stat-icone" style="color:var(--red-text)" aria-hidden="true"></i>
-          <span class="stat-num" id="num-vencidos">—</span>
-          <span class="stat-label">Exames vencidos</span>
-        </div>
-        <div class="card-stat amarelo">
-          <i class="ti ti-alert-triangle stat-icone" style="color:var(--amber-text)" aria-hidden="true"></i>
-          <span class="stat-num" id="num-avencer">—</span>
-          <span class="stat-label">A vencer (60d)</span>
-        </div>
-        <div class="card-stat amarelo">
-          <i class="ti ti-shield stat-icone" style="color:var(--amber-text)" aria-hidden="true"></i>
-          <span class="stat-num" id="num-epi">—</span>
-          <span class="stat-label">EPI p/ repor</span>
-        </div>
+        <div class="card-stat verde"><i class="ti ti-users stat-icone" aria-hidden="true"></i><span class="stat-num" id="num-funcs">—</span><span class="stat-label">Ativos</span></div>
+        <div class="card-stat vermelho"><i class="ti ti-circle-x stat-icone" style="color:var(--red-text)" aria-hidden="true"></i><span class="stat-num" id="num-vencidos">—</span><span class="stat-label">Exames vencidos</span></div>
+        <div class="card-stat amarelo"><i class="ti ti-alert-triangle stat-icone" style="color:var(--amber-text)" aria-hidden="true"></i><span class="stat-num" id="num-avencer">—</span><span class="stat-label">A vencer</span></div>
+        <div class="card-stat amarelo"><i class="ti ti-shield stat-icone" style="color:var(--amber-text)" aria-hidden="true"></i><span class="stat-num" id="num-epi">—</span><span class="stat-label">EPI p/ repor</span></div>
       </div>
-
       <div class="card">
         <div class="card-titulo"><i class="ti ti-bolt" aria-hidden="true"></i> Ações rápidas</div>
         <div class="acoes-grid">
-          <button class="btn-acao" onclick="irPara('novo-func')">
-            <div class="acao-icon green"><i class="ti ti-user-plus" aria-hidden="true"></i></div>
-            <span class="label">Novo funcionário</span>
-          </button>
-          <button class="btn-acao" onclick="irPara('lista-func')">
-            <div class="acao-icon blue"><i class="ti ti-users" aria-hidden="true"></i></div>
-            <span class="label">Funcionários</span>
-          </button>
-          <button class="btn-acao" onclick="irPara('exames')">
-            <div class="acao-icon amber"><i class="ti ti-stethoscope" aria-hidden="true"></i></div>
-            <span class="label">Exames</span>
-          </button>
-          <button class="btn-acao" onclick="irPara('epi')">
-            <div class="acao-icon coral"><i class="ti ti-shield" aria-hidden="true"></i></div>
-            <span class="label">Entregar EPI</span>
-          </button>
-          <button class="btn-acao" onclick="irPara('fracionar')">
-            <div class="acao-icon purple"><i class="ti ti-file-invoice" aria-hidden="true"></i></div>
-            <span class="label">Folha pgto.</span>
-          </button>
+          <button class="btn-acao" onclick="irPara('novo-func')"><div class="acao-icon green"><i class="ti ti-user-plus" aria-hidden="true"></i></div><span class="label">Novo funcionário</span></button>
+          <button class="btn-acao" onclick="irPara('lista-func')"><div class="acao-icon blue"><i class="ti ti-users" aria-hidden="true"></i></div><span class="label">Funcionários</span></button>
+          <button class="btn-acao" onclick="irPara('exames')"><div class="acao-icon amber"><i class="ti ti-stethoscope" aria-hidden="true"></i></div><span class="label">Exames</span></button>
+          <button class="btn-acao" onclick="irPara('epi')"><div class="acao-icon coral"><i class="ti ti-shield" aria-hidden="true"></i></div><span class="label">Entregar EPI</span></button>
+          <button class="btn-acao" onclick="irPara('fracionar')"><div class="acao-icon purple"><i class="ti ti-file-invoice" aria-hidden="true"></i></div><span class="label">Folha pgto.</span></button>
         </div>
       </div>
     </div>
 
     <!-- LISTA FUNCIONÁRIOS -->
     <div id="pg-lista-func" class="pagina">
-      <button class="btn-primario w-full mb-3" onclick="irPara('novo-func')">
-        <i class="ti ti-user-plus" aria-hidden="true"></i> Novo Funcionário
-      </button>
-      <div class="search-bar">
-        <i class="ti ti-search" aria-hidden="true"></i>
-        <input type="text" id="busca-func" placeholder="Buscar funcionário..." oninput="filtrarFuncionarios(this.value)">
-      </div>
+      <button class="btn-primario w-full mb-3" onclick="irPara('novo-func')"><i class="ti ti-user-plus" aria-hidden="true"></i> Novo Funcionário</button>
+      <div class="search-bar"><i class="ti ti-search" aria-hidden="true"></i><input type="text" id="busca-func" placeholder="Buscar funcionário..." oninput="filtrarFuncionarios(this.value)"></div>
       <div id="lista-funcionarios" class="lista"></div>
     </div>
 
@@ -130,7 +80,7 @@
       <div class="card">
         <form id="form-funcionario" class="formulario">
           <div class="campo-grupo"><label>Nome Completo *</label><input type="text" name="nome_completo" required placeholder="Nome como na CTPS"></div>
-          <div class="campo-grupo"><label>Nome Curto</label><input type="text" name="nome_curto" placeholder="Como chamam (ex: Rafael)"></div>
+          <div class="campo-grupo"><label>Nome Curto</label><input type="text" name="nome_curto" placeholder="Como chamam"></div>
           <div class="dois-col">
             <div class="campo-grupo"><label>CPF *</label><input type="text" name="cpf" required placeholder="000.000.000-00"></div>
             <div class="campo-grupo"><label>RG</label><input type="text" name="rg"></div>
@@ -139,19 +89,14 @@
             <div class="campo-grupo"><label>Data Nascimento</label><input type="date" name="data_nascimento"></div>
             <div class="campo-grupo"><label>Telefone (WhatsApp) *</label><input type="tel" name="telefone" required placeholder="(62) 99999-9999"></div>
           </div>
-          <div class="campo-grupo"><label>Empregador</label><input type="text" name="empregador" placeholder="ex: Jovane Gatto Cossul"></div>
-          <div class="campo-grupo">
-            <label>Unidade *</label>
-            <select name="unidade" required>
-              <option value="">Selecione...</option>
-              <option>Fazenda Água Viva</option><option>Fazenda Roncador</option><option>Fazenda Espora</option>
-            </select>
+          <div class="campo-grupo"><label>Empregador</label><input type="text" name="empregador"></div>
+          <div class="campo-grupo"><label>Unidade *</label>
+            <select name="unidade" required><option value="">Selecione...</option><option>Fazenda Água Viva</option><option>Fazenda Roncador</option><option>Fazenda Espora</option></select>
           </div>
           <div class="campo-grupo"><label>Função *</label><input type="text" name="funcao" required placeholder="ex: Tratorista, Cozinheira..."></div>
-          <div class="campo-grupo">
-            <label>Perfil SST * <small>(define exames automáticos)</small></label>
+          <div class="campo-grupo"><label>Perfil SST * <small>(define exames automáticos)</small></label>
             <select name="perfil_sst" required>
-              <option value="">Selecione o perfil...</option>
+              <option value="">Selecione...</option>
               <option value="CASEIRO_AGROPECUARIO">Trab. Agrícola / Caseiro</option>
               <option value="OPERADOR_MAQUINAS_AGRICOLAS">Operador de Máquinas</option>
               <option value="PULVERIZACAO_AGRICOLA">Pulverização Agrícola</option>
@@ -175,9 +120,7 @@
           <div class="info-box"><i class="ti ti-info-circle" style="vertical-align:-2px" aria-hidden="true"></i> Ao salvar, os exames do perfil são cadastrados automaticamente e a pasta do Drive é criada.</div>
           <div class="dois-col mt-2">
             <button type="button" class="btn-secundario" onclick="irPara('lista-func')">Cancelar</button>
-            <button type="submit" class="btn-primario" id="btn-salvar-func">
-              <i class="ti ti-device-floppy" aria-hidden="true"></i> Cadastrar
-            </button>
+            <button type="submit" class="btn-primario" id="btn-salvar-func"><i class="ti ti-device-floppy" aria-hidden="true"></i> Cadastrar</button>
           </div>
         </form>
       </div>
@@ -196,42 +139,55 @@
 
     <!-- EPI -->
     <div id="pg-epi" class="pagina">
+      <!-- Estoque -->
       <div class="card mb-3">
         <div class="card-titulo"><i class="ti ti-box" aria-hidden="true"></i> Estoque atual</div>
-        <div id="lista-estoque" class="lista-compacta"></div>
+        <div id="lista-estoque"></div>
       </div>
 
+      <!-- Nova entrega -->
       <div class="card">
         <div class="card-titulo"><i class="ti ti-send" aria-hidden="true"></i> Nova entrega</div>
-        <form id="form-epi" class="formulario">
-          <div class="campo-grupo">
-            <label>Funcionário *</label>
-            <select name="func_id" id="sel-func-epi" required><option value="">Selecione...</option></select>
-          </div>
-          <div class="campo-grupo">
-            <label>Motivo</label>
-            <select name="motivo">
-              <option>Admissional</option><option>Reposição</option><option>Desgaste</option><option>Perda</option><option>Troca de Tamanho</option>
-            </select>
-          </div>
-          <div class="campo-grupo">
-            <label>Adicionar EPI ao recibo</label>
-            <select id="sel-epi-adicionar" onchange="adicionarItemEpi(this)">
-              <option value="">Selecione um EPI...</option>
-            </select>
-          </div>
-          <div id="itens-epi" class="itens-selecionados" style="display:none">
-            <p class="itens-titulo">EPIs selecionados:</p>
-            <div id="lista-itens-epi"></div>
-          </div>
-          <div class="info-box"><i class="ti ti-brand-whatsapp" style="vertical-align:-2px" aria-hidden="true"></i> O recibo será enviado via WhatsApp + ZapSign. O link também aparece aqui.</div>
-          <button type="submit" class="btn-primario w-full mt-2" id="btn-enviar-epi">
-            <i class="ti ti-brand-whatsapp" aria-hidden="true"></i> Gerar recibo e enviar
-          </button>
-        </form>
+
+        <!-- Seleção de funcionário -->
+        <div id="sel-func-display" class="func-selector" onclick="abrirSeletorFunc()">
+          <div class="avatar" id="sel-func-avatar">?</div>
+          <span id="sel-func-nome" style="flex:1;font-size:13px;color:var(--text-secondary)">Selecione o funcionário...</span>
+          <i class="ti ti-chevron-down" style="color:var(--text-hint);font-size:16px" aria-hidden="true"></i>
+        </div>
+        <select id="sel-func-epi-hidden" style="display:none" onchange="selecionarFuncEpi(this.value)">
+          <option value="">Selecione...</option>
+        </select>
+
+        <!-- Motivo -->
+        <div class="campo-grupo" style="margin-top:8px">
+          <label>Motivo da entrega</label>
+          <select id="sel-motivo-epi">
+            <option>Admissional</option><option>Reposição</option><option>Desgaste</option><option>Perda</option><option>Troca de Tamanho</option>
+          </select>
+        </div>
+
+        <!-- EPIs selecionados -->
+        <div id="epi-itens-lista" style="margin-top:8px"></div>
+
+        <!-- Adicionar EPI -->
+        <div id="btn-add-epi-wrap" onclick="abrirSeletorEpi()" class="add-epi-trigger">
+          <i class="ti ti-plus" style="font-size:14px" aria-hidden="true"></i>
+          <span>Adicionar EPI ao recibo</span>
+        </div>
+        <select id="sel-epi-hidden" style="display:none" onchange="adicionarItemEpi(this)">
+          <option value="">Selecione um EPI...</option>
+        </select>
+
+        <div class="info-box" style="margin-top:8px"><i class="ti ti-brand-whatsapp" style="vertical-align:-2px" aria-hidden="true"></i> Recibo gerado em PDF e enviado via WhatsApp + ZapSign. Link também aparece aqui.</div>
+        <button id="btn-enviar-epi" onclick="enviarEpi()" class="btn-primario w-full" style="margin-top:8px">
+          <i class="ti ti-brand-whatsapp" aria-hidden="true"></i>
+          <span id="btn-epi-label">Gerar recibo e enviar</span>
+        </button>
         <div id="link-assinatura-epi" class="link-assinatura-box"></div>
       </div>
 
+      <!-- Histórico -->
       <div class="card mt-3">
         <div class="card-titulo"><i class="ti ti-history" aria-hidden="true"></i> Últimas entregas</div>
         <div id="lista-entregas" class="lista"></div>
@@ -240,33 +196,53 @@
 
     <!-- FOLHA (FRACIONAR) -->
     <div id="pg-fracionar" class="pagina">
-      <div class="card mb-3">
-        <div class="card-titulo"><i class="ti ti-scissors" aria-hidden="true"></i> Fracionar folha de pagamento</div>
-        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.5">Carregue o PDF completo. O sistema separa cada página, identifica o funcionário automaticamente e você envia individualmente.</p>
-        <form id="form-fracionar" class="formulario">
-          <div class="campo-grupo">
-            <label>Competência *</label>
-            <select id="sel-comp-frac" required></select>
-          </div>
-          <div class="campo-grupo">
-            <label>PDF da folha completa *</label>
-            <input type="file" id="input-pdf-frac" accept=".pdf" required>
-          </div>
-          <div id="frac-preview" class="info-box" style="display:none"></div>
-          <button type="submit" id="btn-fracionar" class="btn-primario w-full mt-2">
-            <i class="ti ti-scissors" aria-hidden="true"></i> Separar PDF
-          </button>
-        </form>
+
+      <!-- Upload e separar -->
+      <div class="card mb-3" id="card-upload-frac">
+        <div class="card-titulo"><i class="ti ti-scissors" aria-hidden="true"></i> Folha de pagamento</div>
+        <div class="campo-grupo">
+          <label>Competência *</label>
+          <select id="sel-comp-frac" required></select>
+        </div>
+        <div class="campo-grupo" style="margin-top:8px">
+          <label>PDF da folha completa *</label>
+          <input type="file" id="input-pdf-frac" accept=".pdf">
+        </div>
+        <div id="frac-preview" class="info-box" style="display:none;margin-top:8px"></div>
+        <button id="btn-fracionar" onclick="processarFracionamento()" class="btn-primario w-full" style="margin-top:10px">
+          <i class="ti ti-scissors" aria-hidden="true"></i> Separar PDF
+        </button>
       </div>
 
+      <!-- Barra de progresso + páginas (aparece após separar) -->
       <div id="frac-resultado" style="display:none">
-        <div class="card mb-3">
+        <!-- Step bar -->
+        <div class="card mb-3" style="padding:12px 14px">
+          <div class="step-bar">
+            <div class="step"><div class="step-dot done" id="step1"><i class="ti ti-check" style="font-size:10px" aria-hidden="true"></i></div><span class="step-label">Upload</span></div>
+            <div class="step-line"></div>
+            <div class="step"><div class="step-dot done" id="step2"><i class="ti ti-check" style="font-size:10px" aria-hidden="true"></i></div><span class="step-label">Separar</span></div>
+            <div class="step-line"></div>
+            <div class="step"><div class="step-dot active" id="step3">3</div><span class="step-label" id="step3-label" style="color:var(--verde);font-weight:600">Enviar</span></div>
+          </div>
+          <p id="frac-resumo" style="font-size:11px;color:var(--text-secondary);text-align:center;margin-top:4px"></p>
+        </div>
+
+        <!-- Botão enviar todos -->
+        <button onclick="enviarTodasPendentes()" class="btn-primario w-full mb-3" id="btn-enviar-todos">
+          <i class="ti ti-brand-whatsapp" aria-hidden="true"></i>
+          <span id="btn-todos-label">Enviar todos via WhatsApp</span>
+        </button>
+
+        <!-- Cards das páginas -->
+        <div class="card">
           <div class="card-titulo"><i class="ti ti-files" aria-hidden="true"></i> Páginas separadas</div>
           <div id="frac-lista"></div>
         </div>
       </div>
 
-      <div class="card">
+      <!-- Histórico -->
+      <div class="card mt-3">
         <div class="card-titulo"><i class="ti ti-history" aria-hidden="true"></i> Histórico de envios</div>
         <div id="historico-folha" class="lista"></div>
       </div>
@@ -275,24 +251,14 @@
   </main>
 
   <nav class="nav-bottom">
-    <button class="nav-btn ativo" data-pg="inicio" onclick="irPara('inicio')">
-      <i class="ti ti-home" aria-hidden="true"></i><span class="nav-label">Início</span>
-    </button>
-    <button class="nav-btn" data-pg="lista-func" onclick="irPara('lista-func')">
-      <i class="ti ti-users" aria-hidden="true"></i><span class="nav-label">Funcionários</span>
-    </button>
-    <button class="nav-btn" data-pg="exames" onclick="irPara('exames')">
-      <i class="ti ti-stethoscope" aria-hidden="true"></i><span class="nav-label">Exames</span>
-    </button>
-    <button class="nav-btn" data-pg="epi" onclick="irPara('epi')">
-      <i class="ti ti-shield" aria-hidden="true"></i><span class="nav-label">EPI</span>
-    </button>
-    <button class="nav-btn" data-pg="fracionar" onclick="irPara('fracionar')">
-      <i class="ti ti-file-invoice" aria-hidden="true"></i><span class="nav-label">Folha</span>
-    </button>
+    <button class="nav-btn ativo" data-pg="inicio" onclick="irPara('inicio')"><i class="ti ti-home" aria-hidden="true"></i><span class="nav-label">Início</span></button>
+    <button class="nav-btn" data-pg="lista-func" onclick="irPara('lista-func')"><i class="ti ti-users" aria-hidden="true"></i><span class="nav-label">Funcionários</span></button>
+    <button class="nav-btn" data-pg="exames" onclick="irPara('exames')"><i class="ti ti-stethoscope" aria-hidden="true"></i><span class="nav-label">Exames</span></button>
+    <button class="nav-btn" data-pg="epi" onclick="irPara('epi')"><i class="ti ti-shield" aria-hidden="true"></i><span class="nav-label">EPI</span></button>
+    <button class="nav-btn" data-pg="fracionar" onclick="irPara('fracionar')"><i class="ti ti-file-invoice" aria-hidden="true"></i><span class="nav-label">Folha</span></button>
   </nav>
-
 </div>
+
 <script src="app.js"></script>
 </body>
 </html>
