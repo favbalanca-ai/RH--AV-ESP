@@ -321,6 +321,47 @@
       </div>
     </div>
 
+    <!-- FRACIONAR FOLHA -->
+    <div id="pg-fracionar" class="pagina">
+      <div class="card mb-3">
+        <h2 class="card-titulo">📄 Fracionar PDF da Folha</h2>
+        <p style="font-size:12px;color:#666;margin-bottom:12px">
+          Carregue o PDF completo com todos os funcionários. O sistema separa automaticamente cada página, identifica o funcionário pelo nome e salva na pasta certa do Drive.
+        </p>
+        <form id="form-fracionar" class="formulario">
+          <div class="campo-grupo">
+            <label>Competência *</label>
+            <select name="competencia" id="sel-comp-frac" required>
+              <option value="">Selecione...</option>
+            </select>
+          </div>
+          <div class="campo-grupo">
+            <label>PDF da Folha Completa *</label>
+            <input type="file" id="input-pdf-frac" accept=".pdf" required>
+          </div>
+          <div class="campo-grupo">
+            <label>Enviar para assinatura via WhatsApp?</label>
+            <select id="sel-zapsign-frac">
+              <option value="sim">Sim — enviar ZapSign para cada funcionário</option>
+              <option value="nao">Não — só salvar no Drive</option>
+            </select>
+          </div>
+          <div id="frac-preview" class="info-box" style="display:none"></div>
+          <button type="submit" id="btn-fracionar" class="btn-primario w-full mt-2">
+            ✂️ Separar e Processar
+          </button>
+        </form>
+      </div>
+
+      <!-- Resultado -->
+      <div id="frac-resultado" style="display:none">
+        <div class="card">
+          <h2 class="card-titulo">📋 Resultado do Fracionamento</h2>
+          <div id="frac-lista" class="lista"></div>
+        </div>
+      </div>
+    </div>
+
   </main>
 
   <!-- Navegação inferior -->
@@ -339,6 +380,9 @@
     </button>
     <button class="nav-btn" data-pg="folha" onclick="irPara('folha')">
       <span>💰</span><span>Folha</span>
+    </button>
+    <button class="nav-btn" data-pg="fracionar" onclick="irPara('fracionar')">
+      <span>✂️</span><span>Fracionar</span>
     </button>
   </nav>
 
