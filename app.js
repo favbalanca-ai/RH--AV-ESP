@@ -3,6 +3,7 @@ const PDFLIB_URL = 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js'
 
 let USUARIO = null, SENHA_ADM = null
 let funcionarios = [], estoque = [], itensEpiSel = []
+let funcEpiSelecionado = null
 let paginaAtual = 'inicio', todosExames = []
 let paginasFracionadas = []
 
@@ -43,8 +44,6 @@ document.addEventListener('DOMContentLoaded', () => {
   })
 
   document.getElementById('form-funcionario').addEventListener('submit', salvarFuncionario)
-  document.getElementById('form-epi').addEventListener('submit', enviarEpi)
-  document.getElementById('form-fracionar').addEventListener('submit', processarFracionamento)
 
   document.getElementById('input-pdf-frac').addEventListener('change', async e => {
     const file = e.target.files[0]; if (!file) return
@@ -54,8 +53,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const PDFLib = await carregarPdfLib()
       const pdfDoc = await PDFLib.PDFDocument.load(await file.arrayBuffer())
       const total  = pdfDoc.getPageCount()
-      preview.innerHTML = '<i class="ti ti-file-check" style="vertical-align:-2px"></i> ' + total + ' página(s) — ' + total + ' funcionário(s) serão processados'
-    } catch(err) { preview.textContent = '❌ Erro ao ler PDF: ' + err.message }
+      preview.innerHTML = '<i class="ti ti-file-check" style="vertical-align:-2px"></i> ' + total + ' página(s) detectadas — 1 funcionário por página'
+    } catch(err) { preview.textContent = '❌ Erro: ' + err.message }
   })
 })
 
@@ -63,7 +62,6 @@ function entrarNoApp() {
   document.getElementById('tela-login').style.display = 'none'
   document.getElementById('tela-app').style.display   = 'flex'
   preencherMesesFracionar()
-  preencherSelectsFuncionarios()
   carregarDashboard()
   irPara('inicio')
 }
@@ -86,11 +84,11 @@ async function sincronizarManual() {
   if (res && res.ok) {
     const d = res.data
     if (d.atualizados > 0) {
-      toast('✅ ' + d.atualizados + ' assinatura(s) atualizada(s)!', 'sucesso')
+      toast('✅ ' + d.atualizados + ' atualizada(s)!', 'sucesso')
       if (paginaAtual === 'epi') carregarEpi()
       if (paginaAtual === 'fracionar') carregarEntregasFolha()
       carregarDashboard()
-    } else { toast(d.verificados === 0 ? 'Nenhum documento pendente' : '🔄 ' + d.pendentes + ' ainda aguardando', '') }
+    } else { toast(d.verificados === 0 ? 'Nenhum pendente' : '🔄 ' + d.pendentes + ' aguardando', '') }
   } else { toast('❌ Erro na sincronização', 'erro') }
 }
 
@@ -102,10 +100,8 @@ const TITULOS = {
 function irPara(pg) {
   document.querySelectorAll('.pagina').forEach(p => p.classList.remove('ativa'))
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('ativo'))
-  const pgEl = document.getElementById('pg-' + pg)
-  if (pgEl) pgEl.classList.add('ativa')
-  const nav = document.querySelector('[data-pg="' + pg + '"]')
-  if (nav) nav.classList.add('ativo')
+  const pgEl = document.getElementById('pg-' + pg); if (pgEl) pgEl.classList.add('ativa')
+  const nav = document.querySelector('[data-pg="' + pg + '"]'); if (nav) nav.classList.add('ativo')
   document.getElementById('titulo-pagina').textContent = TITULOS[pg] || ''
   paginaAtual = pg
   if (pg === 'lista-func') carregarFuncionarios()
@@ -124,6 +120,7 @@ async function chamarGAS(dados) {
   } catch(e) { return { ok: false, erro: 'Erro de conexão: ' + e.message } }
 }
 
+// ─── DASHBOARD ────────────────────────────────────────────────────
 async function carregarDashboard() {
   const [resEx, resEst, resEpi, resFolha] = await Promise.all([
     chamarGAS({ acao: 'listar_exames' }),
@@ -139,121 +136,73 @@ async function carregarDashboard() {
   }
   if (resEst && resEst.ok) {
     estoque = resEst.data
-    document.getElementById('num-epi').textContent = resEst.data.filter(e => {
-      const s = e['SITUAÇÃO']||''; return s.includes('REPOR') || s.includes('SEM')
-    }).length
+    document.getElementById('num-epi').textContent = resEst.data.filter(e => { const s = e['SITUAÇÃO']||''; return s.includes('REPOR') || s.includes('SEM') }).length
   }
-
-  // Monta lembretes de assinaturas pendentes
   const pendentesEpi   = (resEpi   && resEpi.ok)   ? resEpi.data.filter(e   => e['ASSINADO?'] === 'Pendente' && e['ZAPSIGN_DOC']) : []
   const pendentesFolha = (resFolha && resFolha.ok) ? resFolha.data.filter(f => f['STATUS']    === 'Pendente' && f['ZAPSIGN_DOC']) : []
   renderLembretes(pendentesEpi, pendentesFolha)
 }
 
-
 function renderLembretes(pendentesEpi, pendentesFolha) {
-  const el = document.getElementById('lembretes-wrap')
-  if (!el) return
+  const el = document.getElementById('lembretes-wrap'); if (!el) return
   const todos = [
-    ...pendentesEpi.map(e => ({
-      tipo: 'EPI',
-      nome: e['FUNCIONÁRIO'],
-      descricao: e['DESCRIÇÃO DO EPI'],
-      data: e['DATA ENTREGA'],
-      token: e['ZAPSIGN_DOC'],
-      signerToken: (e['OBSERVAÇÕES']||'').replace('Signer: ',''),
-    })),
-    ...pendentesFolha.map(f => ({
-      tipo: 'Folha',
-      nome: f['FUNCIONÁRIO'],
-      descricao: f['COMPETÊNCIA'],
-      data: f['DATA ENVIO'],
-      token: f['ZAPSIGN_DOC'],
-      signerToken: (f['OBSERVAÇÕES']||'').replace('Signer: ',''),
-    })),
+    ...pendentesEpi.map(e => ({ tipo:'EPI', nome:e['FUNCIONÁRIO'], descricao:e['DESCRIÇÃO DO EPI'], data:e['DATA ENTREGA'], signerToken:(e['OBSERVAÇÕES']||'').replace('Signer: ','') })),
+    ...pendentesFolha.map(f => ({ tipo:'Folha', nome:f['FUNCIONÁRIO'], descricao:f['COMPETÊNCIA'], data:f['DATA ENVIO'], signerToken:(f['OBSERVAÇÕES']||'').replace('Signer: ','') })),
   ]
-
-  if (!todos.length) {
-    el.style.display = 'none'
-    return
-  }
-
+  if (!todos.length) { el.style.display = 'none'; return }
   el.style.display = 'block'
-  el.innerHTML = `
-    <div class="card" style="border-color:rgba(133,79,11,0.3);background:#FFFBF5">
-      <div class="card-titulo" style="color:var(--amber-text)">
-        <i class="ti ti-bell-ringing" aria-hidden="true"></i>
-        ${todos.length} assinatura(s) pendente(s)
-      </div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        ${todos.map((item, i) => {
-          const func = funcionarios.find(f => f['NOME_COMPLETO'] === item.nome)
-          const tel  = func ? '55' + func['TELEFONE'].replace(/\D/g,'') : ''
-          return `
-          <div style="display:flex;align-items:center;gap:10px;padding:10px;background:#fff;border-radius:var(--radius-md);border:0.5px solid rgba(133,79,11,0.2)">
-            <div class="avatar" style="background:var(--amber-bg);color:var(--amber-text);flex-shrink:0">${getIniciais(item.nome||'?')}</div>
-            <div style="flex:1;min-width:0">
-              <div style="font-size:12px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.nome}</div>
-              <div style="font-size:11px;color:var(--text-secondary)">
-                <span class="badge badge-amarelo" style="margin-right:4px">${item.tipo}</span>
-                ${item.descricao} · ${item.data}
-              </div>
-            </div>
-            <div style="display:flex;gap:5px;flex-shrink:0">
-              ${tel ? `<a href="https://wa.me/${tel}?text=${encodeURIComponent('Olá ' + (item.nome.split(' ')[0]) + ', seu documento está aguardando assinatura. Por favor acesse o link que enviamos no WhatsApp para assinar.')}" target="_blank"
-                style="background:#22C55E;color:#fff;border:none;border-radius:7px;padding:6px 9px;font-size:13px;text-decoration:none;display:flex;align-items:center;gap:3px;font-weight:600">
-                <i class="ti ti-brand-whatsapp"></i>
-              </a>` : ''}
-              <button onclick="reenviarZapSign('${item.signerToken}', '${item.nome}')"
-                style="background:var(--blue-bg);color:var(--blue-text);border:none;border-radius:7px;padding:6px 9px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:3px;font-weight:600"
-                title="Reenviar link via ZapSign">
-                <i class="ti ti-send"></i>
-              </button>
-            </div>
-          </div>`
-        }).join('')}
-      </div>
-    </div>`
+  el.innerHTML = `<div class="card" style="border-color:rgba(133,79,11,0.3);background:#FFFBF5">
+    <div class="card-titulo" style="color:var(--amber-text)"><i class="ti ti-bell-ringing" aria-hidden="true"></i> ${todos.length} assinatura(s) pendente(s)</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+    ${todos.map(item => {
+      const func = funcionarios.find(f => f['NOME_COMPLETO'] === item.nome)
+      const tel  = func ? '55' + func['TELEFONE'].replace(/\D/g,'') : ''
+      return `<div style="display:flex;align-items:center;gap:10px;padding:10px;background:#fff;border-radius:var(--radius-md);border:0.5px solid rgba(133,79,11,0.15)">
+        <div class="avatar" style="background:var(--amber-bg);color:var(--amber-text)">${getIniciais(item.nome||'?')}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.nome}</div>
+          <div style="font-size:11px;color:var(--text-secondary)"><span class="badge badge-amarelo" style="margin-right:4px">${item.tipo}</span>${item.descricao} · ${item.data}</div>
+        </div>
+        <div style="display:flex;gap:5px;flex-shrink:0">
+          ${tel ? `<a href="https://wa.me/${tel}?text=${encodeURIComponent('Olá '+item.nome.split(' ')[0]+', seu documento aguarda assinatura. Por favor acesse o link que enviamos no WhatsApp.')}" target="_blank" style="background:#22C55E;color:#fff;border:none;border-radius:7px;padding:6px 9px;font-size:13px;text-decoration:none;display:flex;align-items:center"><i class="ti ti-brand-whatsapp"></i></a>` : ''}
+          <button onclick="reenviarZapSign('${item.signerToken}','${item.nome}')" style="background:var(--blue-bg);color:var(--blue-text);border:none;border-radius:7px;padding:6px 9px;font-size:13px;cursor:pointer;display:flex;align-items:center" title="Reenviar via ZapSign"><i class="ti ti-send"></i></button>
+        </div>
+      </div>`
+    }).join('')}
+    </div>
+  </div>`
 }
 
 async function reenviarZapSign(signerToken, nome) {
-  if (!signerToken || signerToken === 'undefined') {
-    return toast('❌ Token não disponível para reenvio', 'erro')
-  }
-  mostrarLoading('Reenviando link para ' + nome.split(' ')[0] + '...')
+  if (!signerToken || signerToken === 'undefined') return toast('❌ Token indisponível', 'erro')
+  mostrarLoading('Reenviando para ' + nome.split(' ')[0] + '...')
   const res = await chamarGAS({ acao: 'reenviar_zapsign', dados: { signer_token: signerToken } })
   esconderLoading()
-  if (res && res.ok) {
-    toast('✅ Link reenviado para ' + nome.split(' ')[0] + ' via WhatsApp!', 'sucesso')
-  } else {
-    toast('❌ Erro ao reenviar: ' + ((res&&res.erro)||'tente novamente'), 'erro')
-  }
+  if (res && res.ok) toast('✅ Reenviado para ' + nome.split(' ')[0] + '!', 'sucesso')
+  else toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
 }
 
-function getIniciais(nome) {
-  const p = nome.trim().split(' ').filter(x => x.length > 1)
-  if (p.length >= 2) return (p[0][0] + p[p.length-1][0]).toUpperCase()
-  return (nome[0]||'?').toUpperCase()
-}
-
+// ─── FUNCIONÁRIOS ─────────────────────────────────────────────────
 async function carregarFuncionarios() {
-  mostrarLoading('Carregando funcionários...')
+  mostrarLoading('Carregando...')
   const res = await chamarGAS({ acao: 'listar_funcionarios' })
   esconderLoading()
   if (!res || !res.ok) return toast('Erro ao carregar', 'erro')
-  funcionarios = res.data
-  renderFuncionarios(funcionarios)
-  preencherSelectsFuncionarios()
+  funcionarios = res.data; renderFuncionarios(funcionarios); preencherSelectsOcultos()
 }
 
 function filtrarFuncionarios(q) {
-  const lista = q ? funcionarios.filter(f => f['NOME_COMPLETO'].toLowerCase().includes(q.toLowerCase())) : funcionarios
-  renderFuncionarios(lista)
+  renderFuncionarios(q ? funcionarios.filter(f => f['NOME_COMPLETO'].toLowerCase().includes(q.toLowerCase())) : funcionarios)
+}
+
+function getIniciais(nome) {
+  const p = String(nome).trim().split(' ').filter(x => x.length > 1)
+  return p.length >= 2 ? (p[0][0] + p[p.length-1][0]).toUpperCase() : (nome[0]||'?').toUpperCase()
 }
 
 function renderFuncionarios(lista) {
   const el = document.getElementById('lista-funcionarios')
-  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum funcionário encontrado</p>'; return }
+  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum funcionário</p>'; return }
   el.innerHTML = lista.map(f => `
     <div class="lista-item">
       <div class="avatar">${getIniciais(f['NOME_COMPLETO'])}</div>
@@ -278,11 +227,12 @@ async function salvarFuncionario(e) {
     toast('✅ Cadastrado! ID: ' + res.data.id, 'sucesso')
     e.target.reset()
     const r2 = await chamarGAS({ acao: 'listar_funcionarios' })
-    if (r2 && r2.ok) { funcionarios = r2.data; preencherSelectsFuncionarios() }
+    if (r2 && r2.ok) { funcionarios = r2.data; preencherSelectsOcultos() }
     setTimeout(() => irPara('lista-func'), 1500)
   } else { toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro') }
 }
 
+// ─── EXAMES ───────────────────────────────────────────────────────
 async function carregarExames() {
   mostrarLoading('Carregando exames...')
   const res = await chamarGAS({ acao: 'listar_exames' })
@@ -295,21 +245,21 @@ function filtrarExames() {
   const filtro = document.getElementById('filtro-status-exame').value
   const lista  = filtro ? todosExames.filter(e => (e['STATUS EXAME']||'') === filtro) : todosExames
   const el = document.getElementById('lista-exames')
-  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum exame encontrado</p>'; return }
+  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum exame</p>'; return }
   el.innerHTML = lista.map(e => {
     const status = e['STATUS EXAME'] || '⏳ PENDENTE'
-    const borderColor = status.includes('VENCIDO') ? 'var(--red-text)' : status.includes('A VENCER') ? 'var(--amber-text)' : 'var(--border)'
-    return `<div class="lista-item" style="border-color:${borderColor}">
+    const bc = status.includes('VENCIDO') ? 'var(--red-text)' : status.includes('A VENCER') ? 'var(--amber-text)' : 'var(--border)'
+    return `<div class="lista-item" style="border-color:${bc}">
       <div class="lista-item-info">
         <div class="lista-item-nome">${e['FUNCIONÁRIO']}</div>
         <div class="lista-item-sub">${e['EXAME REALIZADO']}</div>
         <div class="lista-item-sub">${e['DATA REALIZAÇÃO']?'Realizado: '+e['DATA REALIZAÇÃO']:'Não realizado'}${e['DATA VENCIMENTO']?' · Vence: '+e['DATA VENCIMENTO']:''}</div>
-      </div>
-      ${badge(status)}
+      </div>${badge(status)}
     </div>`
   }).join('')
 }
 
+// ─── EPI ──────────────────────────────────────────────────────────
 async function carregarEpi() {
   mostrarLoading('Carregando EPI...')
   const [resEst, resEnt] = await Promise.all([
@@ -317,17 +267,26 @@ async function carregarEpi() {
     chamarGAS({ acao: 'listar_epi_entregas' }),
   ])
   esconderLoading()
-  if (resEst && resEst.ok) { estoque = resEst.data; renderEstoque(estoque); preencherSelectEpi(estoque) }
+  if (resEst && resEst.ok) { estoque = resEst.data; renderEstoque(estoque); preencherSelectsOcultos() }
   if (resEnt && resEnt.ok) renderEntregas(resEnt.data.slice(0,15))
 }
 
 function renderEstoque(lista) {
+  const icones = { 'Capacete':'🪖','Óculos':'🥽','Protetor':'👂','Respirador':'😷','Luva':'🧤','Bota':'👟','Avental':'🦺','Macacão':'👔','Colete':'🦺','Cinto':'🔒','Protetor Facial':'😷','Chapéu':'👒','Camisa':'👕','Botina':'👟','Máscara':'😷' }
+  function getIcone(nome) { for (const [k,v] of Object.entries(icones)) { if (nome.toLowerCase().includes(k.toLowerCase())) return v } return '🦺' }
   document.getElementById('lista-estoque').innerHTML = lista.map(e => {
     const sit = situacaoEpi(e)
-    return `<div class="estoque-item">
-      <span class="estoque-nome">${e['DESCRIÇÃO DO EPI']}</span>
-      <span class="estoque-qtd">${e['ESTOQUE ATUAL']} ${e['UNIDADE']||'un'}</span>
-      ${badge(sit)}
+    const badgeCls = sit === '✅ OK' ? 'badge-verde' : sit === '⚠️ REPOR' ? 'badge-amarelo' : 'badge-vermelho'
+    return `<div class="epi-estoque-item">
+      <div class="epi-icone-wrap">${getIcone(e['DESCRIÇÃO DO EPI'])}</div>
+      <div class="epi-est-info">
+        <div class="epi-est-nome">${e['DESCRIÇÃO DO EPI']}</div>
+        <div class="epi-est-ca">CA ${e['Nº CA']||'—'} · ${e['UNIDADE']||'un'}</div>
+      </div>
+      <div class="epi-est-right">
+        <span class="epi-est-qty">${e['ESTOQUE ATUAL']}</span>
+        <span class="badge ${badgeCls}">${sit.replace('✅ ','').replace('⚠️ ','').replace('⛔ ','')}</span>
+      </div>
     </div>`
   }).join('')
 }
@@ -339,97 +298,121 @@ function situacaoEpi(e) {
   return '✅ OK'
 }
 
-function preencherSelectEpi(lista) {
-  const sel = document.getElementById('sel-epi-adicionar')
-  sel.innerHTML = '<option value="">Selecione um EPI...</option>'
-  lista.filter(e => parseInt(e['ESTOQUE ATUAL']) > 0).forEach(e => {
-    sel.innerHTML += `<option value="${e['CÓD.']}">${e['CÓD.']} — ${e['DESCRIÇÃO DO EPI']}</option>`
-  })
+// Seletor de funcionário para EPI
+function abrirSeletorFunc() { document.getElementById('sel-func-epi-hidden').click() }
+function selecionarFuncEpi(funcId) {
+  const func = funcionarios.find(f => String(f['ID']) === String(funcId))
+  if (!func) return
+  funcEpiSelecionado = func
+  const disp = document.getElementById('sel-func-display')
+  disp.classList.add('selecionado')
+  document.getElementById('sel-func-avatar').textContent = getIniciais(func['NOME_COMPLETO'])
+  document.getElementById('sel-func-nome').textContent   = func['NOME_COMPLETO']
+  document.getElementById('sel-func-nome').style.color   = 'var(--text-primary)'
+  atualizarBtnEpi()
 }
 
+// Seletor de EPI
+function abrirSeletorEpi() { document.getElementById('sel-epi-hidden').click() }
 function adicionarItemEpi(sel) {
   const cod = sel.value; if (!cod) return
   if (itensEpiSel.find(i => i.cod === cod)) { sel.value = ''; return }
   const epi = estoque.find(e => e['CÓD.'] === cod); if (!epi) return
   itensEpiSel.push({ cod, descricao: epi['DESCRIÇÃO DO EPI'], ca: epi['Nº CA'], quantidade: 1 })
-  sel.value = ''; renderItensEpi()
+  sel.value = ''; renderItensEpi(); atualizarBtnEpi()
 }
-function removerItemEpi(cod) { itensEpiSel = itensEpiSel.filter(i => i.cod !== cod); renderItensEpi() }
-function atualizarQtdEpi(cod, qtd) { const i = itensEpiSel.find(i => i.cod === cod); if (i) i.quantidade = parseInt(qtd)||1 }
+
+function removerItemEpi(cod) { itensEpiSel = itensEpiSel.filter(i => i.cod !== cod); renderItensEpi(); atualizarBtnEpi() }
+function alterarQtdEpi(cod, delta) {
+  const item = itensEpiSel.find(i => i.cod === cod); if (!item) return
+  item.quantidade = Math.max(1, item.quantidade + delta)
+  renderItensEpi(); atualizarBtnEpi()
+}
 
 function renderItensEpi() {
-  const wrap = document.getElementById('itens-epi')
-  const lista = document.getElementById('lista-itens-epi')
-  if (!itensEpiSel.length) { wrap.style.display = 'none'; return }
-  wrap.style.display = 'block'
-  lista.innerHTML = itensEpiSel.map(item => `
-    <div class="item-epi-row">
-      <span class="item-epi-nome">${item.cod} — ${item.descricao}</span>
-      <input class="item-epi-qtd" type="number" min="1" value="${item.quantidade}" onchange="atualizarQtdEpi('${item.cod}',this.value)">
-      <button class="item-epi-del" onclick="removerItemEpi('${item.cod}')" type="button"><i class="ti ti-x"></i></button>
+  const el = document.getElementById('epi-itens-lista')
+  el.innerHTML = itensEpiSel.map(item => `
+    <div class="epi-item-card">
+      <span class="epi-item-nome">${item.cod} — ${item.descricao}</span>
+      <div class="qty-ctrl">
+        <button class="qty-btn" onclick="alterarQtdEpi('${item.cod}',-1)">−</button>
+        <span class="qty-num">${item.quantidade}</span>
+        <button class="qty-btn" onclick="alterarQtdEpi('${item.cod}',1)">+</button>
+      </div>
+      <button class="del-epi-btn" onclick="removerItemEpi('${item.cod}')"><i class="ti ti-x"></i></button>
     </div>`).join('')
 }
 
-async function enviarEpi(e) {
-  e.preventDefault()
-  if (!itensEpiSel.length) return toast('❌ Selecione ao menos 1 EPI', 'erro')
-  const fd = new FormData(e.target)
-  const funcId = fd.get('func_id'), motivo = fd.get('motivo')
-  if (!funcId) return toast('❌ Selecione o funcionário', 'erro')
+function atualizarBtnEpi() {
   const btn = document.getElementById('btn-enviar-epi')
+  const lbl = document.getElementById('btn-epi-label')
+  const n   = itensEpiSel.length
+  if (n > 0) lbl.textContent = 'Gerar recibo e enviar (' + n + ' item' + (n > 1 ? 's' : '') + ')'
+  else lbl.textContent = 'Gerar recibo e enviar'
+  btn.disabled = !funcEpiSelecionado || n === 0
+}
+
+async function enviarEpi() {
+  if (!funcEpiSelecionado || !itensEpiSel.length) return toast('❌ Selecione funcionário e EPIs', 'erro')
+  const btn = document.getElementById('btn-enviar-epi')
+  const motivo = document.getElementById('sel-motivo-epi').value
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Enviando...'
   mostrarLoading('Gerando recibo e enviando via ZapSign...')
-  const res = await chamarGAS({ acao: 'entregar_epi', dados: { func_id: funcId, itens: itensEpiSel, motivo } })
-  esconderLoading(); btn.disabled = false; btn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> Gerar recibo e enviar'
+  const res = await chamarGAS({ acao: 'entregar_epi', dados: { func_id: funcEpiSelecionado['ID'], itens: itensEpiSel, motivo } })
+  esconderLoading()
+  btn.disabled = false; btn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> <span id="btn-epi-label">Gerar recibo e enviar</span>'
   if (res && res.ok) {
     if (res.data.link_assinatura) mostrarLinkAssinaturaEpi(res.data.link_assinatura, res.data.mensagem)
     else toast('✅ ' + res.data.mensagem, 'sucesso')
-    itensEpiSel = []; renderItensEpi(); e.target.reset(); carregarEpi()
+    itensEpiSel = []; funcEpiSelecionado = null
+    renderItensEpi()
+    document.getElementById('sel-func-display').classList.remove('selecionado')
+    document.getElementById('sel-func-avatar').textContent = '?'
+    document.getElementById('sel-func-nome').textContent = 'Selecione o funcionário...'
+    document.getElementById('sel-func-nome').style.color = 'var(--text-secondary)'
+    carregarEpi()
   } else { toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro') }
 }
 
 function mostrarLinkAssinaturaEpi(url, msg) {
   const el = document.getElementById('link-assinatura-epi')
-  const func = funcionarios.find(f => String(f['ID']) === document.getElementById('sel-func-epi').value)
-  const tel  = func ? '55' + func['TELEFONE'].replace(/\D/g,'') : ''
+  const tel = funcEpiSelecionado ? '55' + funcEpiSelecionado['TELEFONE'].replace(/\D/g,'') : ''
   const waUrl = tel ? `https://wa.me/${tel}?text=${encodeURIComponent('Por favor, assine o documento: '+url)}` : ''
   el.style.display = 'block'
-  el.innerHTML = `
-    <p class="link-ass-titulo">✅ ${msg}</p>
-    <div class="link-ass-row">
-      <input class="link-ass-input" id="inp-link-ass" value="${url}" readonly>
-      <button class="btn-copiar" onclick="copiarLink()">Copiar</button>
-      ${waUrl ? `<a href="${waUrl}" target="_blank" class="btn-wa"><i class="ti ti-brand-whatsapp"></i></a>` : ''}
+  el.innerHTML = `<p style="font-size:12px;font-weight:600;color:var(--verde-text);margin-bottom:6px">✅ ${msg}</p>
+    <div style="display:flex;gap:6px;align-items:center">
+      <input id="inp-link-ass" value="${url}" readonly style="flex:1;font-size:10px;border:0.5px solid var(--border);border-radius:6px;padding:6px 8px;background:#fff;color:var(--text-primary)">
+      <button onclick="copiarLink()" class="btn-copiar" style="background:var(--verde);color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:11px;font-weight:600;cursor:pointer">Copiar</button>
+      ${waUrl ? `<a href="${waUrl}" target="_blank" style="background:#22C55E;color:#fff;border-radius:6px;padding:6px 10px;font-size:13px;text-decoration:none;display:flex;align-items:center"><i class="ti ti-brand-whatsapp"></i></a>` : ''}
     </div>`
 }
 
 function copiarLink() {
   const inp = document.getElementById('inp-link-ass'); if (!inp) return
-  inp.select(); document.execCommand('copy')
-  toast('✅ Link copiado!', 'sucesso')
+  inp.select(); document.execCommand('copy'); toast('✅ Link copiado!', 'sucesso')
 }
 
 function renderEntregas(lista) {
   const el = document.getElementById('lista-entregas')
-  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhuma entrega registrada</p>'; return }
+  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhuma entrega</p>'; return }
   el.innerHTML = lista.map(e => `
     <div class="lista-item">
       <div class="avatar" style="background:var(--blue-bg);color:var(--blue-text)">${getIniciais(e['FUNCIONÁRIO']||'?')}</div>
       <div class="lista-item-info">
         <div class="lista-item-nome">${e['FUNCIONÁRIO']}</div>
-        <div class="lista-item-sub">${e['DESCRIÇÃO DO EPI']} · ${e['DATA ENTREGA']}</div>
-        ${e['LINK DOC ASSINADO'] ? `<a href="${e['LINK DOC ASSINADO']}" target="_blank" style="font-size:10px;color:var(--blue-text)"><i class="ti ti-file-check" style="vertical-align:-2px"></i> Ver assinado</a>` : ''}
-      </div>
-      ${badge(e['ASSINADO?'])}
+        <div class="lista-item-sub">${e['DESCRIÇÃO DO EPI']} · ${e['DATA ENTREGA']} · ${e['MOTIVO ENTREGA']||''}</div>
+        ${e['LINK DOC ASSINADO'] ? `<a href="${e['LINK DOC ASSINADO']}" target="_blank" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px;margin-top:2px"><i class="ti ti-file-check" style="font-size:10px"></i> Ver documento assinado</a>` : ''}
+      </div>${badge(e['ASSINADO?'])}
     </div>`).join('')
 }
 
+// ─── FOLHA / FRACIONAR ────────────────────────────────────────────
 function preencherMesesFracionar() {
   const sel = document.getElementById('sel-comp-frac'); if (!sel) return
+  if (sel.options.length > 1) return
   sel.innerHTML = '<option value="">Selecione a competência...</option>'
   const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
-  const ano = new Date().getFullYear()
-  const mesAtual = new Date().getMonth()
+  const ano = new Date().getFullYear(), mesAtual = new Date().getMonth()
   for (let m = mesAtual; m >= 0; m--) sel.innerHTML += `<option value="${meses[m]}/${ano}">${meses[m]}/${ano}</option>`
   for (let m = 11; m > mesAtual; m--) sel.innerHTML += `<option value="${meses[m]}/${ano-1}">${meses[m]}/${ano-1}</option>`
 }
@@ -440,23 +423,20 @@ async function carregarEntregasFolha() {
 }
 
 function renderHistoricoFolha(lista) {
-  const el = document.getElementById('historico-folha')
-  if (!el) return
-  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum envio registrado</p>'; return }
+  const el = document.getElementById('historico-folha'); if (!el) return
+  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum envio</p>'; return }
   el.innerHTML = lista.map(f => `
     <div class="lista-item">
       <div class="avatar" style="background:var(--purple-bg);color:var(--purple-text)">${getIniciais(f['FUNCIONÁRIO']||'?')}</div>
       <div class="lista-item-info">
         <div class="lista-item-nome">${f['FUNCIONÁRIO']}</div>
         <div class="lista-item-sub">${f['COMPETÊNCIA']} · ${f['DATA ENVIO']}</div>
-        ${f['LINK DOC ASSINADO'] ? `<a href="${f['LINK DOC ASSINADO']}" target="_blank" style="font-size:10px;color:var(--blue-text)"><i class="ti ti-file-check" style="vertical-align:-2px"></i> Ver assinado</a>` : ''}
-      </div>
-      ${badge(f['STATUS'])}
+        ${f['LINK DOC ASSINADO'] ? `<a href="${f['LINK DOC ASSINADO']}" target="_blank" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px;margin-top:2px"><i class="ti ti-file-check" style="font-size:10px"></i> Ver assinado</a>` : ''}
+      </div>${badge(f['STATUS'])}
     </div>`).join('')
 }
 
-async function processarFracionamento(e) {
-  e.preventDefault()
+async function processarFracionamento() {
   const file        = document.getElementById('input-pdf-frac').files[0]
   const competencia = document.getElementById('sel-comp-frac').value
   if (!file || !competencia) return toast('❌ Selecione o PDF e a competência', 'erro')
@@ -473,53 +453,44 @@ async function processarFracionamento(e) {
       const novoDoc = await PDFLib.PDFDocument.create()
       const [pag]   = await novoDoc.copyPages(pdfDoc, [i])
       novoDoc.addPage(pag)
-      paginasFracionadas.push({ pagina: i+1, funcId:'', nome:'', telefone:'', pdfBase64: arrayBufferToBase64(await novoDoc.save()), status:'pronto', signUrl:'', competencia })
+      paginasFracionadas.push({ pagina:i+1, funcId:'', nome:'', funcao:'', telefone:'', pdfBase64:arrayBufferToBase64(await novoDoc.save()), status:'pronto', signUrl:'', competencia })
     }
     esconderLoading()
     btn.disabled = false; btn.innerHTML = '<i class="ti ti-scissors"></i> Separar PDF'
-    renderPaginasFracionadas(competencia)
-    toast('🔍 Identificando funcionários automaticamente...', '')
+    document.getElementById('frac-resultado').style.display = 'block'
+    document.getElementById('frac-resumo').textContent = competencia + ' · ' + total + ' página(s) separadas'
+    renderPaginasFracionadas()
+    atualizarBtnTodos()
+    toast('🔍 Identificando funcionários...', '')
     identificarFuncionariosAutomatico()
   } catch(err) {
     esconderLoading(); btn.disabled = false; btn.innerHTML = '<i class="ti ti-scissors"></i> Separar PDF'
-    toast('❌ Erro: ' + err.message, 'erro')
+    toast('❌ ' + err.message, 'erro')
   }
 }
 
-function renderPaginasFracionadas(competencia) {
-  const wrap = document.getElementById('frac-resultado')
-  const lista = document.getElementById('frac-lista')
-  wrap.style.display = 'block'
-  lista.innerHTML = `
-    <div style="background:var(--verde-claro);border-radius:var(--radius-md);padding:10px 12px;margin-bottom:10px;font-size:12px;color:var(--verde-text);font-weight:600">
-      <i class="ti ti-scissors" style="vertical-align:-2px"></i> ${paginasFracionadas.length} página(s) separadas
-    </div>
-    <button onclick="enviarTodasPendentes()" class="btn-primario w-full mb-3" style="font-size:12px">
-      <i class="ti ti-brand-whatsapp"></i> Enviar todas via WhatsApp
-    </button>
-    ${paginasFracionadas.map((p, i) => `
-    <div class="frac-card-page" id="pag-card-${i}">
-      <div class="frac-page-header">
-        <span class="frac-page-num"><i class="ti ti-file-text" style="vertical-align:-2px"></i> Página ${p.pagina}</span>
-        <div class="frac-page-actions">
-          <button onclick="visualizarPagina(${i})" class="btn-ver-pdf"><i class="ti ti-eye"></i> Ver PDF</button>
-          <span id="status-pag-${i}">${badge('pronto')}</span>
+function renderPaginasFracionadas() {
+  const el = document.getElementById('frac-lista')
+  el.innerHTML = paginasFracionadas.map((p, i) => `
+    <div class="frac-page-card" id="fpc-${i}">
+      <div class="fpc-header">
+        <span class="fpc-num" id="fpc-num-${i}"><i class="ti ti-file-text" style="font-size:11px;vertical-align:-1px"></i> Página ${p.pagina}</span>
+        <div class="fpc-actions">
+          <button class="btn-ver-frac" onclick="visualizarPagina(${i})"><i class="ti ti-eye"></i> Ver</button>
+          <div id="fpc-action-${i}">
+            <button class="btn-enviar-frac" onclick="enviarPaginaZapSign(${i})" id="btn-zap-${i}" disabled>
+              <i class="ti ti-brand-whatsapp"></i> Enviar
+            </button>
+          </div>
         </div>
       </div>
-      <select id="func-sel-${i}" class="frac-select" onchange="selecionarFuncPagina(${i}, this.value)">
-        <option value="">⏳ Identificando... / Selecione manualmente</option>
-        ${funcionarios.map(f => `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>`).join('')}
-      </select>
-      <div id="actions-${i}" class="frac-links" style="display:none">
-        <button onclick="enviarPaginaZapSign(${i})" id="btn-zap-${i}" class="btn-enviar-zap">
-          <i class="ti ti-brand-whatsapp"></i> Enviar
-        </button>
-        <a id="link-btn-${i}" href="#" target="_blank" class="btn-link-ass" style="display:none">
-          <i class="ti ti-external-link"></i> Link
-        </a>
+      <div id="fpc-func-${i}">
+        <div style="font-size:11px;color:var(--text-hint);display:flex;align-items:center;gap:4px">
+          <div class="spinner" style="width:14px;height:14px;border-width:2px"></div>
+          Identificando automaticamente...
+        </div>
       </div>
-    </div>`).join('')}
-  `
+    </div>`).join('')
 }
 
 async function identificarFuncionariosAutomatico() {
@@ -532,45 +503,64 @@ async function identificarFuncionariosAutomatico() {
         if (func) {
           paginasFracionadas[i].funcId   = String(func['ID'])
           paginasFracionadas[i].nome     = func['NOME_COMPLETO']
+          paginasFracionadas[i].funcao   = func['FUNCAO']
           paginasFracionadas[i].telefone = func['TELEFONE']
-          const sel = document.getElementById('func-sel-' + i)
-          if (sel) sel.value = func['ID']
-          const actions = document.getElementById('actions-' + i)
-          if (actions) actions.style.display = 'flex'
-          const card = document.getElementById('pag-card-' + i)
-          if (card) card.style.borderColor = '#C8E6C9'
-          const statusEl = document.getElementById('status-pag-' + i)
-          if (statusEl) statusEl.innerHTML = `<span class="badge badge-verde">✅ ${func['NOME_CURTO'] || func['NOME_COMPLETO'].split(' ')[0]}</span>`
+          renderCardIdentificado(i, func, 'auto')
           identificados++
-        }
-      } else {
-        const card = document.getElementById('pag-card-' + i)
-        if (card) card.style.borderColor = '#FFE0B2'
-        const statusEl = document.getElementById('status-pag-' + i)
-        if (statusEl) statusEl.innerHTML = `<span class="badge badge-amarelo">⚠️ Manual</span>`
-      }
-    } catch(err) { console.warn('Erro página ' + (i+1), err) }
+        } else { renderCardManual(i) }
+      } else { renderCardManual(i) }
+    } catch(e) { renderCardManual(i) }
   }
+  atualizarBtnTodos()
   toast(identificados === paginasFracionadas.length
-    ? '✅ Todos os ' + identificados + ' funcionários identificados!'
+    ? '✅ Todos identificados automaticamente!'
     : '✅ ' + identificados + ' identificados · ' + (paginasFracionadas.length - identificados) + ' selecione manualmente', 'sucesso')
 }
 
-function visualizarPagina(idx) {
-  const p = paginasFracionadas[idx]; if (!p || !p.pdfBase64) return toast('❌ PDF não disponível', 'erro')
-  const bytes = Uint8Array.from(atob(p.pdfBase64), c => c.charCodeAt(0))
-  const url   = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
-  window.open(url, '_blank')
-  setTimeout(() => URL.revokeObjectURL(url), 60000)
+function renderCardIdentificado(i, func, metodo) {
+  const card = document.getElementById('fpc-' + i); if (!card) return
+  card.className = 'frac-page-card identificado'
+  document.getElementById('fpc-num-' + i).innerHTML = `<i class="ti ti-file-text" style="font-size:11px;vertical-align:-1px"></i> Página ${paginasFracionadas[i].pagina}`
+  document.getElementById('fpc-func-' + i).innerHTML = `
+    <div class="fpc-func">
+      <div class="fpc-av">${getIniciais(func['NOME_COMPLETO'])}</div>
+      <div>
+        <div class="fpc-nome">${func['NOME_COMPLETO']}</div>
+        <div class="fpc-sub">${func['FUNCAO']||''} · ${func['UNIDADE']||''}</div>
+        ${metodo === 'auto' ? `<div class="fpc-auto"><i class="ti ti-robot" style="font-size:9px"></i> Identificado automaticamente</div>` : ''}
+      </div>
+    </div>`
+  const btnEl = document.getElementById('btn-zap-' + i)
+  if (btnEl) btnEl.disabled = false
 }
 
-function selecionarFuncPagina(idx, funcId) {
+function renderCardManual(i) {
+  const card = document.getElementById('fpc-' + i); if (!card) return
+  card.className = 'frac-page-card manual'
+  const numEl = document.getElementById('fpc-num-' + i)
+  if (numEl) { numEl.className = 'fpc-num manual'; numEl.innerHTML = `<i class="ti ti-alert-triangle" style="font-size:10px;vertical-align:-1px"></i> Pág. ${paginasFracionadas[i].pagina} — selecione` }
+  document.getElementById('fpc-func-' + i).innerHTML = `
+    <select class="frac-select-manual" onchange="selecionarFuncManual(${i}, this.value)">
+      <option value="">Selecione o funcionário...</option>
+      ${funcionarios.map(f => `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>`).join('')}
+    </select>`
+}
+
+function selecionarFuncManual(i, funcId) {
   const func = funcionarios.find(f => String(f['ID']) === String(funcId)); if (!func) return
-  paginasFracionadas[idx].funcId   = funcId
-  paginasFracionadas[idx].nome     = func['NOME_COMPLETO']
-  paginasFracionadas[idx].telefone = func['TELEFONE']
-  const actions = document.getElementById('actions-' + idx)
-  if (actions) actions.style.display = 'flex'
+  paginasFracionadas[i].funcId   = funcId
+  paginasFracionadas[i].nome     = func['NOME_COMPLETO']
+  paginasFracionadas[i].funcao   = func['FUNCAO']
+  paginasFracionadas[i].telefone = func['TELEFONE']
+  renderCardIdentificado(i, func, 'manual')
+  atualizarBtnTodos()
+}
+
+function visualizarPagina(idx) {
+  const p = paginasFracionadas[idx]; if (!p || !p.pdfBase64) return toast('❌ PDF indisponível', 'erro')
+  const url = URL.createObjectURL(new Blob([Uint8Array.from(atob(p.pdfBase64), c => c.charCodeAt(0))], { type: 'application/pdf' }))
+  window.open(url, '_blank')
+  setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
 
 async function enviarPaginaZapSign(idx) {
@@ -578,28 +568,30 @@ async function enviarPaginaZapSign(idx) {
   if (!p.funcId) return toast('❌ Selecione o funcionário primeiro', 'erro')
   const btn = document.getElementById('btn-zap-' + idx)
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>'
-  mostrarLoading('Enviando para ZapSign...')
+  mostrarLoading('Enviando para ' + p.nome.split(' ')[0] + '...')
   const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfBase64, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true } })
   esconderLoading()
   if (res && res.ok) {
     paginasFracionadas[idx].status  = 'enviado'
     paginasFracionadas[idx].signUrl = res.data.sign_url || ''
-    btn.innerHTML = '<i class="ti ti-check"></i> Enviado'; btn.style.background = '#22C55E'
-    const statusEl = document.getElementById('status-pag-' + idx)
-    if (statusEl) statusEl.innerHTML = `<span class="badge badge-amarelo">Pendente</span>`
-    if (res.data.sign_url) {
-      const linkBtn = document.getElementById('link-btn-' + idx)
-      if (linkBtn) { linkBtn.href = res.data.sign_url; linkBtn.style.display = 'flex' }
-      const tel = p.telefone.replace(/\D/g,'')
-      const waUrl = `https://wa.me/55${tel}?text=${encodeURIComponent('Olá ' + p.nome.split(' ')[0] + ', assine seu holerite: ' + res.data.sign_url)}`
-      const actions = document.getElementById('actions-' + idx)
-      if (actions && !actions.querySelector('.btn-wa')) {
-        const wa = document.createElement('a')
-        wa.href = waUrl; wa.target = '_blank'; wa.className = 'btn-wa'
-        wa.innerHTML = '<i class="ti ti-brand-whatsapp"></i> WA'
-        actions.appendChild(wa)
+    // Atualiza card para estado enviado
+    const card = document.getElementById('fpc-' + idx)
+    if (card) card.className = 'frac-page-card enviado'
+    const numEl = document.getElementById('fpc-num-' + idx)
+    if (numEl) { numEl.className = 'fpc-num enviado'; numEl.innerHTML = `<i class="ti ti-circle-check" style="font-size:11px;vertical-align:-1px"></i> Pág. ${p.pagina} — Enviado` }
+    // Substitui botão enviar por "enviado" + links
+    const actionEl = document.getElementById('fpc-action-' + idx)
+    if (actionEl) {
+      let links = `<span class="btn-enviado-frac"><i class="ti ti-check"></i></span>`
+      if (res.data.sign_url) {
+        links += `<a href="${res.data.sign_url}" target="_blank" class="btn-link-frac"><i class="ti ti-external-link"></i> Link</a>`
+        const tel = p.telefone.replace(/\D/g,'')
+        const waUrl = `https://wa.me/55${tel}?text=${encodeURIComponent('Olá '+p.nome.split(' ')[0]+', assine seu holerite: '+res.data.sign_url)}`
+        links += `<a href="${waUrl}" target="_blank" class="btn-wa-frac"><i class="ti ti-brand-whatsapp"></i></a>`
       }
+      actionEl.innerHTML = `<div class="fpc-links">${links}</div>`
     }
+    atualizarBtnTodos()
     toast('✅ ' + p.nome.split(' ')[0] + ' — enviado!', 'sucesso')
     carregarEntregasFolha()
   } else {
@@ -610,18 +602,38 @@ async function enviarPaginaZapSign(idx) {
 
 async function enviarTodasPendentes() {
   const pendentes = paginasFracionadas.filter(p => p.funcId && p.status === 'pronto')
-  if (!pendentes.length) return toast('⚠️ Selecione os funcionários primeiro', 'erro')
+  if (!pendentes.length) return toast('⚠️ Nenhum pronto para enviar', 'erro')
   for (let i = 0; i < paginasFracionadas.length; i++) {
     if (paginasFracionadas[i].funcId && paginasFracionadas[i].status === 'pronto') await enviarPaginaZapSign(i)
   }
 }
 
-function preencherSelectsFuncionarios() {
-  const sel = document.getElementById('sel-func-epi'); if (!sel) return
-  sel.innerHTML = '<option value="">Selecione...</option>'
-  funcionarios.forEach(f => { sel.innerHTML += `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>` })
+function atualizarBtnTodos() {
+  const pendentes = paginasFracionadas.filter(p => p.funcId && p.status === 'pronto').length
+  const btn = document.getElementById('btn-enviar-todos')
+  const lbl = document.getElementById('btn-todos-label')
+  if (!btn || !lbl) return
+  lbl.textContent = pendentes > 0 ? 'Enviar ' + pendentes + ' pendente(s) via WhatsApp' : 'Todos enviados ✅'
+  btn.disabled = pendentes === 0
 }
 
+// ─── SELECTS OCULTOS ──────────────────────────────────────────────
+function preencherSelectsOcultos() {
+  const selFunc = document.getElementById('sel-func-epi-hidden')
+  if (selFunc) {
+    selFunc.innerHTML = '<option value="">Selecione...</option>'
+    funcionarios.forEach(f => { selFunc.innerHTML += `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>` })
+  }
+  const selEpi = document.getElementById('sel-epi-hidden')
+  if (selEpi && estoque.length) {
+    selEpi.innerHTML = '<option value="">Selecione...</option>'
+    estoque.filter(e => parseInt(e['ESTOQUE ATUAL']) > 0).forEach(e => {
+      selEpi.innerHTML += `<option value="${e['CÓD.']}">${e['CÓD.']} — ${e['DESCRIÇÃO DO EPI']}</option>`
+    })
+  }
+}
+
+// ─── UTILITÁRIOS ──────────────────────────────────────────────────
 function arrayBufferToBase64(buffer) {
   let binary = ''; const bytes = new Uint8Array(buffer)
   for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
