@@ -439,7 +439,10 @@ function renderPaginasFracionadas(competencia) {
     <div class="lista-item" id="pag-card-${i}" style="flex-direction:column;gap:8px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="font-size:12px;font-weight:bold;color:#1A5C2A">Página ${p.pagina}</span>
-        <span id="status-pag-${i}">${badge('pronto')}</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button onclick="visualizarPagina(${i})" style="background:#E3F2FD;color:#1565C0;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:bold">👁️ Ver PDF</button>
+          <span id="status-pag-${i}">${badge('pronto')}</span>
+        </div>
       </div>
       <select id="func-sel-${i}" onchange="selecionarFuncPagina(${i}, this.value)"
         style="width:100%;border:1px solid #ddd;border-radius:8px;padding:8px;font-size:12px">
@@ -457,6 +460,19 @@ function renderPaginasFracionadas(competencia) {
       </div>
     </div>`).join('')}
   `
+}
+
+
+function visualizarPagina(idx) {
+  const p = paginasFracionadas[idx]
+  if (!p || !p.pdfBase64) return toast('❌ PDF não disponível', 'erro')
+  // Converte base64 para blob e abre em nova aba
+  const bytes = Uint8Array.from(atob(p.pdfBase64), c => c.charCodeAt(0))
+  const blob  = new Blob([bytes], { type: 'application/pdf' })
+  const url   = URL.createObjectURL(blob)
+  window.open(url, '_blank')
+  // Libera memória após 60s
+  setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
 
 function selecionarFuncPagina(idx, funcId) {
