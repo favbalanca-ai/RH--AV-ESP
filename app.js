@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 // ── Cole aqui a URL do seu Google Apps Script publicado ──────────
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxayJeiQeUeHNfl0oz1xcJh6xzymXLREH-wosmRaLHTazaV6fo62y0bMgivnJTyv1oP/exec';
+const GAS_URL = 'https://script.google.com/macros/s/SEU_DEPLOYMENT_ID_AQUI/exec'
 
 // ── Estado global ────────────────────────────────────────────────
 let USUARIO   = null
@@ -90,6 +90,42 @@ function logout() {
   document.getElementById('tela-login').style.display = 'flex'
   document.getElementById('login-user').value  = ''
   document.getElementById('login-senha').value = ''
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SINCRONIZAÇÃO MANUAL
+// ═══════════════════════════════════════════════════════════════════
+async function sincronizarManual() {
+  const btn = document.getElementById('btn-sync')
+  btn.classList.add('girando')
+  btn.disabled = true
+  mostrarLoading('Verificando assinaturas pendentes na ZapSign...')
+
+  const res = await chamarGAS({ acao: 'sincronizar' })
+
+  esconderLoading()
+  btn.classList.remove('girando')
+  btn.disabled = false
+
+  if (res.ok) {
+    const d = res.data
+    if (d.atualizados > 0) {
+      toast(`✅ ${d.atualizados} assinatura(s) atualizada(s)! Verificados: ${d.verificados}`, 'sucesso')
+      // Recarregar dados da página atual
+      if (paginaAtual === 'epi')   carregarEpi()
+      if (paginaAtual === 'folha') carregarFolha()
+      carregarDashboard()
+    } else if (d.verificados === 0) {
+      toast('Nenhum documento pendente encontrado', '')
+    } else {
+      toast(`🔄 ${d.verificados} verificado(s) — ${d.pendentes} ainda aguardando assinatura`, '')
+    }
+    if (d.erros?.length) {
+      console.warn('Erros na sincronização:', d.erros)
+    }
+  } else {
+    toast('❌ Erro na sincronização: ' + (res.erro || 'Tente novamente'), 'erro')
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════

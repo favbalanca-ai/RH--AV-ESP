@@ -82,6 +82,13 @@ html, body {
 .app-titulo { font-size: 17px; font-weight: bold; }
 .btn-sair  { font-size: 12px; color: #A5D6A7; background: none; border: none; cursor: pointer; }
 .btn-sair:hover { color: white; }
+.btn-sync {
+  font-size: 18px; background: none; border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 8px; padding: 4px 8px; cursor: pointer; color: white;
+  transition: background 0.2s;
+}
+.btn-sync:hover { background: rgba(255,255,255,0.15); }
+.btn-sync.girando { animation: spin 1s linear infinite; }
 
 .app-main {
   flex: 1;
