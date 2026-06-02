@@ -4,6 +4,19 @@
 
 // ── Cole aqui a URL do seu Google Apps Script publicado ──────────
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxayJeiQeUeHNfl0oz1xcJh6xzymXLREH-wosmRaLHTazaV6fo62y0bMgivnJTyv1oP/exec'
+const PDFLIB_URL = 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js'
+
+// Carrega pdf-lib dinamicamente
+async function carregarPdfLib() {
+  if (window.PDFLib) return window.PDFLib
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = PDFLIB_URL
+    s.onload = () => resolve(window.PDFLib)
+    s.onerror = reject
+    document.head.appendChild(s)
+  })
+}
 
 // ── Estado global ────────────────────────────────────────────────
 let USUARIO   = null
@@ -60,8 +73,27 @@ document.addEventListener('DOMContentLoaded', () => {
   // Form Folha
   document.getElementById('form-folha').addEventListener('submit', enviarFolha)
 
-  // Upload PDF
-  document.getElementById('input-pdf-folha').addEventListener('change', e => {
+  // Form fracionar
+  document.getElementById('form-fracionar').addEventListener('submit', processarFracionamento)
+  preencherMesesFracionar()
+
+  // Upload PDF fracionar — preview
+  document.getElementById('input-pdf-frac').addEventListener('change', async e => {
+    const file = e.target.files[0]
+    if (!file) return
+    const preview = document.getElementById('frac-preview')
+    preview.style.display = 'block'
+    preview.textContent   = '⏳ Lendo PDF...'
+    try {
+      const PDFLib  = await carregarPdfLib()
+      const buffer  = await file.arrayBuffer()
+      const pdfDoc  = await PDFLib.PDFDocument.load(buffer)
+      const total   = pdfDoc.getPageCount()
+      preview.textContent = `📄 PDF carregado: ${total} página(s) — ${total} funcionário(s) serão processados`
+    } catch(e) {
+      preview.textContent = '❌ Erro ao ler PDF: ' + e.message
+    }
+  })
     const file = e.target.files[0]
     if (!file) return
     const reader = new FileReader()
@@ -138,6 +170,7 @@ const TITULOS = {
   'exames':     '🩺 Controle de Exames',
   'epi':        '🦺 EPI',
   'folha':      '💰 Folha de Pagamento',
+  'fracionar':  '✂️ Fracionar Folha',
 }
 
 function irPara(pg) {
@@ -507,6 +540,193 @@ function preencherMeses() {
   })
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// FRACIONAR FOLHA DE PAGAMENTO
+// ═══════════════════════════════════════════════════════════════════
+function preencherMesesFracionar() {
+  const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+  const ano   = new Date().getFullYear()
+  const sel   = document.getElementById('sel-comp-frac')
+  if (!sel) return
+  meses.forEach(m => {
+    sel.innerHTML += `<option value="${m}/${ano}">${m}/${ano}</option>`
+    sel.innerHTML += `<option value="${m}/${ano-1}">${m}/${ano-1}</option>`
+  })
+}
+
+async function processarFracionamento(e) {
+  e.preventDefault()
+  const file        = document.getElementById('input-pdf-frac').files[0]
+  const competencia = document.getElementById('sel-comp-frac').value
+  const enviarZap   = document.getElementById('sel-zapsign-frac').value === 'sim'
+
+  if (!file || !competencia) return toast('❌ Selecione o PDF e a competência', 'erro')
+
+  const btn = document.getElementById('btn-fracionar')
+  btn.disabled = true; btn.textContent = '⏳ Lendo PDF...'
+  mostrarLoading('Carregando pdf-lib...')
+
+  try {
+    const PDFLib = await carregarPdfLib()
+    mostrarLoading('Lendo PDF...')
+
+    const buffer = await file.arrayBuffer()
+    const pdfDoc = await PDFLib.PDFDocument.load(buffer)
+    const total  = pdfDoc.getPageCount()
+
+    esconderLoading()
+    btn.disabled = false; btn.textContent = '✂️ Separar e Processar'
+
+    // Mostra interface de confirmação página a página
+    mostrarConfirmacaoPaginas(pdfDoc, PDFLib, total, competencia, enviarZap, file)
+
+  } catch(err) {
+    esconderLoading()
+    btn.disabled = false; btn.textContent = '✂️ Separar e Processar'
+    toast('❌ Erro ao ler PDF: ' + err.message, 'erro')
+  }
+}
+
+async function mostrarConfirmacaoPaginas(pdfDoc, PDFLib, total, competencia, enviarZap) {
+  const wrap  = document.getElementById('frac-resultado')
+  const lista = document.getElementById('frac-lista')
+  wrap.style.display = 'block'
+
+  // Extrai todas as páginas e monta preview com select
+  lista.innerHTML = `<p style="font-size:12px;color:#1A5C2A;font-weight:bold;margin-bottom:10px">
+    📄 ${total} página(s) encontrada(s). Confirme o funcionário de cada página:</p>`
+
+  for (let i = 0; i < total; i++) {
+    const div = document.createElement('div')
+    div.className = 'lista-item'
+    div.id = 'pag-item-' + i
+    div.style.cssText = 'flex-direction:column;gap:8px;margin-bottom:8px'
+    div.innerHTML = `
+      <div style="font-size:12px;font-weight:bold;color:#1A5C2A">Página ${i+1}</div>
+      <select id="func-pag-${i}" style="width:100%;border:1px solid #ddd;border-radius:8px;padding:8px;font-size:12px">
+        <option value="">⏳ Identificando...</option>
+      </select>`
+    lista.appendChild(div)
+  }
+
+  // Botão confirmar
+  const btnDiv = document.createElement('div')
+  btnDiv.innerHTML = `<button onclick="enviarPaginasConfirmadas(${total},'${competencia}',${enviarZap})"
+    class="btn-primario w-full mt-2" id="btn-confirmar-frac">
+    📲 Confirmar e Processar
+  </button>`
+  lista.appendChild(btnDiv)
+
+  // Identifica funcionários em paralelo via GAS (OCR)
+  for (let i = 0; i < total; i++) {
+    identificarPaginaAsync(pdfDoc, PDFLib, i, total)
+  }
+}
+
+async function identificarPaginaAsync(pdfDoc, PDFLib, i, total) {
+  const sel = document.getElementById('func-pag-' + i)
+  if (!sel) return
+
+  try {
+    // Extrai página como PDF
+    const novoDoc  = await PDFLib.PDFDocument.create()
+    const [pag]    = await novoDoc.copyPages(pdfDoc, [i])
+    novoDoc.addPage(pag)
+    const pagBytes  = await novoDoc.save()
+    const pagBase64 = arrayBufferToBase64(pagBytes)
+
+    // Pede ao GAS para identificar o funcionário via OCR
+    const res = await chamarGAS({
+      acao: 'identificar_funcionario_pdf',
+      dados: { pdf_base64: pagBase64 }
+    })
+
+    // Monta select com todos os funcionários, pre-selecionando o identificado
+    let opcoesHtml = '<option value="">— Selecione —</option>'
+    funcionarios.forEach(f => {
+      const sel = (res.ok && res.data && String(res.data.func_id) === String(f['ID'])) ? 'selected' : ''
+      opcoesHtml += `<option value="${f['ID']}" ${sel}>${f['NOME_COMPLETO']}</option>`
+    })
+    opcoesHtml += '<option value="PULAR">⏭ Pular esta página</option>'
+    sel.innerHTML = opcoesHtml
+
+    // Feedback visual
+    const item = document.getElementById('pag-item-' + i)
+    if (res.ok && res.data?.func_id) {
+      item.style.borderColor = '#4CAF50'
+      item.querySelector('div').textContent = `Página ${i+1} — ✅ ${res.data.nome_encontrado}`
+    } else {
+      item.style.borderColor = '#FF9800'
+      item.querySelector('div').textContent = `Página ${i+1} — ⚠️ Confirme manualmente`
+    }
+  } catch(e) {
+    sel.innerHTML = '<option value="">— Erro, selecione manualmente —</option>' +
+      funcionarios.map(f => `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>`).join('')
+  }
+}
+
+async function enviarPaginasConfirmadas(total, competencia, enviarZap) {
+  const btn = document.getElementById('btn-confirmar-frac')
+  btn.disabled = true; btn.textContent = '⏳ Processando...'
+
+  const PDFLib = window._PDFLibFrac
+  const pdfDoc = window._pdfDocFrac
+  const resultados = [], erros = []
+
+  for (let i = 0; i < total; i++) {
+    const sel    = document.getElementById('func-pag-' + i)
+    const funcId = sel?.value
+    if (!funcId || funcId === 'PULAR' || funcId === '') continue
+
+    const func = funcionarios.find(f => String(f['ID']) === String(funcId))
+    if (!func) continue
+
+    mostrarLoading(`Processando ${func['NOME_COMPLETO']} (${i+1}/${total})...`)
+
+    const novoDoc  = await PDFLib.PDFDocument.create()
+    const [pag]    = await novoDoc.copyPages(pdfDoc, [i])
+    novoDoc.addPage(pag)
+    const pagBytes  = await novoDoc.save()
+    const pagBase64 = arrayBufferToBase64(pagBytes)
+
+    const res = await chamarGAS({
+      acao: 'processar_pagina_folha',
+      dados: {
+        pdf_base64:       pagBase64,
+        competencia,
+        nome_funcionario: func['NOME_COMPLETO'],
+        pagina:           i + 1,
+        enviar_zapsign:   enviarZap,
+      }
+    })
+
+    const item = document.getElementById('pag-item-' + i)
+    if (res.ok) {
+      resultados.push({ pagina: i+1, ...res.data })
+      if (item) item.style.background = '#F1F8E9'
+    } else {
+      erros.push(`Pág ${i+1}: ${res.erro}`)
+      if (item) item.style.background = '#FFF5F5'
+    }
+  }
+
+  esconderLoading()
+  btn.disabled = false; btn.textContent = '✅ Concluído'
+  renderResultadoFracionamento(resultados, erros, total)
+  toast(`✅ ${resultados.length} processados, ${erros.length} erros`, resultados.length > 0 ? 'sucesso' : 'erro')
+}
+
+function arrayBufferToBase64(buffer) {
+  let binary = ''
+  const bytes = new Uint8Array(buffer)
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
+
+// ═══════════════════════════════════════════════════════════════════
 function badge(status) {
   const map = {
     '✅ VIGENTE':     'badge-verde',
