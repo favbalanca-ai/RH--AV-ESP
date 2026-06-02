@@ -1,13 +1,9 @@
-// ═══════════════════════════════════════════════════════════════════
-// SST FAZENDA ÁGUA VIVA — app.js
-// ═══════════════════════════════════════════════════════════════════
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxayJeiQeUeHNfl0oz1xcJh6xzymXLREH-wosmRaLHTazaV6fo62y0bMgivnJTyv1oP/exec'
 const PDFLIB_URL = 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js'
 
 let USUARIO = null, SENHA_ADM = null
 let funcionarios = [], estoque = [], itensEpiSel = []
 let paginaAtual = 'inicio', todosExames = []
-// Páginas fracionadas aguardando envio: [{pagina, funcId, nome, telefone, pdfBase64, status, signUrl}]
 let paginasFracionadas = []
 
 async function carregarPdfLib() {
@@ -23,8 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const sessao = sessionStorage.getItem('sst_user')
   if (sessao) {
     const { usuario, senha } = JSON.parse(sessao)
-    USUARIO = usuario; SENHA_ADM = senha
-    entrarNoApp()
+    USUARIO = usuario; SENHA_ADM = senha; entrarNoApp()
   }
 
   document.getElementById('form-login').addEventListener('submit', async e => {
@@ -32,15 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const usuario = document.getElementById('login-user').value.trim()
     const senha   = document.getElementById('login-senha').value
     const btn     = document.getElementById('btn-login')
-    btn.disabled = true; btn.textContent = 'Entrando...'
+    btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Entrando...'
     document.getElementById('login-erro').style.display = 'none'
     const res = await chamarGAS({ acao: 'listar_funcionarios', usuario, senha })
-    btn.disabled = false; btn.textContent = 'Entrar'
+    btn.disabled = false; btn.innerHTML = '<i class="ti ti-login"></i> Entrar'
     if (res && res.ok) {
       USUARIO = usuario; SENHA_ADM = senha
       sessionStorage.setItem('sst_user', JSON.stringify({ usuario, senha }))
-      funcionarios = res.data
-      entrarNoApp()
+      funcionarios = res.data; entrarNoApp()
     } else {
       const el = document.getElementById('login-erro')
       el.textContent = '⚠️ ' + ((res && res.erro) || 'Usuário ou senha incorretos')
@@ -60,20 +54,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const PDFLib = await carregarPdfLib()
       const pdfDoc = await PDFLib.PDFDocument.load(await file.arrayBuffer())
       const total  = pdfDoc.getPageCount()
-      preview.textContent = '📄 ' + total + ' página(s) — ' + total + ' funcionário(s)'
-      preview.style.background = '#E8F5E9'; preview.style.color = '#1A5C2A'
-    } catch(err) {
-      preview.textContent = '❌ Erro: ' + err.message
-    }
+      preview.innerHTML = '<i class="ti ti-file-check" style="vertical-align:-2px"></i> ' + total + ' página(s) — ' + total + ' funcionário(s) serão processados'
+    } catch(err) { preview.textContent = '❌ Erro ao ler PDF: ' + err.message }
   })
-
-  preencherMesesFracionar()
 })
 
 function entrarNoApp() {
   document.getElementById('tela-login').style.display = 'none'
   document.getElementById('tela-app').style.display   = 'flex'
   preencherMesesFracionar()
+  preencherSelectsFuncionarios()
   carregarDashboard()
   irPara('inicio')
 }
@@ -100,21 +90,13 @@ async function sincronizarManual() {
       if (paginaAtual === 'epi') carregarEpi()
       if (paginaAtual === 'fracionar') carregarEntregasFolha()
       carregarDashboard()
-    } else if (d.verificados === 0) {
-      toast('Nenhum documento pendente', '')
-    } else {
-      toast('🔄 ' + d.pendentes + ' ainda aguardando assinatura', '')
-    }
+    } else { toast(d.verificados === 0 ? 'Nenhum documento pendente' : '🔄 ' + d.pendentes + ' ainda aguardando', '') }
   } else { toast('❌ Erro na sincronização', 'erro') }
 }
 
 const TITULOS = {
-  'inicio':    '🏠 Início',
-  'lista-func':'👥 Funcionários',
-  'novo-func': '➕ Novo Funcionário',
-  'exames':    '🩺 Exames',
-  'epi':       '🦺 EPI',
-  'fracionar': '💰 Folha de Pagamento',
+  'inicio':'Início','lista-func':'Funcionários','novo-func':'Novo Funcionário',
+  'exames':'Exames','epi':'EPI','fracionar':'Folha de Pagamento',
 }
 
 function irPara(pg) {
@@ -142,7 +124,6 @@ async function chamarGAS(dados) {
   } catch(e) { return { ok: false, erro: 'Erro de conexão: ' + e.message } }
 }
 
-// ─── DASHBOARD ───────────────────────────────────────────────────
 async function carregarDashboard() {
   const [resEx, resEst] = await Promise.all([
     chamarGAS({ acao: 'listar_exames' }),
@@ -162,7 +143,12 @@ async function carregarDashboard() {
   }
 }
 
-// ─── FUNCIONÁRIOS ────────────────────────────────────────────────
+function getIniciais(nome) {
+  const p = nome.trim().split(' ').filter(x => x.length > 1)
+  if (p.length >= 2) return (p[0][0] + p[p.length-1][0]).toUpperCase()
+  return (nome[0]||'?').toUpperCase()
+}
+
 async function carregarFuncionarios() {
   mostrarLoading('Carregando funcionários...')
   const res = await chamarGAS({ acao: 'listar_funcionarios' })
@@ -173,11 +159,17 @@ async function carregarFuncionarios() {
   preencherSelectsFuncionarios()
 }
 
+function filtrarFuncionarios(q) {
+  const lista = q ? funcionarios.filter(f => f['NOME_COMPLETO'].toLowerCase().includes(q.toLowerCase())) : funcionarios
+  renderFuncionarios(lista)
+}
+
 function renderFuncionarios(lista) {
   const el = document.getElementById('lista-funcionarios')
-  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum funcionário</p>'; return }
+  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum funcionário encontrado</p>'; return }
   el.innerHTML = lista.map(f => `
     <div class="lista-item">
+      <div class="avatar">${getIniciais(f['NOME_COMPLETO'])}</div>
       <div class="lista-item-info">
         <div class="lista-item-nome">${f['NOME_COMPLETO']}</div>
         <div class="lista-item-sub">${f['FUNCAO']} · ${f['UNIDADE']}</div>
@@ -190,11 +182,11 @@ function renderFuncionarios(lista) {
 async function salvarFuncionario(e) {
   e.preventDefault()
   const btn = document.getElementById('btn-salvar-func')
-  btn.disabled = true; btn.textContent = 'Salvando...'
-  mostrarLoading('Cadastrando funcionário e criando pasta no Drive...')
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Salvando...'
+  mostrarLoading('Cadastrando e criando pasta no Drive...')
   const dados = Object.fromEntries(new FormData(e.target).entries())
   const res = await chamarGAS({ acao: 'cadastrar_funcionario', dados })
-  esconderLoading(); btn.disabled = false; btn.textContent = '💾 Cadastrar'
+  esconderLoading(); btn.disabled = false; btn.innerHTML = '<i class="ti ti-device-floppy"></i> Cadastrar'
   if (res && res.ok) {
     toast('✅ Cadastrado! ID: ' + res.data.id, 'sucesso')
     e.target.reset()
@@ -204,7 +196,6 @@ async function salvarFuncionario(e) {
   } else { toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro') }
 }
 
-// ─── EXAMES ──────────────────────────────────────────────────────
 async function carregarExames() {
   mostrarLoading('Carregando exames...')
   const res = await chamarGAS({ acao: 'listar_exames' })
@@ -217,19 +208,21 @@ function filtrarExames() {
   const filtro = document.getElementById('filtro-status-exame').value
   const lista  = filtro ? todosExames.filter(e => (e['STATUS EXAME']||'') === filtro) : todosExames
   const el = document.getElementById('lista-exames')
-  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum exame</p>'; return }
-  el.innerHTML = lista.map(e => `
-    <div class="lista-item">
+  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum exame encontrado</p>'; return }
+  el.innerHTML = lista.map(e => {
+    const status = e['STATUS EXAME'] || '⏳ PENDENTE'
+    const borderColor = status.includes('VENCIDO') ? 'var(--red-text)' : status.includes('A VENCER') ? 'var(--amber-text)' : 'var(--border)'
+    return `<div class="lista-item" style="border-color:${borderColor}">
       <div class="lista-item-info">
         <div class="lista-item-nome">${e['FUNCIONÁRIO']}</div>
         <div class="lista-item-sub">${e['EXAME REALIZADO']}</div>
         <div class="lista-item-sub">${e['DATA REALIZAÇÃO']?'Realizado: '+e['DATA REALIZAÇÃO']:'Não realizado'}${e['DATA VENCIMENTO']?' · Vence: '+e['DATA VENCIMENTO']:''}</div>
       </div>
-      ${badge(e['STATUS EXAME']||'⏳ PENDENTE')}
-    </div>`).join('')
+      ${badge(status)}
+    </div>`
+  }).join('')
 }
 
-// ─── EPI ─────────────────────────────────────────────────────────
 async function carregarEpi() {
   mostrarLoading('Carregando EPI...')
   const [resEst, resEnt] = await Promise.all([
@@ -242,12 +235,14 @@ async function carregarEpi() {
 }
 
 function renderEstoque(lista) {
-  document.getElementById('lista-estoque').innerHTML = lista.map(e => `
-    <div class="estoque-item">
-      <span class="estoque-nome">${e['CÓD.']} — ${e['DESCRIÇÃO DO EPI']}</span>
-      <span class="estoque-qtd">Qtd: ${e['ESTOQUE ATUAL']}</span>
-      ${badge(situacaoEpi(e))}
-    </div>`).join('')
+  document.getElementById('lista-estoque').innerHTML = lista.map(e => {
+    const sit = situacaoEpi(e)
+    return `<div class="estoque-item">
+      <span class="estoque-nome">${e['DESCRIÇÃO DO EPI']}</span>
+      <span class="estoque-qtd">${e['ESTOQUE ATUAL']} ${e['UNIDADE']||'un'}</span>
+      ${badge(sit)}
+    </div>`
+  }).join('')
 }
 
 function situacaoEpi(e) {
@@ -284,7 +279,7 @@ function renderItensEpi() {
     <div class="item-epi-row">
       <span class="item-epi-nome">${item.cod} — ${item.descricao}</span>
       <input class="item-epi-qtd" type="number" min="1" value="${item.quantidade}" onchange="atualizarQtdEpi('${item.cod}',this.value)">
-      <button class="item-epi-del" onclick="removerItemEpi('${item.cod}')" type="button">✕</button>
+      <button class="item-epi-del" onclick="removerItemEpi('${item.cod}')" type="button"><i class="ti ti-x"></i></button>
     </div>`).join('')
 }
 
@@ -295,73 +290,61 @@ async function enviarEpi(e) {
   const funcId = fd.get('func_id'), motivo = fd.get('motivo')
   if (!funcId) return toast('❌ Selecione o funcionário', 'erro')
   const btn = document.getElementById('btn-enviar-epi')
-  btn.disabled = true; btn.textContent = 'Enviando...'
-  mostrarLoading('Gerando recibo e enviando para ZapSign...')
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Enviando...'
+  mostrarLoading('Gerando recibo e enviando via ZapSign...')
   const res = await chamarGAS({ acao: 'entregar_epi', dados: { func_id: funcId, itens: itensEpiSel, motivo } })
-  esconderLoading(); btn.disabled = false; btn.textContent = '📲 Gerar Recibo e Enviar'
-
+  esconderLoading(); btn.disabled = false; btn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> Gerar recibo e enviar'
   if (res && res.ok) {
-    // Mostra link de assinatura no app também
-    if (res.data.link_assinatura) {
-      mostrarLinkAssinatura(res.data.link_assinatura, res.data.mensagem)
-    } else {
-      toast('✅ ' + res.data.mensagem, 'sucesso')
-    }
+    if (res.data.link_assinatura) mostrarLinkAssinaturaEpi(res.data.link_assinatura, res.data.mensagem)
+    else toast('✅ ' + res.data.mensagem, 'sucesso')
     itensEpiSel = []; renderItensEpi(); e.target.reset(); carregarEpi()
   } else { toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro') }
 }
 
-function mostrarLinkAssinatura(url, msg) {
+function mostrarLinkAssinaturaEpi(url, msg) {
   const el = document.getElementById('link-assinatura-epi')
-  if (!el) return
+  const func = funcionarios.find(f => String(f['ID']) === document.getElementById('sel-func-epi').value)
+  const tel  = func ? '55' + func['TELEFONE'].replace(/\D/g,'') : ''
+  const waUrl = tel ? `https://wa.me/${tel}?text=${encodeURIComponent('Por favor, assine o documento: '+url)}` : ''
   el.style.display = 'block'
   el.innerHTML = `
-    <p style="font-size:12px;font-weight:bold;color:#1A5C2A;margin-bottom:6px">✅ ${msg}</p>
-    <p style="font-size:11px;color:#555;margin-bottom:8px">Link de assinatura (copie para enviar manualmente se necessário):</p>
-    <div style="display:flex;gap:6px;align-items:center">
-      <input id="inp-link-ass" value="${url}" readonly style="flex:1;font-size:10px;border:1px solid #ddd;border-radius:6px;padding:6px;background:#f9f9f9">
-      <button onclick="copiarLink()" style="background:#1A5C2A;color:white;border:none;border-radius:6px;padding:6px 10px;font-size:11px;cursor:pointer">Copiar</button>
-      <a href="https://wa.me/?text=${encodeURIComponent('Por favor, assine o documento: '+url)}" target="_blank" style="background:#25D366;color:white;border-radius:6px;padding:6px 10px;font-size:11px;text-decoration:none">WhatsApp</a>
+    <p class="link-ass-titulo">✅ ${msg}</p>
+    <div class="link-ass-row">
+      <input class="link-ass-input" id="inp-link-ass" value="${url}" readonly>
+      <button class="btn-copiar" onclick="copiarLink()">Copiar</button>
+      ${waUrl ? `<a href="${waUrl}" target="_blank" class="btn-wa"><i class="ti ti-brand-whatsapp"></i></a>` : ''}
     </div>`
 }
 
 function copiarLink() {
-  const inp = document.getElementById('inp-link-ass')
-  if (!inp) return
+  const inp = document.getElementById('inp-link-ass'); if (!inp) return
   inp.select(); document.execCommand('copy')
   toast('✅ Link copiado!', 'sucesso')
 }
 
 function renderEntregas(lista) {
   const el = document.getElementById('lista-entregas')
-  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhuma entrega</p>'; return }
+  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhuma entrega registrada</p>'; return }
   el.innerHTML = lista.map(e => `
     <div class="lista-item">
+      <div class="avatar" style="background:var(--blue-bg);color:var(--blue-text)">${getIniciais(e['FUNCIONÁRIO']||'?')}</div>
       <div class="lista-item-info">
         <div class="lista-item-nome">${e['FUNCIONÁRIO']}</div>
         <div class="lista-item-sub">${e['DESCRIÇÃO DO EPI']} · ${e['DATA ENTREGA']}</div>
-        ${e['LINK DOC ASSINADO'] ? '<a href="'+e['LINK DOC ASSINADO']+'" target="_blank" style="font-size:10px;color:#1565C0">📄 Ver doc assinado</a>' : ''}
+        ${e['LINK DOC ASSINADO'] ? `<a href="${e['LINK DOC ASSINADO']}" target="_blank" style="font-size:10px;color:var(--blue-text)"><i class="ti ti-file-check" style="vertical-align:-2px"></i> Ver assinado</a>` : ''}
       </div>
       ${badge(e['ASSINADO?'])}
     </div>`).join('')
 }
 
-// ─── FRACIONAR FOLHA (substitui Folha de Pagamento) ─────────────
 function preencherMesesFracionar() {
-  const sel = document.getElementById('sel-comp-frac')
-  if (!sel) return
-  // Limpa e repreenche sempre
+  const sel = document.getElementById('sel-comp-frac'); if (!sel) return
   sel.innerHTML = '<option value="">Selecione a competência...</option>'
   const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
   const ano = new Date().getFullYear()
-  // Mês atual primeiro
   const mesAtual = new Date().getMonth()
-  for (let m = mesAtual; m >= 0; m--) {
-    sel.innerHTML += `<option value="${meses[m]}/${ano}">${meses[m]}/${ano}</option>`
-  }
-  for (let m = 11; m > mesAtual; m--) {
-    sel.innerHTML += `<option value="${meses[m]}/${ano-1}">${meses[m]}/${ano-1}</option>`
-  }
+  for (let m = mesAtual; m >= 0; m--) sel.innerHTML += `<option value="${meses[m]}/${ano}">${meses[m]}/${ano}</option>`
+  for (let m = 11; m > mesAtual; m--) sel.innerHTML += `<option value="${meses[m]}/${ano-1}">${meses[m]}/${ano-1}</option>`
 }
 
 async function carregarEntregasFolha() {
@@ -372,13 +355,14 @@ async function carregarEntregasFolha() {
 function renderHistoricoFolha(lista) {
   const el = document.getElementById('historico-folha')
   if (!el) return
-  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum envio</p>'; return }
+  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum envio registrado</p>'; return }
   el.innerHTML = lista.map(f => `
     <div class="lista-item">
+      <div class="avatar" style="background:var(--purple-bg);color:var(--purple-text)">${getIniciais(f['FUNCIONÁRIO']||'?')}</div>
       <div class="lista-item-info">
         <div class="lista-item-nome">${f['FUNCIONÁRIO']}</div>
         <div class="lista-item-sub">${f['COMPETÊNCIA']} · ${f['DATA ENVIO']}</div>
-        ${f['LINK DOC ASSINADO'] ? '<a href="'+f['LINK DOC ASSINADO']+'" target="_blank" style="font-size:10px;color:#1565C0">📄 Ver assinado</a>' : ''}
+        ${f['LINK DOC ASSINADO'] ? `<a href="${f['LINK DOC ASSINADO']}" target="_blank" style="font-size:10px;color:var(--blue-text)"><i class="ti ti-file-check" style="vertical-align:-2px"></i> Ver assinado</a>` : ''}
       </div>
       ${badge(f['STATUS'])}
     </div>`).join('')
@@ -389,97 +373,29 @@ async function processarFracionamento(e) {
   const file        = document.getElementById('input-pdf-frac').files[0]
   const competencia = document.getElementById('sel-comp-frac').value
   if (!file || !competencia) return toast('❌ Selecione o PDF e a competência', 'erro')
-
   const btn = document.getElementById('btn-fracionar')
-  btn.disabled = true; btn.textContent = '⏳ Separando...'
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Separando...'
   mostrarLoading('Carregando pdf-lib...')
-
   try {
     const PDFLib = await carregarPdfLib()
     const pdfDoc = await PDFLib.PDFDocument.load(await file.arrayBuffer())
     const total  = pdfDoc.getPageCount()
-
-    // Separa todas as páginas primeiro
     paginasFracionadas = []
     for (let i = 0; i < total; i++) {
       mostrarLoading('Separando página ' + (i+1) + ' de ' + total + '...')
       const novoDoc = await PDFLib.PDFDocument.create()
       const [pag]   = await novoDoc.copyPages(pdfDoc, [i])
       novoDoc.addPage(pag)
-      const b64 = arrayBufferToBase64(await novoDoc.save())
-      paginasFracionadas.push({
-        pagina: i+1, funcId: '', nome: '', telefone: '',
-        pdfBase64: b64, status: 'pronto', signUrl: '', competencia
-      })
+      paginasFracionadas.push({ pagina: i+1, funcId:'', nome:'', telefone:'', pdfBase64: arrayBufferToBase64(await novoDoc.save()), status:'pronto', signUrl:'', competencia })
     }
-
-    // Mostra cards imediatamente (sem funcionário selecionado)
     esconderLoading()
-    btn.disabled = false; btn.textContent = '✂️ Separar PDF'
+    btn.disabled = false; btn.innerHTML = '<i class="ti ti-scissors"></i> Separar PDF'
     renderPaginasFracionadas(competencia)
-
-    // Identifica funcionários em paralelo via OCR no GAS
     toast('🔍 Identificando funcionários automaticamente...', '')
     identificarFuncionariosAutomatico()
-
   } catch(err) {
-    esconderLoading(); btn.disabled = false; btn.textContent = '✂️ Separar PDF'
+    esconderLoading(); btn.disabled = false; btn.innerHTML = '<i class="ti ti-scissors"></i> Separar PDF'
     toast('❌ Erro: ' + err.message, 'erro')
-  }
-}
-
-async function identificarFuncionariosAutomatico() {
-  let identificados = 0
-
-  for (let i = 0; i < paginasFracionadas.length; i++) {
-    const p = paginasFracionadas[i]
-    try {
-      const res = await chamarGAS({
-        acao: 'identificar_funcionario_pdf',
-        dados: { pdf_base64: p.pdfBase64 }
-      })
-
-      if (res && res.ok && res.data && res.data.func_id) {
-        const funcId = String(res.data.func_id)
-        const func   = funcionarios.find(f => String(f['ID']) === funcId)
-        if (func) {
-          // Pré-seleciona o funcionário no select
-          paginasFracionadas[i].funcId   = funcId
-          paginasFracionadas[i].nome     = func['NOME_COMPLETO']
-          paginasFracionadas[i].telefone = func['TELEFONE']
-
-          const sel = document.getElementById('func-sel-' + i)
-          if (sel) sel.value = funcId
-
-          // Mostra botão de envio
-          const actions = document.getElementById('actions-' + i)
-          if (actions) actions.style.display = 'flex'
-
-          // Feedback visual no card
-          const card = document.getElementById('pag-card-' + i)
-          if (card) card.style.borderColor = '#4CAF50'
-
-          const statusEl = document.getElementById('status-pag-' + i)
-          if (statusEl) statusEl.innerHTML = `<span style="font-size:10px;color:#1A5C2A;font-weight:bold">✅ ${func['NOME_CURTO'] || func['NOME_COMPLETO'].split(' ')[0]}</span>`
-
-          identificados++
-        }
-      } else {
-        // Não identificado — destaca para seleção manual
-        const card = document.getElementById('pag-card-' + i)
-        if (card) card.style.borderColor = '#FF9800'
-        const statusEl = document.getElementById('status-pag-' + i)
-        if (statusEl) statusEl.innerHTML = `<span style="font-size:10px;color:#E65100;font-weight:bold">⚠️ Selecione</span>`
-      }
-    } catch(err) {
-      console.warn('Erro ao identificar página ' + (i+1), err)
-    }
-  }
-
-  if (identificados === paginasFracionadas.length) {
-    toast('✅ ' + identificados + ' funcionário(s) identificados automaticamente!', 'sucesso')
-  } else {
-    toast('✅ ' + identificados + ' identificados · ' + (paginasFracionadas.length - identificados) + ' precisam de seleção manual', '')
   }
 }
 
@@ -487,131 +403,136 @@ function renderPaginasFracionadas(competencia) {
   const wrap = document.getElementById('frac-resultado')
   const lista = document.getElementById('frac-lista')
   wrap.style.display = 'block'
-
   lista.innerHTML = `
-    <div style="background:#E8F5E9;border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px;color:#1A5C2A;font-weight:bold">
-      ✅ ${paginasFracionadas.length} página(s) separadas — selecione o funcionário e envie individualmente
+    <div style="background:var(--verde-claro);border-radius:var(--radius-md);padding:10px 12px;margin-bottom:10px;font-size:12px;color:var(--verde-text);font-weight:600">
+      <i class="ti ti-scissors" style="vertical-align:-2px"></i> ${paginasFracionadas.length} página(s) separadas
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button onclick="enviarTodasPendentes()" class="btn-primario" style="flex:1;font-size:12px;padding:10px">
-        📲 Enviar Todas via WhatsApp
-      </button>
-    </div>
+    <button onclick="enviarTodasPendentes()" class="btn-primario w-full mb-3" style="font-size:12px">
+      <i class="ti ti-brand-whatsapp"></i> Enviar todas via WhatsApp
+    </button>
     ${paginasFracionadas.map((p, i) => `
-    <div class="lista-item" id="pag-card-${i}" style="flex-direction:column;gap:8px;margin-bottom:8px">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:12px;font-weight:bold;color:#1A5C2A">Página ${p.pagina}</span>
-        <div style="display:flex;gap:6px;align-items:center">
-          <button onclick="visualizarPagina(${i})" style="background:#E3F2FD;color:#1565C0;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:bold">👁️ Ver PDF</button>
+    <div class="frac-card-page" id="pag-card-${i}">
+      <div class="frac-page-header">
+        <span class="frac-page-num"><i class="ti ti-file-text" style="vertical-align:-2px"></i> Página ${p.pagina}</span>
+        <div class="frac-page-actions">
+          <button onclick="visualizarPagina(${i})" class="btn-ver-pdf"><i class="ti ti-eye"></i> Ver PDF</button>
           <span id="status-pag-${i}">${badge('pronto')}</span>
         </div>
       </div>
-      <select id="func-sel-${i}" onchange="selecionarFuncPagina(${i}, this.value)"
-        style="width:100%;border:1px solid #ddd;border-radius:8px;padding:8px;font-size:12px">
-        <option value="">— Selecione o funcionário —</option>
+      <select id="func-sel-${i}" class="frac-select" onchange="selecionarFuncPagina(${i}, this.value)">
+        <option value="">⏳ Identificando... / Selecione manualmente</option>
         ${funcionarios.map(f => `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>`).join('')}
       </select>
-      <div id="actions-${i}" style="display:none;gap:8px">
-        <button onclick="enviarPaginaZapSign(${i})" id="btn-zap-${i}"
-          class="btn-primario" style="flex:1;font-size:11px;padding:8px">
-          📲 Enviar WhatsApp + ZapSign
+      <div id="actions-${i}" class="frac-links" style="display:none">
+        <button onclick="enviarPaginaZapSign(${i})" id="btn-zap-${i}" class="btn-enviar-zap">
+          <i class="ti ti-brand-whatsapp"></i> Enviar
         </button>
-        <a id="link-btn-${i}" href="#" target="_blank" style="display:none;background:#E3F2FD;color:#1565C0;border-radius:8px;padding:8px 10px;font-size:11px;text-decoration:none;font-weight:bold">
-          🔗 Ver Link
+        <a id="link-btn-${i}" href="#" target="_blank" class="btn-link-ass" style="display:none">
+          <i class="ti ti-external-link"></i> Link
         </a>
       </div>
     </div>`).join('')}
   `
 }
 
+async function identificarFuncionariosAutomatico() {
+  let identificados = 0
+  for (let i = 0; i < paginasFracionadas.length; i++) {
+    try {
+      const res = await chamarGAS({ acao: 'identificar_funcionario_pdf', dados: { pdf_base64: paginasFracionadas[i].pdfBase64 } })
+      if (res && res.ok && res.data && res.data.func_id) {
+        const func = funcionarios.find(f => String(f['ID']) === String(res.data.func_id))
+        if (func) {
+          paginasFracionadas[i].funcId   = String(func['ID'])
+          paginasFracionadas[i].nome     = func['NOME_COMPLETO']
+          paginasFracionadas[i].telefone = func['TELEFONE']
+          const sel = document.getElementById('func-sel-' + i)
+          if (sel) sel.value = func['ID']
+          const actions = document.getElementById('actions-' + i)
+          if (actions) actions.style.display = 'flex'
+          const card = document.getElementById('pag-card-' + i)
+          if (card) card.style.borderColor = '#C8E6C9'
+          const statusEl = document.getElementById('status-pag-' + i)
+          if (statusEl) statusEl.innerHTML = `<span class="badge badge-verde">✅ ${func['NOME_CURTO'] || func['NOME_COMPLETO'].split(' ')[0]}</span>`
+          identificados++
+        }
+      } else {
+        const card = document.getElementById('pag-card-' + i)
+        if (card) card.style.borderColor = '#FFE0B2'
+        const statusEl = document.getElementById('status-pag-' + i)
+        if (statusEl) statusEl.innerHTML = `<span class="badge badge-amarelo">⚠️ Manual</span>`
+      }
+    } catch(err) { console.warn('Erro página ' + (i+1), err) }
+  }
+  toast(identificados === paginasFracionadas.length
+    ? '✅ Todos os ' + identificados + ' funcionários identificados!'
+    : '✅ ' + identificados + ' identificados · ' + (paginasFracionadas.length - identificados) + ' selecione manualmente', 'sucesso')
+}
 
 function visualizarPagina(idx) {
-  const p = paginasFracionadas[idx]
-  if (!p || !p.pdfBase64) return toast('❌ PDF não disponível', 'erro')
-  // Converte base64 para blob e abre em nova aba
+  const p = paginasFracionadas[idx]; if (!p || !p.pdfBase64) return toast('❌ PDF não disponível', 'erro')
   const bytes = Uint8Array.from(atob(p.pdfBase64), c => c.charCodeAt(0))
-  const blob  = new Blob([bytes], { type: 'application/pdf' })
-  const url   = URL.createObjectURL(blob)
+  const url   = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
   window.open(url, '_blank')
-  // Libera memória após 60s
   setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
 
 function selecionarFuncPagina(idx, funcId) {
-  const func = funcionarios.find(f => String(f['ID']) === String(funcId))
-  if (!func) return
-  paginasFracionadas[idx].funcId    = funcId
-  paginasFracionadas[idx].nome      = func['NOME_COMPLETO']
-  paginasFracionadas[idx].telefone  = func['TELEFONE']
-  document.getElementById('actions-' + idx).style.display = 'flex'
+  const func = funcionarios.find(f => String(f['ID']) === String(funcId)); if (!func) return
+  paginasFracionadas[idx].funcId   = funcId
+  paginasFracionadas[idx].nome     = func['NOME_COMPLETO']
+  paginasFracionadas[idx].telefone = func['TELEFONE']
+  const actions = document.getElementById('actions-' + idx)
+  if (actions) actions.style.display = 'flex'
 }
 
 async function enviarPaginaZapSign(idx) {
   const p = paginasFracionadas[idx]
   if (!p.funcId) return toast('❌ Selecione o funcionário primeiro', 'erro')
-
   const btn = document.getElementById('btn-zap-' + idx)
-  btn.disabled = true; btn.textContent = '⏳ Enviando...'
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>'
   mostrarLoading('Enviando para ZapSign...')
-
-  const res = await chamarGAS({
-    acao: 'processar_pagina_folha',
-    dados: {
-      pdf_base64:       p.pdfBase64,
-      competencia:      p.competencia,
-      nome_funcionario: p.nome,
-      pagina:           p.pagina,
-      enviar_zapsign:   true,
-    }
-  })
-
+  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfBase64, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true } })
   esconderLoading()
-
   if (res && res.ok) {
     paginasFracionadas[idx].status  = 'enviado'
     paginasFracionadas[idx].signUrl = res.data.sign_url || ''
-
-    // Atualiza card
-    document.getElementById('status-pag-' + idx).innerHTML = badge('Pendente')
-    btn.textContent = '✅ Enviado'
-    btn.style.background = '#4CAF50'
-
-    // Mostra link de assinatura
+    btn.innerHTML = '<i class="ti ti-check"></i> Enviado'; btn.style.background = '#22C55E'
+    const statusEl = document.getElementById('status-pag-' + idx)
+    if (statusEl) statusEl.innerHTML = `<span class="badge badge-amarelo">Pendente</span>`
     if (res.data.sign_url) {
       const linkBtn = document.getElementById('link-btn-' + idx)
-      linkBtn.href = res.data.sign_url
-      linkBtn.style.display = 'inline-flex'
-      // Botão WhatsApp direto
-      const waUrl = 'https://wa.me/55' + p.telefone.replace(/\D/g,'') + '?text=' + encodeURIComponent('Olá ' + p.nome.split(' ')[0] + ', por favor assine seu holerite: ' + res.data.sign_url)
+      if (linkBtn) { linkBtn.href = res.data.sign_url; linkBtn.style.display = 'flex' }
+      const tel = p.telefone.replace(/\D/g,'')
+      const waUrl = `https://wa.me/55${tel}?text=${encodeURIComponent('Olá ' + p.nome.split(' ')[0] + ', assine seu holerite: ' + res.data.sign_url)}`
       const actions = document.getElementById('actions-' + idx)
-      actions.innerHTML += `<a href="${waUrl}" target="_blank" style="background:#25D366;color:white;border-radius:8px;padding:8px 10px;font-size:11px;text-decoration:none;font-weight:bold">💬 WA</a>`
+      if (actions && !actions.querySelector('.btn-wa')) {
+        const wa = document.createElement('a')
+        wa.href = waUrl; wa.target = '_blank'; wa.className = 'btn-wa'
+        wa.innerHTML = '<i class="ti ti-brand-whatsapp"></i> WA'
+        actions.appendChild(wa)
+      }
     }
-
-    toast('✅ ' + p.nome.split(' ')[0] + ' — enviado via WhatsApp!', 'sucesso')
+    toast('✅ ' + p.nome.split(' ')[0] + ' — enviado!', 'sucesso')
     carregarEntregasFolha()
   } else {
-    btn.disabled = false; btn.textContent = '📲 Enviar WhatsApp + ZapSign'
+    btn.disabled = false; btn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> Enviar'
     toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
   }
 }
 
 async function enviarTodasPendentes() {
   const pendentes = paginasFracionadas.filter(p => p.funcId && p.status === 'pronto')
-  if (!pendentes.length) return toast('⚠️ Selecione os funcionários de cada página primeiro', 'erro')
+  if (!pendentes.length) return toast('⚠️ Selecione os funcionários primeiro', 'erro')
   for (let i = 0; i < paginasFracionadas.length; i++) {
-    if (paginasFracionadas[i].funcId && paginasFracionadas[i].status === 'pronto') {
-      await enviarPaginaZapSign(i)
-    }
+    if (paginasFracionadas[i].funcId && paginasFracionadas[i].status === 'pronto') await enviarPaginaZapSign(i)
   }
 }
 
-// ─── UTILITÁRIOS ─────────────────────────────────────────────────
 function preencherSelectsFuncionarios() {
-  ;['sel-func-epi'].forEach(id => {
-    const sel = document.getElementById(id); if (!sel) return
-    sel.innerHTML = '<option value="">Selecione...</option>'
-    funcionarios.forEach(f => { sel.innerHTML += `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>` })
-  })
+  const sel = document.getElementById('sel-func-epi'); if (!sel) return
+  sel.innerHTML = '<option value="">Selecione...</option>'
+  funcionarios.forEach(f => { sel.innerHTML += `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>` })
 }
 
 function arrayBufferToBase64(buffer) {
@@ -627,7 +548,7 @@ function badge(status) {
     'Sim':'badge-verde','Não':'badge-cinza','Pendente':'badge-amarelo',
     'Assinado':'badge-verde','Salvo':'badge-azul','pronto':'badge-cinza',
     'enviado':'badge-verde','✅ OK':'badge-verde','⚠️ REPOR':'badge-amarelo',
-    '⛔ SEM ESTOQUE':'badge-vermelho',
+    '⛔ SEM ESTOQUE':'badge-vermelho','⛔ Recusado':'badge-vermelho',
   }
   return `<span class="badge ${map[status]||'badge-cinza'}">${status||'—'}</span>`
 }
