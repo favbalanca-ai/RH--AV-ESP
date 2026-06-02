@@ -73,6 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function entrarNoApp() {
   document.getElementById('tela-login').style.display = 'none'
   document.getElementById('tela-app').style.display   = 'flex'
+  preencherMesesFracionar()
   carregarDashboard()
   irPara('inicio')
 }
@@ -349,13 +350,18 @@ function renderEntregas(lista) {
 function preencherMesesFracionar() {
   const sel = document.getElementById('sel-comp-frac')
   if (!sel) return
-  if (sel.options.length > 1) return // já preenchido
+  // Limpa e repreenche sempre
+  sel.innerHTML = '<option value="">Selecione a competência...</option>'
   const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
   const ano = new Date().getFullYear()
-  meses.forEach(m => {
-    sel.innerHTML += `<option value="${m}/${ano}">${m}/${ano}</option>`
-    sel.innerHTML += `<option value="${m}/${ano-1}">${m}/${ano-1}</option>`
-  })
+  // Mês atual primeiro
+  const mesAtual = new Date().getMonth()
+  for (let m = mesAtual; m >= 0; m--) {
+    sel.innerHTML += `<option value="${meses[m]}/${ano}">${meses[m]}/${ano}</option>`
+  }
+  for (let m = 11; m > mesAtual; m--) {
+    sel.innerHTML += `<option value="${meses[m]}/${ano-1}">${meses[m]}/${ano-1}</option>`
+  }
 }
 
 async function carregarEntregasFolha() {
