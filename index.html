@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>SST — Fazenda Água Viva</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<!-- ══ TELA DE LOGIN ══════════════════════════════════════════════ -->
+<!-- LOGIN -->
 <div id="tela-login" class="tela ativa">
   <div class="login-wrap">
     <div class="login-logo">🌿</div>
@@ -31,76 +31,44 @@
   </div>
 </div>
 
-<!-- ══ APP PRINCIPAL ══════════════════════════════════════════════ -->
+<!-- APP -->
 <div id="tela-app" class="tela" style="display:none">
 
-  <!-- Header -->
   <header class="app-header">
     <div>
       <p class="app-sub">Fazenda Água Viva — SST</p>
       <h1 class="app-titulo" id="titulo-pagina">🏠 Início</h1>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
-      <button onclick="sincronizarManual()" id="btn-sync" class="btn-sync" title="Sincronizar assinaturas pendentes">🔄</button>
+      <button onclick="sincronizarManual()" id="btn-sync" class="btn-sync" title="Sincronizar assinaturas">🔄</button>
       <button onclick="logout()" class="btn-sair">Sair</button>
     </div>
   </header>
 
-  <!-- Toast -->
   <div id="toast" class="toast" style="display:none"></div>
-
-  <!-- Loading -->
   <div id="loading" class="loading-overlay" style="display:none">
     <div class="spinner"></div>
     <p id="loading-msg">Carregando...</p>
   </div>
 
-  <!-- ── PÁGINAS ──────────────────────────────────────────────── -->
   <main class="app-main">
 
     <!-- INÍCIO -->
     <div id="pg-inicio" class="pagina ativa">
       <div class="cards-grid">
-        <div class="card-stat verde" id="stat-funcs">
-          <span class="stat-icone">👥</span>
-          <span class="stat-num" id="num-funcs">—</span>
-          <span class="stat-label">Funcionários Ativos</span>
-        </div>
-        <div class="card-stat vermelho" id="stat-vencidos">
-          <span class="stat-icone">⛔</span>
-          <span class="stat-num" id="num-vencidos">—</span>
-          <span class="stat-label">Exames Vencidos</span>
-        </div>
-        <div class="card-stat amarelo" id="stat-avencer">
-          <span class="stat-icone">⚠️</span>
-          <span class="stat-num" id="num-avencer">—</span>
-          <span class="stat-label">A Vencer (60 dias)</span>
-        </div>
-        <div class="card-stat laranja" id="stat-epi">
-          <span class="stat-icone">🦺</span>
-          <span class="stat-num" id="num-epi">—</span>
-          <span class="stat-label">EPIs p/ Repor</span>
-        </div>
+        <div class="card-stat verde"><span class="stat-icone">👥</span><span class="stat-num" id="num-funcs">—</span><span class="stat-label">Ativos</span></div>
+        <div class="card-stat vermelho"><span class="stat-icone">⛔</span><span class="stat-num" id="num-vencidos">—</span><span class="stat-label">Exames Vencidos</span></div>
+        <div class="card-stat amarelo"><span class="stat-icone">⚠️</span><span class="stat-num" id="num-avencer">—</span><span class="stat-label">A Vencer</span></div>
+        <div class="card-stat laranja"><span class="stat-icone">🦺</span><span class="stat-num" id="num-epi">—</span><span class="stat-label">EPI p/ Repor</span></div>
       </div>
-
       <div class="card">
         <h2 class="card-titulo">⚡ Ações Rápidas</h2>
         <div class="acoes-grid">
-          <button class="btn-acao" onclick="irPara('novo-func')">
-            <span>➕</span><span>Novo Funcionário</span>
-          </button>
-          <button class="btn-acao" onclick="irPara('lista-func')">
-            <span>👥</span><span>Funcionários</span>
-          </button>
-          <button class="btn-acao" onclick="irPara('exames')">
-            <span>🩺</span><span>Exames</span>
-          </button>
-          <button class="btn-acao" onclick="irPara('epi')">
-            <span>🦺</span><span>Entregar EPI</span>
-          </button>
-          <button class="btn-acao" onclick="irPara('folha')">
-            <span>💰</span><span>Folha de Pagamento</span>
-          </button>
+          <button class="btn-acao" onclick="irPara('novo-func')"><span>➕</span><span>Novo Funcionário</span></button>
+          <button class="btn-acao" onclick="irPara('lista-func')"><span>👥</span><span>Funcionários</span></button>
+          <button class="btn-acao" onclick="irPara('exames')"><span>🩺</span><span>Exames</span></button>
+          <button class="btn-acao" onclick="irPara('epi')"><span>🦺</span><span>Entregar EPI</span></button>
+          <button class="btn-acao" onclick="irPara('fracionar')"><span>💰</span><span>Folha de Pagamento</span></button>
         </div>
       </div>
     </div>
@@ -114,97 +82,46 @@
     <!-- NOVO FUNCIONÁRIO -->
     <div id="pg-novo-func" class="pagina">
       <form id="form-funcionario" class="formulario">
-        <div class="campo-grupo">
-          <label>Nome Completo *</label>
-          <input type="text" name="nome_completo" required placeholder="Nome como na CTPS">
-        </div>
-        <div class="campo-grupo">
-          <label>Nome Curto</label>
-          <input type="text" name="nome_curto" placeholder="Como chamam (ex: Rafael)">
-        </div>
-        <div class="campo-grupo">
-          <label>CPF *</label>
-          <input type="text" name="cpf" required placeholder="000.000.000-00">
-        </div>
-        <div class="campo-grupo">
-          <label>RG</label>
-          <input type="text" name="rg">
-        </div>
-        <div class="campo-grupo">
-          <label>Data de Nascimento</label>
-          <input type="date" name="data_nascimento">
-        </div>
-        <div class="campo-grupo">
-          <label>Telefone (WhatsApp) *</label>
-          <input type="tel" name="telefone" required placeholder="(62) 99999-9999">
-        </div>
-        <div class="campo-grupo">
-          <label>Empregador</label>
-          <input type="text" name="empregador" placeholder="ex: Jovane Gatto Cossul">
-        </div>
+        <div class="campo-grupo"><label>Nome Completo *</label><input type="text" name="nome_completo" required placeholder="Nome como na CTPS"></div>
+        <div class="campo-grupo"><label>Nome Curto</label><input type="text" name="nome_curto" placeholder="Como chamam"></div>
+        <div class="campo-grupo"><label>CPF *</label><input type="text" name="cpf" required placeholder="000.000.000-00"></div>
+        <div class="campo-grupo"><label>RG</label><input type="text" name="rg"></div>
+        <div class="campo-grupo"><label>Data de Nascimento</label><input type="date" name="data_nascimento"></div>
+        <div class="campo-grupo"><label>Telefone (WhatsApp) *</label><input type="tel" name="telefone" required placeholder="(62) 99999-9999"></div>
+        <div class="campo-grupo"><label>Empregador</label><input type="text" name="empregador"></div>
         <div class="campo-grupo">
           <label>Unidade *</label>
           <select name="unidade" required>
             <option value="">Selecione...</option>
-            <option>Fazenda Água Viva</option>
-            <option>Fazenda Roncador</option>
-            <option>Fazenda Espora</option>
+            <option>Fazenda Água Viva</option><option>Fazenda Roncador</option><option>Fazenda Espora</option>
           </select>
         </div>
-        <div class="campo-grupo">
-          <label>Função *</label>
-          <input type="text" name="funcao" required placeholder="ex: Tratorista, Cozinheira...">
-        </div>
+        <div class="campo-grupo"><label>Função *</label><input type="text" name="funcao" required placeholder="ex: Tratorista, Cozinheira..."></div>
         <div class="campo-grupo">
           <label>Perfil SST * <small>(define exames automáticos)</small></label>
           <select name="perfil_sst" required>
-            <option value="">Selecione o perfil...</option>
+            <option value="">Selecione...</option>
             <option value="CASEIRO_AGROPECUARIO">Trab. Agrícola / Caseiro</option>
             <option value="OPERADOR_MAQUINAS_AGRICOLAS">Operador de Máquinas Agrícolas</option>
             <option value="PULVERIZACAO_AGRICOLA">Pulverização Agrícola</option>
             <option value="MOTORISTA_LOGISTICA">Motorista / Logística</option>
             <option value="COZINHA">Cozinheira / Cozinheiro</option>
-            <option value="LIDER_OPERACIONAL">Encarregado / Líder Operacional</option>
+            <option value="LIDER_OPERACIONAL">Encarregado / Líder</option>
             <option value="ADMINISTRATIVO">Administrativo</option>
             <option value="ARMAZEM_ABASTECIMENTO">Armazém / Abastecimento</option>
             <option value="BIOFABRICA">Biofábrica</option>
           </select>
         </div>
-        <div class="campo-grupo">
-          <label>Data de Admissão</label>
-          <input type="date" name="data_admissao">
+        <div class="campo-grupo"><label>Data de Admissão</label><input type="date" name="data_admissao"></div>
+        <div class="dois-col">
+          <div class="campo-grupo"><label>Opera Máquina?</label><select name="opera_maquina"><option>Não</option><option>Sim</option></select></div>
+          <div class="campo-grupo"><label>Aplica Defensivo?</label><select name="aplica_defensivo"><option>Não</option><option>Sim</option></select></div>
         </div>
         <div class="dois-col">
-          <div class="campo-grupo">
-            <label>Opera Máquina?</label>
-            <select name="opera_maquina">
-              <option>Não</option><option>Sim</option>
-            </select>
-          </div>
-          <div class="campo-grupo">
-            <label>Aplica Defensivo?</label>
-            <select name="aplica_defensivo">
-              <option>Não</option><option>Sim</option>
-            </select>
-          </div>
+          <div class="campo-grupo"><label>Tam. Camisa</label><input type="text" name="tam_camisa" placeholder="P, M, G..."></div>
+          <div class="campo-grupo"><label>Tam. Bota</label><input type="text" name="tam_bota" placeholder="38, 39..."></div>
         </div>
-        <div class="dois-col">
-          <div class="campo-grupo">
-            <label>Tam. Camisa</label>
-            <input type="text" name="tam_camisa" placeholder="P, M, G...">
-          </div>
-          <div class="campo-grupo">
-            <label>Tam. Bota</label>
-            <input type="text" name="tam_bota" placeholder="38, 39...">
-          </div>
-        </div>
-        <div class="campo-grupo">
-          <label>Observações</label>
-          <textarea name="observacoes" rows="2"></textarea>
-        </div>
-        <div class="info-box">
-          💡 Ao salvar, os exames do perfil serão cadastrados automaticamente e a pasta do Drive será criada.
-        </div>
+        <div class="info-box">💡 Ao salvar, os exames do perfil são cadastrados automaticamente e a pasta do Drive é criada.</div>
         <div class="dois-col mt-2">
           <button type="button" class="btn-secundario" onclick="irPara('lista-func')">Cancelar</button>
           <button type="submit" class="btn-primario" id="btn-salvar-func">💾 Cadastrar</button>
@@ -212,15 +129,12 @@
       </form>
     </div>
 
-    <!-- CONTROLE EXAMES -->
+    <!-- EXAMES -->
     <div id="pg-exames" class="pagina">
       <div class="filtro-wrap">
         <select id="filtro-status-exame" onchange="filtrarExames()">
           <option value="">Todos os status</option>
-          <option>⛔ VENCIDO</option>
-          <option>⚠️ A VENCER</option>
-          <option>✅ VIGENTE</option>
-          <option>⏳ PENDENTE</option>
+          <option>⛔ VENCIDO</option><option>⚠️ A VENCER</option><option>✅ VIGENTE</option><option>⏳ PENDENTE</option>
         </select>
       </div>
       <div id="lista-exames" class="lista"></div>
@@ -228,13 +142,10 @@
 
     <!-- EPI -->
     <div id="pg-epi" class="pagina">
-      <!-- Estoque -->
       <div class="card mb-3">
         <h2 class="card-titulo">📦 Estoque Atual</h2>
         <div id="lista-estoque" class="lista-compacta"></div>
       </div>
-
-      <!-- Formulário de entrega -->
       <div class="card">
         <h2 class="card-titulo">🦺 Registrar Entrega</h2>
         <form id="form-epi" class="formulario">
@@ -247,11 +158,7 @@
           <div class="campo-grupo">
             <label>Motivo</label>
             <select name="motivo">
-              <option>Admissional</option>
-              <option>Reposição</option>
-              <option>Desgaste</option>
-              <option>Perda</option>
-              <option>Troca de Tamanho</option>
+              <option>Admissional</option><option>Reposição</option><option>Desgaste</option><option>Perda</option><option>Troca de Tamanho</option>
             </select>
           </div>
           <div class="campo-grupo">
@@ -260,133 +167,65 @@
               <option value="">Selecione um EPI...</option>
             </select>
           </div>
-          <!-- Itens selecionados -->
           <div id="itens-epi" class="itens-selecionados" style="display:none">
             <p class="itens-titulo">EPIs selecionados:</p>
             <div id="lista-itens-epi"></div>
           </div>
-          <div class="info-box blue">
-            📱 O recibo será gerado em PDF e enviado para o WhatsApp do funcionário via ZapSign. O documento assinado será salvo automaticamente no Drive.
-          </div>
-          <button type="submit" class="btn-primario w-full mt-2" id="btn-enviar-epi">
-            📲 Gerar Recibo e Enviar para Assinatura
-          </button>
+          <div class="info-box blue">📱 O recibo será gerado em PDF e enviado para o WhatsApp via ZapSign. Você também receberá o link de assinatura aqui no app.</div>
+          <button type="submit" class="btn-primario w-full mt-2" id="btn-enviar-epi">📲 Gerar Recibo e Enviar</button>
         </form>
+        <!-- Link de assinatura aparece aqui após envio -->
+        <div id="link-assinatura-epi" style="display:none;margin-top:12px;background:#F1F8E9;border:1px solid #C8E6C9;border-radius:10px;padding:12px"></div>
       </div>
-
-      <!-- Histórico -->
       <div class="card mt-3">
         <h2 class="card-titulo">📋 Últimas Entregas</h2>
         <div id="lista-entregas" class="lista"></div>
       </div>
     </div>
 
-    <!-- FOLHA DE PAGAMENTO -->
-    <div id="pg-folha" class="pagina">
-      <div class="card mb-3">
-        <h2 class="card-titulo">💰 Enviar Folha para Assinatura</h2>
-        <form id="form-folha" class="formulario">
-          <div class="campo-grupo">
-            <label>Funcionário *</label>
-            <select name="func_id" id="sel-func-folha" required>
-              <option value="">Selecione...</option>
-            </select>
-          </div>
-          <div class="campo-grupo">
-            <label>Competência *</label>
-            <select name="competencia" required id="sel-competencia">
-              <option value="">Selecione...</option>
-            </select>
-          </div>
-          <div class="campo-grupo">
-            <label>PDF do Holerite <small>(opcional)</small></label>
-            <input type="file" id="input-pdf-folha" accept=".pdf">
-            <p class="campo-hint">Se não enviar, será gerado um documento de ciência.</p>
-          </div>
-          <div id="pdf-carregado" class="alerta sucesso" style="display:none">
-            ✅ PDF carregado — será mesclado com o documento de ciência
-          </div>
-          <div class="info-box blue">
-            📱 A folha será enviada para o WhatsApp do funcionário via ZapSign. O documento assinado será salvo na pasta Drive do funcionário.
-          </div>
-          <button type="submit" class="btn-primario w-full mt-2" id="btn-enviar-folha">
-            📲 Enviar para Assinatura
-          </button>
-        </form>
-      </div>
-
-      <div class="card">
-        <h2 class="card-titulo">📋 Histórico de Envios</h2>
-        <div id="lista-folhas" class="lista"></div>
-      </div>
-    </div>
-
-    <!-- FRACIONAR FOLHA -->
+    <!-- FOLHA DE PAGAMENTO (Fracionar) -->
     <div id="pg-fracionar" class="pagina">
       <div class="card mb-3">
-        <h2 class="card-titulo">📄 Fracionar PDF da Folha</h2>
-        <p style="font-size:12px;color:#666;margin-bottom:12px">
-          Carregue o PDF completo com todos os funcionários. O sistema separa automaticamente cada página, identifica o funcionário pelo nome e salva na pasta certa do Drive.
-        </p>
+        <h2 class="card-titulo">✂️ Fracionar Folha de Pagamento</h2>
+        <p style="font-size:12px;color:#666;margin-bottom:12px">Carregue o PDF com todos os funcionários. O sistema separa cada página e você envia individualmente via WhatsApp + ZapSign.</p>
         <form id="form-fracionar" class="formulario">
           <div class="campo-grupo">
             <label>Competência *</label>
-            <select name="competencia" id="sel-comp-frac" required>
-              <option value="">Selecione...</option>
-            </select>
+            <select id="sel-comp-frac" required><option value="">Selecione...</option></select>
           </div>
           <div class="campo-grupo">
             <label>PDF da Folha Completa *</label>
             <input type="file" id="input-pdf-frac" accept=".pdf" required>
           </div>
-          <div class="campo-grupo">
-            <label>Enviar para assinatura via WhatsApp?</label>
-            <select id="sel-zapsign-frac">
-              <option value="sim">Sim — enviar ZapSign para cada funcionário</option>
-              <option value="nao">Não — só salvar no Drive</option>
-            </select>
-          </div>
           <div id="frac-preview" class="info-box" style="display:none"></div>
-          <button type="submit" id="btn-fracionar" class="btn-primario w-full mt-2">
-            ✂️ Separar e Processar
-          </button>
+          <button type="submit" id="btn-fracionar" class="btn-primario w-full mt-2">✂️ Separar PDF</button>
         </form>
       </div>
 
-      <!-- Resultado -->
       <div id="frac-resultado" style="display:none">
-        <div class="card">
-          <h2 class="card-titulo">📋 Resultado do Fracionamento</h2>
-          <div id="frac-lista" class="lista"></div>
+        <div class="card mb-3">
+          <h2 class="card-titulo">📄 Páginas Separadas</h2>
+          <div id="frac-lista"></div>
         </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-titulo">📋 Histórico de Envios</h2>
+        <div id="historico-folha" class="lista"></div>
       </div>
     </div>
 
   </main>
 
-  <!-- Navegação inferior -->
   <nav class="nav-bottom">
-    <button class="nav-btn ativo" data-pg="inicio" onclick="irPara('inicio')">
-      <span>🏠</span><span>Início</span>
-    </button>
-    <button class="nav-btn" data-pg="lista-func" onclick="irPara('lista-func')">
-      <span>👥</span><span>Funcionários</span>
-    </button>
-    <button class="nav-btn" data-pg="exames" onclick="irPara('exames')">
-      <span>🩺</span><span>Exames</span>
-    </button>
-    <button class="nav-btn" data-pg="epi" onclick="irPara('epi')">
-      <span>🦺</span><span>EPI</span>
-    </button>
-    <button class="nav-btn" data-pg="folha" onclick="irPara('folha')">
-      <span>💰</span><span>Folha</span>
-    </button>
-    <button class="nav-btn" data-pg="fracionar" onclick="irPara('fracionar')">
-      <span>✂️</span><span>Fracionar</span>
-    </button>
+    <button class="nav-btn ativo" data-pg="inicio" onclick="irPara('inicio')"><span>🏠</span><span>Início</span></button>
+    <button class="nav-btn" data-pg="lista-func" onclick="irPara('lista-func')"><span>👥</span><span>Funcionários</span></button>
+    <button class="nav-btn" data-pg="exames" onclick="irPara('exames')"><span>🩺</span><span>Exames</span></button>
+    <button class="nav-btn" data-pg="epi" onclick="irPara('epi')"><span>🦺</span><span>EPI</span></button>
+    <button class="nav-btn" data-pg="fracionar" onclick="irPara('fracionar')"><span>💰</span><span>Folha</span></button>
   </nav>
 
-</div><!-- fim #tela-app -->
+</div>
 
 <script src="app.js"></script>
 </body>
