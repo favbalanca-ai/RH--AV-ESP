@@ -125,9 +125,11 @@ async function chamarGAS(dados) {
 }
 
 async function carregarDashboard() {
-  const [resEx, resEst] = await Promise.all([
+  const [resEx, resEst, resEpi, resFolha] = await Promise.all([
     chamarGAS({ acao: 'listar_exames' }),
     chamarGAS({ acao: 'listar_epi_estoque' }),
+    chamarGAS({ acao: 'listar_epi_entregas' }),
+    chamarGAS({ acao: 'listar_folhas' }),
   ])
   document.getElementById('num-funcs').textContent = funcionarios.length
   if (resEx && resEx.ok) {
@@ -140,6 +142,91 @@ async function carregarDashboard() {
     document.getElementById('num-epi').textContent = resEst.data.filter(e => {
       const s = e['SITUAÇÃO']||''; return s.includes('REPOR') || s.includes('SEM')
     }).length
+  }
+
+  // Monta lembretes de assinaturas pendentes
+  const pendentesEpi   = (resEpi   && resEpi.ok)   ? resEpi.data.filter(e   => e['ASSINADO?'] === 'Pendente' && e['ZAPSIGN_DOC']) : []
+  const pendentesFolha = (resFolha && resFolha.ok) ? resFolha.data.filter(f => f['STATUS']    === 'Pendente' && f['ZAPSIGN_DOC']) : []
+  renderLembretes(pendentesEpi, pendentesFolha)
+}
+
+
+function renderLembretes(pendentesEpi, pendentesFolha) {
+  const el = document.getElementById('lembretes-wrap')
+  if (!el) return
+  const todos = [
+    ...pendentesEpi.map(e => ({
+      tipo: 'EPI',
+      nome: e['FUNCIONÁRIO'],
+      descricao: e['DESCRIÇÃO DO EPI'],
+      data: e['DATA ENTREGA'],
+      token: e['ZAPSIGN_DOC'],
+      signerToken: (e['OBSERVAÇÕES']||'').replace('Signer: ',''),
+    })),
+    ...pendentesFolha.map(f => ({
+      tipo: 'Folha',
+      nome: f['FUNCIONÁRIO'],
+      descricao: f['COMPETÊNCIA'],
+      data: f['DATA ENVIO'],
+      token: f['ZAPSIGN_DOC'],
+      signerToken: (f['OBSERVAÇÕES']||'').replace('Signer: ',''),
+    })),
+  ]
+
+  if (!todos.length) {
+    el.style.display = 'none'
+    return
+  }
+
+  el.style.display = 'block'
+  el.innerHTML = `
+    <div class="card" style="border-color:rgba(133,79,11,0.3);background:#FFFBF5">
+      <div class="card-titulo" style="color:var(--amber-text)">
+        <i class="ti ti-bell-ringing" aria-hidden="true"></i>
+        ${todos.length} assinatura(s) pendente(s)
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${todos.map((item, i) => {
+          const func = funcionarios.find(f => f['NOME_COMPLETO'] === item.nome)
+          const tel  = func ? '55' + func['TELEFONE'].replace(/\D/g,'') : ''
+          return `
+          <div style="display:flex;align-items:center;gap:10px;padding:10px;background:#fff;border-radius:var(--radius-md);border:0.5px solid rgba(133,79,11,0.2)">
+            <div class="avatar" style="background:var(--amber-bg);color:var(--amber-text);flex-shrink:0">${getIniciais(item.nome||'?')}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.nome}</div>
+              <div style="font-size:11px;color:var(--text-secondary)">
+                <span class="badge badge-amarelo" style="margin-right:4px">${item.tipo}</span>
+                ${item.descricao} · ${item.data}
+              </div>
+            </div>
+            <div style="display:flex;gap:5px;flex-shrink:0">
+              ${tel ? `<a href="https://wa.me/${tel}?text=${encodeURIComponent('Olá ' + (item.nome.split(' ')[0]) + ', seu documento está aguardando assinatura. Por favor acesse o link que enviamos no WhatsApp para assinar.')}" target="_blank"
+                style="background:#22C55E;color:#fff;border:none;border-radius:7px;padding:6px 9px;font-size:13px;text-decoration:none;display:flex;align-items:center;gap:3px;font-weight:600">
+                <i class="ti ti-brand-whatsapp"></i>
+              </a>` : ''}
+              <button onclick="reenviarZapSign('${item.signerToken}', '${item.nome}')"
+                style="background:var(--blue-bg);color:var(--blue-text);border:none;border-radius:7px;padding:6px 9px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:3px;font-weight:600"
+                title="Reenviar link via ZapSign">
+                <i class="ti ti-send"></i>
+              </button>
+            </div>
+          </div>`
+        }).join('')}
+      </div>
+    </div>`
+}
+
+async function reenviarZapSign(signerToken, nome) {
+  if (!signerToken || signerToken === 'undefined') {
+    return toast('❌ Token não disponível para reenvio', 'erro')
+  }
+  mostrarLoading('Reenviando link para ' + nome.split(' ')[0] + '...')
+  const res = await chamarGAS({ acao: 'reenviar_zapsign', dados: { signer_token: signerToken } })
+  esconderLoading()
+  if (res && res.ok) {
+    toast('✅ Link reenviado para ' + nome.split(' ')[0] + ' via WhatsApp!', 'sucesso')
+  } else {
+    toast('❌ Erro ao reenviar: ' + ((res&&res.erro)||'tente novamente'), 'erro')
   }
 }
 
