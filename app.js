@@ -128,7 +128,7 @@ function irPara(pg) {
   if (pg === 'lista-func') carregarFuncionarios()
   if (pg === 'exames')     carregarExames()
   if (pg === 'epi')        carregarEpi()
-  if (pg === 'fracionar')  carregarEntregasFolha()
+  if (pg === 'fracionar')  { preencherMesesFracionar(); carregarEntregasFolha() }
 }
 
 async function chamarGAS(dados) {
@@ -347,10 +347,11 @@ function renderEntregas(lista) {
 
 // ─── FRACIONAR FOLHA (substitui Folha de Pagamento) ─────────────
 function preencherMesesFracionar() {
+  const sel = document.getElementById('sel-comp-frac')
+  if (!sel) return
+  if (sel.options.length > 1) return // já preenchido
   const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
   const ano = new Date().getFullYear()
-  const sel = document.getElementById('sel-comp-frac'); if (!sel) return
-  sel.innerHTML = '<option value="">Selecione...</option>'
   meses.forEach(m => {
     sel.innerHTML += `<option value="${m}/${ano}">${m}/${ano}</option>`
     sel.innerHTML += `<option value="${m}/${ano-1}">${m}/${ano-1}</option>`
