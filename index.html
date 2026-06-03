@@ -157,36 +157,33 @@
         </div>
 
         <!-- Funcionário -->
-        <div id="sel-func-display" class="func-selector" onclick="abrirSeletorFunc()">
-          <div class="avatar" id="sel-func-avatar">?</div>
-          <div style="flex:1;min-width:0">
-            <div id="sel-func-nome" style="font-size:13px;color:var(--text-secondary)">Selecione o funcionário...</div>
-            <div id="sel-func-sub" style="font-size:10px;color:var(--text-hint)"></div>
+        <div style="position:relative;margin-bottom:8px">
+          <div id="sel-func-display" class="func-selector">
+            <div class="avatar" id="sel-func-avatar">?</div>
+            <div style="flex:1;min-width:0">
+              <div id="sel-func-nome" style="font-size:13px;color:var(--text-secondary)">Selecione o funcionário...</div>
+              <div id="sel-func-sub" style="font-size:10px;color:var(--text-hint)"></div>
+            </div>
+            <i class="ti ti-chevron-down" style="color:var(--text-hint);font-size:16px" aria-hidden="true"></i>
           </div>
-          <i class="ti ti-chevron-down" style="color:var(--text-hint);font-size:16px" aria-hidden="true"></i>
+          <select id="sel-func-epi-hidden" onchange="selecionarFuncEpi(this.value)"
+            style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px">
+          </select>
         </div>
-        <select id="sel-func-epi-hidden" style="display:none" onchange="selecionarFuncEpi(this.value)"></select>
 
         <!-- EPIs selecionados -->
         <div id="epi-itens-lista" style="margin-top:8px"></div>
 
         <!-- Buscar e adicionar EPI -->
-        <div onclick="abrirSeletorEpi()" class="add-epi-trigger" style="margin-top:6px">
-          <i class="ti ti-plus" style="font-size:14px" aria-hidden="true"></i>
-          <span id="add-epi-hint">Buscar e adicionar EPI...</span>
-        </div>
-
-        <!-- Dropdown de busca -->
-        <div id="epi-busca-wrap" style="display:none;margin-top:4px;border:0.5px solid var(--border);border-radius:var(--radius-md);overflow:hidden;background:var(--card-bg)">
-          <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:0.5px solid var(--border)">
-            <i class="ti ti-search" style="font-size:14px;color:var(--text-hint)" aria-hidden="true"></i>
-            <input id="epi-busca-input" type="text" placeholder="Buscar EPI..." oninput="filtrarEpiBusca(this.value)"
-              style="border:none;outline:none;background:none;font-size:12px;width:100%;color:var(--text-primary)">
-            <button onclick="fecharBuscaEpi()" style="background:none;border:none;cursor:pointer;color:var(--text-hint);font-size:16px;padding:0;display:flex">
-              <i class="ti ti-x" aria-hidden="true"></i>
-            </button>
+        <div style="position:relative;margin-top:6px">
+          <div class="add-epi-trigger">
+            <i class="ti ti-plus" style="font-size:14px" aria-hidden="true"></i>
+            <span id="add-epi-hint">Buscar e adicionar EPI...</span>
           </div>
-          <div id="epi-busca-lista" style="max-height:180px;overflow-y:auto"></div>
+          <select id="sel-epi-hidden" onchange="adicionarItemEpi(this)"
+            style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px">
+            <option value="">Selecione um EPI...</option>
+          </select>
         </div>
 
         <!-- Motivo — chips compactos -->
