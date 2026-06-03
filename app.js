@@ -1,3 +1,4 @@
+
 let motivoEpiSelecionado = 'Admissional'
 
 function selecionarMotivo(btn, motivo) {
@@ -83,6 +84,7 @@ function entrarNoApp() {
   document.getElementById('tela-login').style.display = 'none'
   document.getElementById('tela-app').style.display   = 'flex'
   preencherMesesFracionar()
+  preencherSelectsOcultos()
   carregarDashboard()
   irPara('inicio')
 }
