@@ -554,3 +554,31 @@ html, body {
   padding: 4px 10px; font-size: 10px; font-weight: 600;
   text-decoration: none; display: flex; align-items: center; gap: 3px;
 }
+
+/* ── BOTÃO EPI RÁPIDO ────────────────────────────────────────────── */
+.btn-epi-rapido {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  background: var(--coral-bg); color: var(--coral-text);
+  border: 0.5px solid rgba(153,60,29,0.2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; cursor: pointer; flex-shrink: 0;
+  transition: background 0.15s;
+}
+.btn-epi-rapido:hover { background: #f5d5c8; }
+.btn-epi-rapido:active { transform: scale(0.94); }
+
+/* ── MOTIVO CHIPS ────────────────────────────────────────────────── */
+.motivo-chip {
+  padding: 5px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 600;
+  border: 0.5px solid var(--border);
+  background: var(--surface); color: var(--text-secondary);
+  cursor: pointer; font-family: inherit;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.motivo-chip.ativo {
+  background: var(--blue-bg); color: var(--blue-text);
+  border-color: rgba(24,95,165,0.25);
+}
+.motivo-chip:hover:not(.ativo) { background: #EFEFEF; }
