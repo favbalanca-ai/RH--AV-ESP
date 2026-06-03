@@ -139,48 +139,69 @@
 
     <!-- EPI -->
     <div id="pg-epi" class="pagina">
-      <!-- Estoque -->
-      <div class="card mb-3">
+
+      <!-- Modal Estoque (oculto por padrão) -->
+      <div id="estoque-modal" style="display:none" class="card mb-3">
         <div class="card-titulo"><i class="ti ti-box" aria-hidden="true"></i> Estoque atual</div>
-        <div id="lista-estoque"></div>
+        <div id="estoque-modal-body"></div>
       </div>
 
-      <!-- Nova entrega -->
+      <!-- Entrega compacta -->
       <div class="card">
-        <div class="card-titulo"><i class="ti ti-send" aria-hidden="true"></i> Nova entrega</div>
+        <!-- Header com botão estoque -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div class="card-titulo" style="margin:0"><i class="ti ti-send" aria-hidden="true"></i> Nova entrega</div>
+          <button onclick="toggleEstoqueModal()" style="background:var(--surface);border:0.5px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:600;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;gap:4px">
+            <i class="ti ti-box" style="font-size:13px" aria-hidden="true"></i> Estoque
+          </button>
+        </div>
 
-        <!-- Seleção de funcionário -->
+        <!-- Funcionário -->
         <div id="sel-func-display" class="func-selector" onclick="abrirSeletorFunc()">
           <div class="avatar" id="sel-func-avatar">?</div>
-          <span id="sel-func-nome" style="flex:1;font-size:13px;color:var(--text-secondary)">Selecione o funcionário...</span>
+          <div style="flex:1;min-width:0">
+            <div id="sel-func-nome" style="font-size:13px;color:var(--text-secondary)">Selecione o funcionário...</div>
+            <div id="sel-func-sub" style="font-size:10px;color:var(--text-hint)"></div>
+          </div>
           <i class="ti ti-chevron-down" style="color:var(--text-hint);font-size:16px" aria-hidden="true"></i>
         </div>
-        <select id="sel-func-epi-hidden" style="display:none" onchange="selecionarFuncEpi(this.value)">
-          <option value="">Selecione...</option>
-        </select>
-
-        <!-- Motivo -->
-        <div class="campo-grupo" style="margin-top:8px">
-          <label>Motivo da entrega</label>
-          <select id="sel-motivo-epi">
-            <option>Admissional</option><option>Reposição</option><option>Desgaste</option><option>Perda</option><option>Troca de Tamanho</option>
-          </select>
-        </div>
+        <select id="sel-func-epi-hidden" style="display:none" onchange="selecionarFuncEpi(this.value)"></select>
 
         <!-- EPIs selecionados -->
         <div id="epi-itens-lista" style="margin-top:8px"></div>
 
-        <!-- Adicionar EPI -->
-        <div id="btn-add-epi-wrap" onclick="abrirSeletorEpi()" class="add-epi-trigger">
+        <!-- Buscar e adicionar EPI -->
+        <div onclick="abrirSeletorEpi()" class="add-epi-trigger" style="margin-top:6px">
           <i class="ti ti-plus" style="font-size:14px" aria-hidden="true"></i>
-          <span>Adicionar EPI ao recibo</span>
+          <span id="add-epi-hint">Buscar e adicionar EPI...</span>
         </div>
-        <select id="sel-epi-hidden" style="display:none" onchange="adicionarItemEpi(this)">
-          <option value="">Selecione um EPI...</option>
-        </select>
 
-        <div class="info-box" style="margin-top:8px"><i class="ti ti-brand-whatsapp" style="vertical-align:-2px" aria-hidden="true"></i> Recibo gerado em PDF e enviado via WhatsApp + ZapSign. Link também aparece aqui.</div>
-        <button id="btn-enviar-epi" onclick="enviarEpi()" class="btn-primario w-full" style="margin-top:8px">
+        <!-- Dropdown de busca -->
+        <div id="epi-busca-wrap" style="display:none;margin-top:4px;border:0.5px solid var(--border);border-radius:var(--radius-md);overflow:hidden;background:var(--card-bg)">
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:0.5px solid var(--border)">
+            <i class="ti ti-search" style="font-size:14px;color:var(--text-hint)" aria-hidden="true"></i>
+            <input id="epi-busca-input" type="text" placeholder="Buscar EPI..." oninput="filtrarEpiBusca(this.value)"
+              style="border:none;outline:none;background:none;font-size:12px;width:100%;color:var(--text-primary)">
+            <button onclick="fecharBuscaEpi()" style="background:none;border:none;cursor:pointer;color:var(--text-hint);font-size:16px;padding:0;display:flex">
+              <i class="ti ti-x" aria-hidden="true"></i>
+            </button>
+          </div>
+          <div id="epi-busca-lista" style="max-height:180px;overflow-y:auto"></div>
+        </div>
+
+        <!-- Motivo — chips compactos -->
+        <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:600;color:var(--text-secondary);white-space:nowrap">Motivo:</span>
+          <div id="motivo-chips" style="display:flex;gap:5px;flex-wrap:wrap">
+            <button class="motivo-chip ativo" onclick="selecionarMotivo(this,'Admissional')">Admissional</button>
+            <button class="motivo-chip" onclick="selecionarMotivo(this,'Reposição')">Reposição</button>
+            <button class="motivo-chip" onclick="selecionarMotivo(this,'Desgaste')">Desgaste</button>
+            <button class="motivo-chip" onclick="selecionarMotivo(this,'Perda')">Perda</button>
+            <button class="motivo-chip" onclick="selecionarMotivo(this,'Troca de Tamanho')">Troca</button>
+          </div>
+        </div>
+
+        <button id="btn-enviar-epi" onclick="enviarEpi()" class="btn-primario w-full" style="margin-top:10px" disabled>
           <i class="ti ti-brand-whatsapp" aria-hidden="true"></i>
           <span id="btn-epi-label">Gerar recibo e enviar</span>
         </button>
