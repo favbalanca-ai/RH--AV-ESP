@@ -1,3 +1,24 @@
+let motivoEpiSelecionado = 'Admissional'
+
+function selecionarMotivo(btn, motivo) {
+  motivoEpiSelecionado = motivo
+  document.querySelectorAll('.motivo-chip').forEach(b => b.classList.remove('ativo'))
+  btn.classList.add('ativo')
+}
+
+
+const EPI_SUGERIDOS_PERFIL = {
+  CASEIRO_AGROPECUARIO:        ['EPI-006','EPI-007','EPI-014','EPI-015'],
+  OPERADOR_MAQUINAS_AGRICOLAS: ['EPI-001','EPI-003','EPI-006','EPI-007','EPI-002'],
+  PULVERIZACAO_AGRICOLA:       ['EPI-001','EPI-004','EPI-005','EPI-009','EPI-010','EPI-002'],
+  MOTORISTA_LOGISTICA:         ['EPI-001','EPI-003','EPI-002','EPI-006'],
+  COZINHA:                     ['EPI-005','EPI-015','EPI-002'],
+  LIDER_OPERACIONAL:           ['EPI-001','EPI-006','EPI-007','EPI-003'],
+  ADMINISTRATIVO:              ['EPI-002','EPI-014'],
+  ARMAZEM_ABASTECIMENTO:       ['EPI-001','EPI-003','EPI-004','EPI-006','EPI-007'],
+  BIOFABRICA:                  ['EPI-004','EPI-005','EPI-010','EPI-002'],
+}
+
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxayJeiQeUeHNfl0oz1xcJh6xzymXLREH-wosmRaLHTazaV6fo62y0bMgivnJTyv1oP/exec'
 const PDFLIB_URL = 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js'
 
@@ -200,6 +221,34 @@ function getIniciais(nome) {
   return p.length >= 2 ? (p[0][0] + p[p.length-1][0]).toUpperCase() : (nome[0]||'?').toUpperCase()
 }
 
+
+function abrirEpiRapido(funcId) {
+  const func = funcionarios.find(f => String(f['ID']) === String(funcId))
+  if (!func) return
+  irPara('epi')
+  setTimeout(() => {
+    // Pré-seleciona o funcionário
+    selecionarFuncEpi(funcId)
+    const sel = document.getElementById('sel-func-epi-hidden')
+    if (sel) sel.value = funcId
+    // Sugerir EPIs do perfil em estoque
+    const perfil    = func['PERFIL_SST'] || ''
+    const sugeridos = EPI_SUGERIDOS_PERFIL[perfil] || []
+    if (sugeridos.length && estoque.length) {
+      itensEpiSel = []
+      sugeridos.forEach(cod => {
+        const epi = estoque.find(e => e['CÓD.'] === cod && parseInt(e['ESTOQUE ATUAL']) > 0)
+        if (epi && !itensEpiSel.find(i => i.cod === cod)) {
+          itensEpiSel.push({ cod, descricao: epi['DESCRIÇÃO DO EPI'], ca: epi['Nº CA'], quantidade: 1 })
+        }
+      })
+      renderItensEpi()
+      atualizarBtnEpi()
+      if (itensEpiSel.length) toast('⚡ ' + itensEpiSel.length + ' EPI(s) sugerido(s) para ' + func['NOME_CURTO'], 'sucesso')
+    }
+  }, 400)
+}
+
 function renderFuncionarios(lista) {
   const el = document.getElementById('lista-funcionarios')
   if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum funcionário</p>'; return }
@@ -211,7 +260,12 @@ function renderFuncionarios(lista) {
         <div class="lista-item-sub">${f['FUNCAO']} · ${f['UNIDADE']}</div>
         <div class="lista-item-sub">${f['TELEFONE']||''}</div>
       </div>
-      ${badge(f['STATUS'])}
+      <div style="display:flex;gap:5px;align-items:center">
+        <button onclick="abrirEpiRapido('${f['ID']}')" class="btn-epi-rapido" title="Entregar EPI">
+          <i class="ti ti-shield-plus" aria-hidden="true"></i>
+        </button>
+        ${badge(f['STATUS'])}
+      </div>
     </div>`).join('')
 }
 
@@ -267,8 +321,36 @@ async function carregarEpi() {
     chamarGAS({ acao: 'listar_epi_entregas' }),
   ])
   esconderLoading()
-  if (resEst && resEst.ok) { estoque = resEst.data; renderEstoque(estoque); preencherSelectsOcultos() }
+  if (resEst && resEst.ok) { estoque = resEst.data; preencherSelectsOcultos(); renderEstoqueModal(estoque) }
   if (resEnt && resEnt.ok) renderEntregas(resEnt.data.slice(0,15))
+}
+
+function toggleEstoqueModal() {
+  const el = document.getElementById('estoque-modal')
+  if (!el) return
+  el.style.display = el.style.display === 'none' ? 'block' : 'none'
+}
+
+function renderEstoqueModal(lista) {
+  const el = document.getElementById('estoque-modal-body')
+  if (!el) return
+  const icones = { 'Capacete':'🪖','Óculos':'🥽','Protetor':'👂','Respirador':'😷','Luva':'🧤','Bota':'👟','Botina':'👟','Avental':'🦺','Macacão':'👔','Colete':'🦺','Cinto':'🔒','Chapéu':'👒','Camisa':'👕','Máscara':'😷' }
+  function gi(nome) { for (const [k,v] of Object.entries(icones)) { if (nome.toLowerCase().includes(k.toLowerCase())) return v } return '🦺' }
+  el.innerHTML = lista.map(e => {
+    const sit = situacaoEpi(e)
+    const bc = sit === '✅ OK' ? 'badge-verde' : sit === '⚠️ REPOR' ? 'badge-amarelo' : 'badge-vermelho'
+    return `<div class="epi-estoque-item">
+      <div class="epi-icone-wrap">${gi(e['DESCRIÇÃO DO EPI'])}</div>
+      <div class="epi-est-info">
+        <div class="epi-est-nome">${e['DESCRIÇÃO DO EPI']}</div>
+        <div class="epi-est-ca">CA ${e['Nº CA']||'—'} · ${e['UNIDADE']||'un'}</div>
+      </div>
+      <div class="epi-est-right">
+        <span class="epi-est-qty">${e['ESTOQUE ATUAL']}</span>
+        <span class="badge ${bc}">${sit.replace('✅ ','').replace('⚠️ ','').replace('⛔ ','')}</span>
+      </div>
+    </div>`
+  }).join('')
 }
 
 function renderEstoque(lista) {
@@ -304,22 +386,66 @@ function selecionarFuncEpi(funcId) {
   const func = funcionarios.find(f => String(f['ID']) === String(funcId))
   if (!func) return
   funcEpiSelecionado = func
-  const disp = document.getElementById('sel-func-display')
-  disp.classList.add('selecionado')
+  document.getElementById('sel-func-display').classList.add('selecionado')
   document.getElementById('sel-func-avatar').textContent = getIniciais(func['NOME_COMPLETO'])
-  document.getElementById('sel-func-nome').textContent   = func['NOME_COMPLETO']
-  document.getElementById('sel-func-nome').style.color   = 'var(--text-primary)'
+  const nomeEl = document.getElementById('sel-func-nome')
+  nomeEl.textContent = func['NOME_COMPLETO']; nomeEl.style.color = 'var(--text-primary)'
+  const subEl = document.getElementById('sel-func-sub')
+  if (subEl) subEl.textContent = (func['FUNCAO']||'') + ' · ' + (func['UNIDADE']||'')
+
+  // Sugerir EPIs do perfil
+  const perfil    = func['PERFIL_SST'] || ''
+  const sugeridos = EPI_SUGERIDOS_PERFIL[perfil] || []
+  if (sugeridos.length && estoque.length && itensEpiSel.length === 0) {
+    sugeridos.forEach(cod => {
+      const epi = estoque.find(e => e['CÓD.'] === cod && parseInt(e['ESTOQUE ATUAL']) > 0)
+      if (epi) itensEpiSel.push({ cod, descricao: epi['DESCRIÇÃO DO EPI'], ca: epi['Nº CA'], quantidade: 1 })
+    })
+    renderItensEpi()
+    const hint = document.getElementById('add-epi-hint')
+    if (hint && itensEpiSel.length) hint.textContent = itensEpiSel.length + ' EPI(s) sugeridos — adicionar mais...'
+  }
   atualizarBtnEpi()
 }
 
 // Seletor de EPI
-function abrirSeletorEpi() { document.getElementById('sel-epi-hidden').click() }
-function adicionarItemEpi(sel) {
-  const cod = sel.value; if (!cod) return
-  if (itensEpiSel.find(i => i.cod === cod)) { sel.value = ''; return }
+function abrirSeletorEpi() {
+  // Mostra dropdown de busca
+  const wrap = document.getElementById('epi-busca-wrap')
+  if (!wrap) return
+  wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none'
+  if (wrap.style.display === 'block') {
+    const inp = document.getElementById('epi-busca-input')
+    if (inp) { inp.value = ''; inp.focus(); filtrarEpiBusca('') }
+  }
+}
+
+function filtrarEpiBusca(q) {
+  const lista = document.getElementById('epi-busca-lista'); if (!lista) return
+  const itens = estoque.filter(e => parseInt(e['ESTOQUE ATUAL']) > 0 && (!q || e['DESCRIÇÃO DO EPI'].toLowerCase().includes(q.toLowerCase())))
+  lista.innerHTML = itens.map(e => `
+    <div onclick="adicionarItemEpiBusca('${e['CÓD.']}')" style="padding:8px 10px;cursor:pointer;border-bottom:0.5px solid rgba(0,0,0,0.06);display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:12px;font-weight:500">${e['DESCRIÇÃO DO EPI']}</span>
+      <span style="font-size:11px;color:#6B7280">${e['ESTOQUE ATUAL']} ${e['UNIDADE']||'un'}</span>
+    </div>`).join('') || '<p style="padding:10px;font-size:12px;color:#9CA3AF;text-align:center">Nenhum EPI disponível</p>'
+}
+
+function adicionarItemEpiBusca(cod) {
+  if (itensEpiSel.find(i => i.cod === cod)) { fecharBuscaEpi(); return }
   const epi = estoque.find(e => e['CÓD.'] === cod); if (!epi) return
   itensEpiSel.push({ cod, descricao: epi['DESCRIÇÃO DO EPI'], ca: epi['Nº CA'], quantidade: 1 })
-  sel.value = ''; renderItensEpi(); atualizarBtnEpi()
+  renderItensEpi(); atualizarBtnEpi(); fecharBuscaEpi()
+}
+
+function fecharBuscaEpi() {
+  const wrap = document.getElementById('epi-busca-wrap')
+  if (wrap) wrap.style.display = 'none'
+}
+
+function adicionarItemEpi(sel) {
+  const cod = sel.value; if (!cod) return
+  adicionarItemEpiBusca(cod)
+  sel.value = ''
 }
 
 function removerItemEpi(cod) { itensEpiSel = itensEpiSel.filter(i => i.cod !== cod); renderItensEpi(); atualizarBtnEpi() }
@@ -355,7 +481,7 @@ function atualizarBtnEpi() {
 async function enviarEpi() {
   if (!funcEpiSelecionado || !itensEpiSel.length) return toast('❌ Selecione funcionário e EPIs', 'erro')
   const btn = document.getElementById('btn-enviar-epi')
-  const motivo = document.getElementById('sel-motivo-epi').value
+  const motivo = motivoEpiSelecionado || 'Admissional'
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Enviando...'
   mostrarLoading('Gerando recibo e enviando via ZapSign...')
   const res = await chamarGAS({ acao: 'entregar_epi', dados: { func_id: funcEpiSelecionado['ID'], itens: itensEpiSel, motivo } })
@@ -493,27 +619,67 @@ function renderPaginasFracionadas() {
     </div>`).join('')
 }
 
+// ── Mapeamento salvo: competencia -> {pagina: funcId} ──────────
+function salvarMapeamento(competencia) {
+  const mapa = {}
+  paginasFracionadas.forEach(p => { if (p.funcId) mapa[p.pagina] = p.funcId })
+  try { sessionStorage.setItem('mapa_folha_' + competencia, JSON.stringify(mapa)) } catch(e) {}
+}
+
+function carregarMapeamentoSalvo(competencia) {
+  try {
+    const raw = sessionStorage.getItem('mapa_folha_' + competencia)
+    return raw ? JSON.parse(raw) : null
+  } catch(e) { return null }
+}
+
 async function identificarFuncionariosAutomatico() {
+  const competencia = paginasFracionadas[0]?.competencia || ''
+
+  // Tenta mapeamento salvo do mês anterior / mesmo mês
+  const mapaAnterior = carregarMapeamentoSalvo(competencia)
   let identificados = 0
-  for (let i = 0; i < paginasFracionadas.length; i++) {
-    try {
-      const res = await chamarGAS({ acao: 'identificar_funcionario_pdf', dados: { pdf_base64: paginasFracionadas[i].pdfBase64 } })
-      if (res && res.ok && res.data && res.data.func_id) {
-        const func = funcionarios.find(f => String(f['ID']) === String(res.data.func_id))
-        if (func) {
-          paginasFracionadas[i].funcId   = String(func['ID'])
-          paginasFracionadas[i].nome     = func['NOME_COMPLETO']
-          paginasFracionadas[i].funcao   = func['FUNCAO']
-          paginasFracionadas[i].telefone = func['TELEFONE']
-          renderCardIdentificado(i, func, 'auto')
-          identificados++
-        } else { renderCardManual(i) }
-      } else { renderCardManual(i) }
-    } catch(e) { renderCardManual(i) }
+
+  // Identifica todas as páginas em paralelo (sem esperar uma a uma)
+  const promessas = paginasFracionadas.map((p, i) =>
+    chamarGAS({ acao: 'identificar_funcionario_pdf', dados: { pdf_base64: p.pdfBase64 } })
+      .catch(() => null)
+  )
+
+  // Processa resultados conforme chegam
+  for (let i = 0; i < promessas.length; i++) {
+    const res = await promessas[i]
+    let func = null
+
+    if (res && res.ok && res.data && res.data.func_id) {
+      func = funcionarios.find(f => String(f['ID']) === String(res.data.func_id))
+    }
+
+    // Fallback: mapeamento salvo pela posição da página
+    if (!func && mapaAnterior && mapaAnterior[paginasFracionadas[i].pagina]) {
+      const savedId = mapaAnterior[paginasFracionadas[i].pagina]
+      func = funcionarios.find(f => String(f['ID']) === String(savedId))
+      if (func) func._fromCache = true
+    }
+
+    if (func) {
+      paginasFracionadas[i].funcId   = String(func['ID'])
+      paginasFracionadas[i].nome     = func['NOME_COMPLETO']
+      paginasFracionadas[i].funcao   = func['FUNCAO']
+      paginasFracionadas[i].telefone = func['TELEFONE']
+      renderCardIdentificado(i, func, func._fromCache ? 'cache' : 'auto')
+      identificados++
+    } else {
+      renderCardManual(i)
+    }
+    atualizarBtnTodos()
   }
-  atualizarBtnTodos()
+
+  // Salva mapeamento para próximo uso
+  if (identificados > 0) salvarMapeamento(competencia)
+
   toast(identificados === paginasFracionadas.length
-    ? '✅ Todos identificados automaticamente!'
+    ? '✅ Todos os ' + identificados + ' identificados!'
     : '✅ ' + identificados + ' identificados · ' + (paginasFracionadas.length - identificados) + ' selecione manualmente', 'sucesso')
 }
 
@@ -527,7 +693,7 @@ function renderCardIdentificado(i, func, metodo) {
       <div>
         <div class="fpc-nome">${func['NOME_COMPLETO']}</div>
         <div class="fpc-sub">${func['FUNCAO']||''} · ${func['UNIDADE']||''}</div>
-        ${metodo === 'auto' ? `<div class="fpc-auto"><i class="ti ti-robot" style="font-size:9px"></i> Identificado automaticamente</div>` : ''}
+        ${metodo === 'auto' ? `<div class="fpc-auto"><i class="ti ti-robot" style="font-size:9px"></i> Identificado automaticamente</div>` : metodo === 'cache' ? `<div class="fpc-auto"><i class="ti ti-history" style="font-size:9px"></i> Do mapeamento salvo — confirme</div>` : ''}
       </div>
     </div>`
   const btnEl = document.getElementById('btn-zap-' + i)
@@ -591,6 +757,7 @@ async function enviarPaginaZapSign(idx) {
       }
       actionEl.innerHTML = `<div class="fpc-links">${links}</div>`
     }
+    salvarMapeamento(p.competencia)
     atualizarBtnTodos()
     toast('✅ ' + p.nome.split(' ')[0] + ' — enviado!', 'sucesso')
     carregarEntregasFolha()
