@@ -217,6 +217,13 @@
 
       <!-- Upload e separar -->
       <div class="card mb-3" id="card-upload-frac">
+          <div class="campo-grupo">
+            <label>Tipo de documento *</label>
+            <select id="sel-tipo-doc" onchange="tipoDocAtual=this.value">
+              <option value="Folha">💰 Folha de Pagamento (Holerite)</option>
+              <option value="Ponto">📋 Folha de Ponto</option>
+            </select>
+          </div>
         <div class="card-titulo"><i class="ti ti-scissors" aria-hidden="true"></i> Folha de pagamento</div>
         <div class="campo-grupo">
           <label>Competência *</label>
