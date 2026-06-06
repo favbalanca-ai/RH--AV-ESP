@@ -28,7 +28,6 @@ let funcEpiSelecionado = null
 let paginaAtual = 'inicio', todosExames = []
 let paginasFracionadas = []
 let tipoDocAtual = 'Folha'
-let tipoDocAtual = 'Folha'
 
 async function carregarPdfLib() {
   if (window.PDFLib) return window.PDFLib
