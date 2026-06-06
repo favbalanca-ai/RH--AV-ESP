@@ -2,1768 +2,281 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Comprovantes IA — Fazenda Água Viva</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/dist/tabler-icons.min.css">
-<style>
-:root{
-  --bg:#F7F6F2;
-  --card:#FFFFFF;
-  --border:#E8E6DF;
-  --text:#1C1C1A;
-  --muted:#8A8880;
-  --green:#1A7A5E;
-  --green-light:#E6F4EF;
-  --green-mid:#2FAD85;
-  --amber:#B86E00;
-  --amber-light:#FEF3E2;
-  --red:#A32D2D;
-  --red-light:#FDE8E8;
-  --font:'DM Sans',sans-serif;
-  --mono:'DM Mono',monospace;
-  --radius:12px;
-  --radius-sm:8px;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh}
-input,select,button,textarea{font-family:var(--font)}
-
-/* ── SCREENS ── */
-.screen{display:none}.screen.active{display:block}
-
-/* ── LOGIN ── */
-.login-page{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.5rem;background:var(--bg)}
-.login-box{width:100%;max-width:360px}
-.login-logo{display:flex;align-items:center;gap:10px;margin-bottom:2rem}
-.logo-mark{width:44px;height:44px;background:var(--green);border-radius:10px;display:flex;align-items:center;justify-content:center}
-.logo-mark i{font-size:22px;color:#fff}
-.logo-text{font-size:18px;font-weight:600;color:var(--text)}
-.logo-sub{font-size:12px;color:var(--muted);margin-top:1px}
-.login-heading{font-size:26px;font-weight:600;margin-bottom:6px;line-height:1.2}
-.login-sub-h{font-size:14px;color:var(--muted);margin-bottom:1.75rem}
-.user-list{display:flex;flex-direction:column;gap:8px;margin-bottom:1.25rem}
-.user-opt{display:flex;align-items:center;gap:12px;padding:11px 14px;border:1.5px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:all .15s;background:var(--card)}
-.user-opt:hover{border-color:var(--green);background:var(--green-light)}
-.user-opt.selected{border-color:var(--green);background:var(--green-light)}
-.u-av{width:36px;height:36px;border-radius:50%;background:#D4EDE6;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--green);flex-shrink:0;font-family:var(--mono)}
-.user-opt.selected .u-av{background:var(--green);color:#fff}
-.u-name{font-size:14px;font-weight:500}
-.u-faz{font-size:12px;color:var(--muted)}
-.field-label{font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px;letter-spacing:.02em}
-.field-input{width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:15px;background:var(--card);color:var(--text);outline:none;transition:border .15s;letter-spacing:2px;text-align:center}
-.field-input:focus{border-color:var(--green)}
-.btn-login{width:100%;background:var(--green);color:#fff;border:none;padding:12px;border-radius:var(--radius-sm);font-size:15px;font-weight:600;cursor:pointer;margin-top:14px;transition:background .15s;display:flex;align-items:center;justify-content:center;gap:8px}
-.btn-login:hover{background:#0F5A44}
-.err{color:var(--red);font-size:13px;text-align:center;margin-top:8px;display:none}
-
-/* ── APP ── */
-.app-wrap{max-width:640px;margin:0 auto;padding:1rem 1rem 3rem}
-.app-bar{display:flex;align-items:center;justify-content:space-between;padding:14px 0;margin-bottom:1rem;border-bottom:1px solid var(--border)}
-.app-bar-left{display:flex;align-items:center;gap:8px}
-.app-bar-left i{font-size:20px;color:var(--green)}
-.app-bar-title{font-size:15px;font-weight:600}
-.user-chip{display:flex;align-items:center;gap:7px;padding:6px 12px;background:var(--card);border:1px solid var(--border);border-radius:20px;cursor:pointer;transition:all .15s}
-.user-chip:hover{border-color:var(--green);background:var(--green-light)}
-.chip-av{width:24px;height:24px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;font-family:var(--mono)}
-.chip-name{font-size:13px;font-weight:500}
-
-.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1.25rem}
-.metric{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
-.metric-label{font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:500;letter-spacing:.03em}
-.metric-value{font-size:21px;font-weight:600;font-family:var(--mono)}
-.metric-value.amber{color:var(--amber)}
-.metric-value.red{color:var(--red)}
-.metric-value.green{color:var(--green)}
-
-.tabs{display:flex;gap:2px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:3px;margin-bottom:1.25rem}
-.tab{flex:1;padding:8px 10px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-radius:9px;text-align:center;transition:all .15s;white-space:nowrap}
-.tab.active{background:var(--green);color:#fff}
-.panel{display:none}.panel.active{display:block}
-
-/* ── CONTA CARD ── */
-.conta-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:1rem;border-left:3px solid var(--green)}
-.conta-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.conta-title{font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px}
-.auto-pill{font-size:10px;background:var(--green-light);color:var(--green);padding:2px 8px;border-radius:20px;font-weight:600;font-family:var(--mono)}
-.trocar-btn{font-size:12px;color:var(--green);cursor:pointer;font-weight:500;display:flex;align-items:center;gap:3px}
-.conta-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.ci-label{font-size:11px;color:var(--muted);margin-bottom:2px}
-.ci-val{font-size:13px;font-weight:500;font-family:var(--mono)}
-.conta-opts{flex-direction:column;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:none}
-.conta-opt{padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-size:13px;transition:all .15s}
-.conta-opt:hover,.conta-opt.sel{border-color:var(--green);background:var(--green-light);color:var(--green);font-weight:500}
-
-/* ── UPLOAD / OCR ── */
-.upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:2rem 1rem;text-align:center;cursor:pointer;position:relative;transition:all .25s;background:var(--card);margin-bottom:1rem}
-.upload-zone:hover,.upload-zone.drag{border-color:var(--green);background:var(--green-light)}
-.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
-.uz-icon{font-size:40px;color:var(--green);display:block;margin-bottom:10px}
-.uz-title{font-size:15px;font-weight:600;margin-bottom:4px}
-.uz-sub{font-size:12px;color:var(--muted)}
-
-/* OCR LOADING */
-.ocr-loading{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;text-align:center;margin-bottom:1rem;display:none}
-.ocr-spinner{width:40px;height:40px;border:3px solid var(--green-light);border-top-color:var(--green);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 12px}
-@keyframes spin{to{transform:rotate(360deg)}}
-.demo-badge{background:var(--amber-light);border:1px solid var(--amber);border-radius:8px;padding:7px 12px;font-size:12px;color:var(--amber);display:none;align-items:center;gap:6px;margin-bottom:1rem}
-.ocr-steps{display:flex;flex-direction:column;gap:6px;text-align:left;margin-top:1rem}
-.ocr-step{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px;transition:color .3s}
-.ocr-step.done{color:var(--green)}
-.ocr-step.active{color:var(--text);font-weight:500}
-.ocr-step i{width:16px;text-align:center;flex-shrink:0}
-
-/* OCR RESULT */
-.ocr-result{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:1rem;overflow:hidden;display:none}
-.ocr-result-header{background:var(--green-light);border-bottom:1px solid #C6E8DC;padding:10px 16px;display:flex;align-items:center;gap:8px}
-.ocr-result-header i{color:var(--green);font-size:18px}
-.ocr-result-header span{font-size:13px;font-weight:600;color:var(--green)}
-.ocr-badge{margin-left:auto;font-size:11px;background:var(--green);color:#fff;padding:2px 8px;border-radius:10px;font-family:var(--mono)}
-.ocr-fields{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
-.ocr-field{display:flex;flex-direction:column;gap:4px}
-.ocr-field label{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
-.ocr-field input,.ocr-field select{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:14px;background:var(--bg);color:var(--text);outline:none;transition:border .15s;font-family:var(--font)}
-.ocr-field input:focus,.ocr-field select:focus{border-color:var(--green);background:#fff}
-.ocr-field input.ai-filled{border-color:#C6E8DC;background:var(--green-light)}
-.ocr-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.ocr-full{grid-column:1/-1}
-.confidence{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:2px}
-.conf-bar{width:60px;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
-.conf-fill{height:100%;border-radius:2px;background:var(--green)}
-
-/* SEARCH DESTINO */
-.search-wrap{position:relative}
-.search-wrap .si{position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px;pointer-events:none}
-.dropdown{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);max-height:200px;overflow-y:auto;z-index:100;display:none;box-shadow:0 8px 24px rgba(0,0,0,.1)}
-.dropdown.open{display:block}
-.dd-group{font-size:10px;font-weight:700;color:var(--muted);padding:7px 12px 3px;text-transform:uppercase;letter-spacing:.06em;border-top:1px solid var(--bg)}
-.dd-group:first-child{border-top:none}
-.dd-item{padding:8px 12px;font-size:13px;cursor:pointer;transition:background .1s}
-.dd-item:hover{background:var(--green-light);color:var(--green)}
-
-/* PREVIEW */
-.img-preview-wrap{position:relative;margin-bottom:1rem}
-.img-preview{width:100%;max-height:200px;object-fit:contain;border-radius:var(--radius);border:1px solid var(--border);display:block;background:var(--bg)}
-.img-remove{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.6);color:#fff;border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px}
-.img-retry{position:absolute;bottom:8px;right:8px;background:var(--green);color:#fff;border:none;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;display:flex;align-items:center;gap:4px}
-.scanner-modal{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;display:none;flex-direction:column;align-items:center;justify-content:center;padding:1rem}
-.scanner-modal.open{display:flex}
-.scanner-title{color:#fff;font-size:16px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.scanner-canvas-wrap{position:relative;width:100%;max-width:500px;background:#000;border-radius:var(--radius);overflow:hidden}
-#scanner-video{width:100%;display:block;border-radius:var(--radius)}
-#scanner-overlay{position:absolute;inset:0;pointer-events:none}
-.scanner-corners span{position:absolute;width:24px;height:24px;border-color:#1D9E75;border-style:solid;border-width:0}
-.scanner-corners span:nth-child(1){top:10px;left:10px;border-top-width:3px;border-left-width:3px}
-.scanner-corners span:nth-child(2){top:10px;right:10px;border-top-width:3px;border-right-width:3px}
-.scanner-corners span:nth-child(3){bottom:10px;left:10px;border-bottom-width:3px;border-left-width:3px}
-.scanner-corners span:nth-child(4){bottom:10px;right:10px;border-bottom-width:3px;border-right-width:3px}
-.scanner-btns{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;justify-content:center}
-.scanner-btn{padding:10px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;border:none;display:flex;align-items:center;gap:6px;font-family:var(--font)}
-.scanner-btn.capture{background:var(--green);color:#fff}
-.scanner-btn.capture:hover{background:#0F5A44}
-.scanner-btn.cancel{background:rgba(255,255,255,.15);color:#fff}
-.scanner-hint{color:rgba(255,255,255,.6);font-size:12px;margin-top:8px;text-align:center}
-.scan-processing{color:#fff;font-size:14px;margin-top:12px;display:none;align-items:center;gap:8px}
-.upload-options{display:flex;gap:8px;margin-top:10px;justify-content:center;flex-wrap:wrap}
-.upload-opt-btn{padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer;border:1.5px solid var(--border);background:var(--card);color:var(--text);display:flex;align-items:center;gap:6px;font-family:var(--font);transition:all .15s}
-.upload-opt-btn:hover{border-color:var(--green);color:var(--green);background:var(--gl)}
-.upload-opt-btn.primary{background:var(--green);color:#fff;border-color:var(--green)}
-.upload-opt-btn.primary:hover{background:#0F5A44}
-.ocr-fail{background:var(--card);border:1.5px dashed var(--amber);border-radius:var(--radius);padding:1.25rem;text-align:center;margin-bottom:1rem;display:none}
-.ocr-fail-title{font-size:14px;font-weight:600;color:var(--amber);margin-bottom:6px;display:flex;align-items:center;justify-content:center;gap:6px}
-.ocr-fail-sub{font-size:12px;color:var(--muted);margin-bottom:1rem}
-.fail-btns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
-.btn-retry{padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;border:none;font-family:var(--font)}
-.btn-retry.green{background:var(--green);color:#fff}
-.btn-retry.green:hover{background:#0F5A44}
-.btn-retry.outline{background:transparent;border:1.5px solid var(--border);color:var(--text)}
-.btn-retry.outline:hover{border-color:var(--green);color:var(--green);background:var(--gl)}
-.btn-trocar-foto{width:100%;margin-top:8px;padding:10px;border:1.5px dashed var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--muted);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font);position:relative}
-.btn-trocar-foto:hover{border-color:var(--green);color:var(--green);background:var(--gl)}
-.btn-trocar-foto input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
-
-.btn-salvar{width:100%;background:var(--green);color:#fff;border:none;padding:13px;border-radius:var(--radius-sm);font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .15s;margin-top:4px}
-.btn-salvar:hover{background:#0F5A44}
-.btn-salvar:disabled{background:var(--muted);cursor:not-allowed}
-
-/* LISTA */
-.filter-row{display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center}
-.filter-sel{padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--card);color:var(--text);outline:none;font-family:var(--font)}
-.filter-sel:focus{border-color:var(--green)}
-.spacer{flex:1}
-.btn-export{padding:7px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--card);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:5px;color:var(--text);font-family:var(--font);transition:all .15s}
-.btn-export:hover{border-color:var(--green);color:var(--green);background:var(--green-light)}
-.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-table{width:100%;font-size:13px;border-collapse:collapse}
-th{text-align:left;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--bg)}
-td{padding:10px 14px;border-bottom:1px solid var(--bg);vertical-align:middle}
-tr:last-child td{border-bottom:none}
-tr:hover td{background:var(--bg)}
-.tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 8px;border-radius:6px;font-weight:600;font-family:var(--mono)}
-.tag-ok{background:var(--green-light);color:var(--green)}
-.tag-pend{background:var(--amber-light);color:var(--amber)}
-.tag-ai{background:#EEF0FB;color:#3D4FB5}
-
-/* TOAST */
-.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(80px);background:var(--text);color:#fff;padding:11px 20px;border-radius:10px;font-size:13px;font-weight:500;opacity:0;transition:all .3s;pointer-events:none;z-index:9999;display:flex;align-items:center;gap:8px;white-space:nowrap}
-.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.toast.green{background:var(--green)}
-.toast.red{background:var(--red)}
-
-@media(max-width:480px){
-  .metrics{grid-template-columns:1fr 1fr}
-  .ocr-grid{grid-template-columns:1fr}
-  .ocr-full{grid-column:1}
-}
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<title>SST — Fazenda Água Viva</title>
 </head>
 <body>
 
-<!-- LOGIN -->
-<div id="screen-login" class="screen active">
-  <div class="login-page">
-    <div class="login-box">
-      <div class="login-logo">
-        <div class="logo-mark"><i class="ti ti-leaf"></i></div>
-        <div>
-          <div class="logo-text">Água Viva</div>
-          <div class="logo-sub">Gestão de Comprovantes</div>
-        </div>
-      </div>
-      <div class="login-heading">Bom dia,<br>quem é você?</div>
-      <div class="login-sub-h">Selecione seu perfil para continuar</div>
-      <div class="user-list" id="user-list"></div>
-      <div class="field-label">Senha</div>
-      <input type="password" class="field-input" id="senha" placeholder="••••••" onkeydown="if(event.key==='Enter')fazerLogin()">
-      <button class="btn-login" onclick="fazerLogin()"><i class="ti ti-login"></i>Entrar</button>
-      <div class="err" id="err-login">Usuário ou senha incorretos</div>
-    </div>
+<div id="tela-login">
+  <div class="login-wrap">
+    <div class="login-logo">🌿</div>
+    <h1 class="login-titulo">Fazenda Água Viva</h1>
+    <p class="login-sub">Sistema SST — Acesso Restrito</p>
+    <form id="form-login" style="display:flex;flex-direction:column;gap:10px">
+      <div class="campo-grupo"><label>Usuário</label><input type="text" id="login-user" placeholder="seu usuário" autocomplete="username" required></div>
+      <div class="campo-grupo"><label>Senha</label><input type="password" id="login-senha" placeholder="••••••••" autocomplete="current-password" required></div>
+      <div id="login-erro" class="alerta erro" style="display:none"></div>
+      <button type="submit" class="btn-primario w-full" id="btn-login" style="margin-top:4px">
+        <i class="ti ti-login" aria-hidden="true"></i> Entrar
+      </button>
+    </form>
   </div>
 </div>
 
-<!-- APP -->
-<div id="screen-app" class="screen">
-  <div class="app-wrap">
-    <div class="app-bar">
-      <div class="app-bar-left">
-        <i class="ti ti-receipt"></i>
-        <div class="app-bar-title">Comprovantes</div>
+<div id="tela-app" style="display:none">
+  <header class="app-header">
+    <div>
+      <p class="app-sub">Fazenda Água Viva — SST</p>
+      <h1 class="app-titulo" id="titulo-pagina">Início</h1>
+    </div>
+    <div class="header-actions">
+      <button onclick="sincronizarManual()" id="btn-sync" class="btn-sync" title="Sincronizar assinaturas"><i class="ti ti-refresh" aria-hidden="true"></i></button>
+      <button onclick="logout()" class="btn-sair">Sair</button>
+    </div>
+  </header>
+
+  <div id="toast" class="toast" style="display:none"></div>
+  <div id="loading" class="loading-overlay" style="display:none">
+    <div class="spinner"></div>
+    <p id="loading-msg">Carregando...</p>
+  </div>
+
+  <main class="app-main">
+
+    <!-- INÍCIO -->
+    <div id="pg-inicio" class="pagina ativa">
+      <div id="lembretes-wrap" style="display:none;margin-bottom:10px"></div>
+      <div class="cards-grid">
+        <div class="card-stat verde"><i class="ti ti-users stat-icone" aria-hidden="true"></i><span class="stat-num" id="num-funcs">—</span><span class="stat-label">Ativos</span></div>
+        <div class="card-stat vermelho"><i class="ti ti-circle-x stat-icone" style="color:var(--red-text)" aria-hidden="true"></i><span class="stat-num" id="num-vencidos">—</span><span class="stat-label">Exames vencidos</span></div>
+        <div class="card-stat amarelo"><i class="ti ti-alert-triangle stat-icone" style="color:var(--amber-text)" aria-hidden="true"></i><span class="stat-num" id="num-avencer">—</span><span class="stat-label">A vencer</span></div>
+        <div class="card-stat amarelo"><i class="ti ti-shield stat-icone" style="color:var(--amber-text)" aria-hidden="true"></i><span class="stat-num" id="num-epi">—</span><span class="stat-label">EPI p/ repor</span></div>
       </div>
-      <div class="user-chip" onclick="fazerLogout()">
-        <div class="chip-av" id="chip-av"></div>
-        <div class="chip-name" id="chip-name"></div>
-        <i class="ti ti-logout" style="font-size:13px;color:var(--muted)"></i>
+      <div class="card">
+        <div class="card-titulo"><i class="ti ti-bolt" aria-hidden="true"></i> Ações rápidas</div>
+        <div class="acoes-grid">
+          <button class="btn-acao" onclick="irPara('novo-func')"><div class="acao-icon green"><i class="ti ti-user-plus" aria-hidden="true"></i></div><span class="label">Novo funcionário</span></button>
+          <button class="btn-acao" onclick="irPara('lista-func')"><div class="acao-icon blue"><i class="ti ti-users" aria-hidden="true"></i></div><span class="label">Funcionários</span></button>
+          <button class="btn-acao" onclick="irPara('exames')"><div class="acao-icon amber"><i class="ti ti-stethoscope" aria-hidden="true"></i></div><span class="label">Exames</span></button>
+          <button class="btn-acao" onclick="irPara('epi')"><div class="acao-icon coral"><i class="ti ti-shield" aria-hidden="true"></i></div><span class="label">Entregar EPI</span></button>
+          <button class="btn-acao" onclick="irPara('fracionar')"><div class="acao-icon purple"><i class="ti ti-file-invoice" aria-hidden="true"></i></div><span class="label">Folha pgto.</span></button>
+        </div>
       </div>
     </div>
 
-    <div class="demo-badge" id="modo-demo-badge">
-      <i class="ti ti-alert-triangle"></i>
-      <span><strong>Modo demonstração</strong> — adicione a URL do GAS no HTML para ativar Drive e Sheets</span>
+    <!-- LISTA FUNCIONÁRIOS -->
+    <div id="pg-lista-func" class="pagina">
+      <button class="btn-primario w-full mb-3" onclick="irPara('novo-func')"><i class="ti ti-user-plus" aria-hidden="true"></i> Novo Funcionário</button>
+      <div class="search-bar"><i class="ti ti-search" aria-hidden="true"></i><input type="text" id="busca-func" placeholder="Buscar funcionário..." oninput="filtrarFuncionarios(this.value)"></div>
+      <div id="lista-funcionarios" class="lista"></div>
     </div>
 
-    <div class="metrics">
-      <div class="metric"><div class="metric-label">Lançamentos</div><div class="metric-value" id="m-total">0</div></div>
-      <div class="metric"><div class="metric-label">Total gasto</div><div class="metric-value amber" id="m-valor">R$ 0</div></div>
-      <div class="metric"><div class="metric-label">Pendentes</div><div class="metric-value red" id="m-pend">0</div></div>
-      <div class="metric"><div class="metric-label">Lidos por IA</div><div class="metric-value green" id="m-ia">0</div></div>
-    </div>
-
-    <div class="tabs">
-      <div class="tab active" onclick="switchTab('envio')"><i class="ti ti-bolt" style="font-size:13px;vertical-align:-1px;margin-right:3px"></i>Comprovante</div>
-      <div class="tab" onclick="switchTab('nf')"><i class="ti ti-file-invoice" style="font-size:13px;vertical-align:-1px;margin-right:3px"></i>Nota Fiscal</div>
-      <div class="tab" onclick="switchTab('lista')"><i class="ti ti-list" style="font-size:13px;vertical-align:-1px;margin-right:3px"></i>Lançamentos</div>
-    </div>
-
-    <!-- ENVIO -->
-    <div id="panel-envio" class="panel active">
-
-      <!-- CONTA -->
-      <div class="conta-card">
-        <div class="conta-hdr">
-          <div class="conta-title"><i class="ti ti-credit-card" style="color:var(--green)"></i>Conta de pagamento <span class="auto-pill">AUTO</span></div>
-          <div class="trocar-btn" onclick="toggleContas()"><i class="ti ti-arrows-exchange"></i>Trocar</div>
-        </div>
-        <div class="conta-grid" id="conta-info"></div>
-        <div class="conta-opts" id="conta-opts"></div>
-      </div>
-
-      <!-- UPLOAD -->
-      <div class="upload-zone" id="upload-zone">
-        <input type="file" id="file-input" accept="image/*,application/pdf" style="display:none" onchange="handleFile(event)">
-        <i class="ti ti-scan big-icon uz-icon" id="uz-icon"></i>
-        <div class="uz-title" id="uz-title">Enviar comprovante</div>
-        <div class="uz-sub" id="uz-sub">A IA lê e preenche automaticamente · JPG, PNG, PDF</div>
-        <div class="upload-options">
-          <button class="upload-opt-btn primary" onclick="abrirScanner('comp')"><i class="ti ti-camera"></i>Câmera (Scanner)</button>
-          <button class="upload-opt-btn" onclick="document.getElementById('file-input').click()"><i class="ti ti-upload"></i>Galeria / PDF</button>
-        </div>
-      </div>
-
-      <!-- PREVIEW -->
-      <div class="img-preview-wrap" id="preview-wrap" style="display:none">
-        <img class="img-preview" id="img-preview">
-        <button class="img-remove" onclick="removerFoto()"><i class="ti ti-x"></i></button>
-        <button class="img-retry" onclick="rodarOCR()"><i class="ti ti-refresh"></i>Re-analisar</button>
-      </div>
-
-      <!-- OCR LOADING -->
-      <div class="ocr-loading" id="ocr-loading">
-        <div class="ocr-spinner"></div>
-        <div style="font-size:14px;font-weight:600;margin-bottom:4px">IA lendo o comprovante...</div>
-        <div style="font-size:12px;color:var(--muted)">Aguarde alguns segundos</div>
-        <div class="ocr-steps">
-          <div class="ocr-step" id="step-1"><i class="ti ti-photo"></i>Processando imagem</div>
-          <div class="ocr-step" id="step-2"><i class="ti ti-scan"></i>Extraindo texto do documento</div>
-          <div class="ocr-step" id="step-3"><i class="ti ti-brain"></i>Identificando valor, fornecedor e data</div>
-          <div class="ocr-step" id="step-4"><i class="ti ti-check"></i>Preenchendo campos automaticamente</div>
-        </div>
-      </div>
-
-      <!-- OCR FALHOU -->
-      <div class="ocr-fail" id="ocr-fail">
-        <div class="ocr-fail-title"><i class="ti ti-mood-sad"></i>Não consegui ler o comprovante</div>
-        <div class="ocr-fail-sub">A imagem pode estar escura, borrada ou em ângulo difícil.<br>Tente novamente com uma foto melhor ou preencha manualmente.</div>
-        <div class="fail-btns">
-          <button class="btn-retry green" onclick="triggerNovaFoto()"><i class="ti ti-camera"></i>Tirar nova foto</button>
-          <button class="btn-retry outline" onclick="preencherManual()"><i class="ti ti-pencil"></i>Preencher manualmente</button>
-        </div>
-      </div>
-      <input type="file" id="file-retry" accept="image/*,application/pdf" style="display:none" onchange="handleFile(event)">
-
-      <!-- RESULTADO OCR -->
-      <div class="ocr-result" id="ocr-result">
-        <div class="ocr-result-header">
-          <i class="ti ti-sparkles"></i>
-          <span>Dados lidos pela IA — confirme ou edite</span>
-          <div class="ocr-badge" id="conf-badge">●●● ALTA</div>
-        </div>
-        <div class="ocr-fields">
-          <div class="ocr-grid">
-            <div class="ocr-field">
-              <label>Valor (R$)</label>
-              <input type="number" id="f-valor" placeholder="0,00" step="0.01">
-              <div class="confidence"><div class="conf-bar"><div class="conf-fill" id="conf-valor" style="width:0%"></div></div><span id="conf-valor-txt"></span></div>
-            </div>
-            <div class="ocr-field">
-              <label>Data</label>
-              <input type="date" id="f-data">
-            </div>
-            <div class="ocr-field ocr-full">
-              <label>Fornecedor</label>
-              <input type="text" id="f-fornecedor" placeholder="Nome da loja ou empresa">
-              <div class="confidence"><div class="conf-bar"><div class="conf-fill" id="conf-forn" style="width:0%"></div></div><span id="conf-forn-txt"></span></div>
-            </div>
-            <div class="ocr-field">
-              <label>CNPJ</label>
-              <input type="text" id="f-cnpj" placeholder="00.000.000/0001-00" style="font-family:var(--mono)">
-            </div>
-            <div class="ocr-field">
-              <label>Forma de pagamento</label>
-              <select id="f-pgto">
-                <option value="">Selecionar...</option>
-                <option>PIX</option><option>Cartão de crédito</option><option>Boleto</option><option>Dinheiro</option><option>Transferência</option>
-              </select>
-            </div>
-            <div class="ocr-field ocr-full">
-              <label>Destino — máquina, benfeitoria ou insumo</label>
-              <div class="search-wrap">
-                <input type="text" id="f-dest" placeholder="Buscar: NH, trator, fertilizante..." autocomplete="off" oninput="filtrarDest()" onfocus="mostrarDest()">
-                <i class="ti ti-search si"></i>
-                <div class="dropdown" id="dest-dd"></div>
-              </div>
-              <input type="hidden" id="f-dest-val">
-              <input type="hidden" id="f-dest-grupo">
-            </div>
-            <div class="ocr-field ocr-full">
-              <label>Observação <span style="font-weight:400;text-transform:none;letter-spacing:0">(opcional)</span></label>
-              <input type="text" id="f-obs" placeholder="Detalhe adicional...">
-            </div>
+    <!-- NOVO FUNCIONÁRIO -->
+    <div id="pg-novo-func" class="pagina">
+      <div class="card">
+        <form id="form-funcionario" class="formulario">
+          <div class="campo-grupo"><label>Nome Completo *</label><input type="text" name="nome_completo" required placeholder="Nome como na CTPS"></div>
+          <div class="campo-grupo"><label>Nome Curto</label><input type="text" name="nome_curto" placeholder="Como chamam"></div>
+          <div class="dois-col">
+            <div class="campo-grupo"><label>CPF *</label><input type="text" name="cpf" required placeholder="000.000.000-00"></div>
+            <div class="campo-grupo"><label>RG</label><input type="text" name="rg"></div>
           </div>
-          <label class="btn-trocar-foto" style="cursor:pointer">
-            <input type="file" accept="image/*,application/pdf" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%" onchange="handleFile(event)">
-            <i class="ti ti-camera-rotate"></i>Trocar foto / Re-analisar com nova imagem
-          </label>
-          <button class="btn-salvar" id="btn-salvar" onclick="salvar()">
-            <i class="ti ti-cloud-upload"></i>Salvar e enviar ao Drive
-          </button>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- NOTA FISCAL -->
-    <div id="panel-nf" class="panel">
-
-      <!-- UPLOAD NF -->
-      <div class="upload-zone" id="nf-upload-zone">
-        <input type="file" id="nf-file-input" accept="image/*,application/pdf" style="display:none" onchange="handleNFFile(event)">
-        <i class="ti ti-file-invoice big-icon uz-icon" id="nf-uz-icon"></i>
-        <div class="uz-title" id="nf-uz-title">Enviar Nota Fiscal</div>
-        <div class="uz-sub">NF-e, DANFE, cupom fiscal · IA extrai todos os dados</div>
-        <div class="upload-options">
-          <button class="upload-opt-btn primary" onclick="abrirScanner('nf')"><i class="ti ti-camera"></i>Usar câmera (Scanner)</button>
-          <button class="upload-opt-btn" onclick="document.getElementById('nf-file-input').click()"><i class="ti ti-upload"></i>Galeria / PDF</button>
-        </div>
-      </div>
-
-      <div id="nf-preview-wrap" style="display:none"></div>
-      <input type="file" id="nf-file-retry" accept="image/*,application/pdf" style="display:none" onchange="handleNFFile(event)">
-
-      <!-- NF LOADING -->
-      <div class="ocr-loading" id="nf-loading">
-        <div class="ocr-spinner"></div>
-        <div style="font-size:14px;font-weight:600;margin-bottom:4px">IA lendo a Nota Fiscal...</div>
-        <div style="font-size:12px;color:var(--muted)">Aguarde alguns segundos</div>
-        <div class="ocr-steps">
-          <div class="ocr-step" id="nf-step-1"><i class="ti ti-photo"></i>Processando documento</div>
-          <div class="ocr-step" id="nf-step-2"><i class="ti ti-scan"></i>Extraindo dados fiscais</div>
-          <div class="ocr-step" id="nf-step-3"><i class="ti ti-brain"></i>Identificando emitente, valores e itens</div>
-          <div class="ocr-step" id="nf-step-4"><i class="ti ti-check"></i>Preenchendo campos automaticamente</div>
-        </div>
-      </div>
-
-      <!-- NF FALHOU -->
-      <div class="ocr-fail" id="nf-fail">
-        <div class="ocr-fail-title"><i class="ti ti-mood-sad"></i>Não consegui ler a Nota Fiscal</div>
-        <div class="ocr-fail-sub">Tente uma foto mais nítida ou preencha manualmente.</div>
-        <div class="fail-btns">
-          <button class="btn-retry green" onclick="triggerNovaNF()"><i class="ti ti-camera"></i>Nova foto</button>
-          <button class="btn-retry outline" onclick="preencherNFManual()"><i class="ti ti-pencil"></i>Preencher manualmente</button>
-        </div>
-      </div>
-
-      <!-- NF RESULTADO -->
-      <div class="ocr-result" id="nf-result">
-        <div class="ocr-result-header">
-          <i class="ti ti-sparkles"></i>
-          <span>Nota Fiscal lida pela IA — confirme ou edite</span>
-          <div class="ocr-badge" id="nf-conf-badge">●●● ALTA</div>
-        </div>
-        <div class="ocr-fields">
-          <div class="ocr-grid">
-            <div class="ocr-field ocr-full">
-              <label>Emitente (Fornecedor)</label>
-              <input type="text" id="nf-emitente" placeholder="Razão social do emitente">
-              <div class="confidence"><div class="conf-bar"><div class="conf-fill" id="nf-conf-emit" style="width:0%"></div></div><span id="nf-conf-emit-txt"></span></div>
-            </div>
-            <div class="ocr-field">
-              <label>CNPJ Emitente</label>
-              <input type="text" id="nf-cnpj" placeholder="00.000.000/0001-00" style="font-family:var(--mono)">
-            </div>
-            <div class="ocr-field">
-              <label>Data de Emissão</label>
-              <input type="date" id="nf-data">
-            </div>
-            <div class="ocr-field">
-              <label>Número NF</label>
-              <input type="text" id="nf-numero" placeholder="000.000.000" style="font-family:var(--mono)">
-            </div>
-            <div class="ocr-field">
-              <label>Série</label>
-              <input type="text" id="nf-serie" placeholder="1" style="font-family:var(--mono)">
-            </div>
-            <div class="ocr-field">
-              <label>Valor Total (R$)</label>
-              <input type="number" id="nf-valor" placeholder="0,00" step="0.01">
-              <div class="confidence"><div class="conf-bar"><div class="conf-fill" id="nf-conf-val" style="width:0%"></div></div><span id="nf-conf-val-txt"></span></div>
-            </div>
-            <div class="ocr-field">
-              <label>Forma de Pagamento</label>
-              <select id="nf-pgto">
-                <option value="">Selecionar...</option>
-                <option>PIX</option><option>Cartão de crédito</option><option>Boleto</option><option>Dinheiro</option><option>Transferência</option>
-              </select>
-            </div>
-            <div class="ocr-field ocr-full">
-              <label>Chave de Acesso NF-e</label>
-              <input type="text" id="nf-chave" placeholder="0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000" style="font-family:var(--mono);font-size:11px">
-            </div>
-            <div class="ocr-field ocr-full">
-              <label>Descrição / Itens principais</label>
-              <input type="text" id="nf-descricao" placeholder="Ex: Filtro ar motor, óleo lubrificante...">
-            </div>
-            <div class="ocr-field ocr-full">
-              <label>Destino — máquina, benfeitoria ou insumo</label>
-              <div class="search-wrap">
-                <input type="text" id="nf-dest" placeholder="Buscar: NH, trator, fertilizante..." autocomplete="off" oninput="filtrarDestNF()" onfocus="mostrarDestNF()">
-                <i class="ti ti-search si"></i>
-                <div class="dropdown" id="nf-dest-dd"></div>
-              </div>
-              <input type="hidden" id="nf-dest-val">
-              <input type="hidden" id="nf-dest-grupo">
-            </div>
+          <div class="dois-col">
+            <div class="campo-grupo"><label>Data Nascimento</label><input type="date" name="data_nascimento"></div>
+            <div class="campo-grupo"><label>Telefone (WhatsApp) *</label><input type="tel" name="telefone" required placeholder="(62) 99999-9999"></div>
           </div>
-
-          <button class="btn-trocar-foto" onclick="triggerNovaNF()">
-            <input type="file" id="nf-file-trocar" accept="image/*,application/pdf" style="display:none" onchange="handleNFFile(event)">
-            <i class="ti ti-camera-rotate"></i>Trocar foto / Re-analisar
-          </button>
-
-          <button class="btn-salvar" id="nf-btn-salvar" onclick="salvarNF()">
-            <i class="ti ti-cloud-upload"></i>Salvar NF e enviar ao Drive
-          </button>
-        </div>
+          <div class="campo-grupo"><label>Empregador</label><input type="text" name="empregador"></div>
+          <div class="campo-grupo"><label>Unidade *</label>
+            <select name="unidade" required><option value="">Selecione...</option><option>Fazenda Água Viva</option><option>Fazenda Roncador</option><option>Fazenda Espora</option></select>
+          </div>
+          <div class="campo-grupo"><label>Função *</label><input type="text" name="funcao" required placeholder="ex: Tratorista, Cozinheira..."></div>
+          <div class="campo-grupo"><label>Perfil SST * <small>(define exames automáticos)</small></label>
+            <select name="perfil_sst" required>
+              <option value="">Selecione...</option>
+              <option value="CASEIRO_AGROPECUARIO">Trab. Agrícola / Caseiro</option>
+              <option value="OPERADOR_MAQUINAS_AGRICOLAS">Operador de Máquinas</option>
+              <option value="PULVERIZACAO_AGRICOLA">Pulverização Agrícola</option>
+              <option value="MOTORISTA_LOGISTICA">Motorista / Logística</option>
+              <option value="COZINHA">Cozinheira / Cozinheiro</option>
+              <option value="LIDER_OPERACIONAL">Encarregado / Líder</option>
+              <option value="ADMINISTRATIVO">Administrativo</option>
+              <option value="ARMAZEM_ABASTECIMENTO">Armazém / Abastecimento</option>
+              <option value="BIOFABRICA">Biofábrica</option>
+            </select>
+          </div>
+          <div class="campo-grupo"><label>Data de Admissão</label><input type="date" name="data_admissao"></div>
+          <div class="dois-col">
+            <div class="campo-grupo"><label>Opera Máquina?</label><select name="opera_maquina"><option>Não</option><option>Sim</option></select></div>
+            <div class="campo-grupo"><label>Aplica Defensivo?</label><select name="aplica_defensivo"><option>Não</option><option>Sim</option></select></div>
+          </div>
+          <div class="dois-col">
+            <div class="campo-grupo"><label>Tam. Camisa</label><input type="text" name="tam_camisa" placeholder="P, M, G..."></div>
+            <div class="campo-grupo"><label>Tam. Bota</label><input type="text" name="tam_bota" placeholder="38, 39..."></div>
+          </div>
+          <div class="info-box"><i class="ti ti-info-circle" style="vertical-align:-2px" aria-hidden="true"></i> Ao salvar, os exames do perfil são cadastrados automaticamente e a pasta do Drive é criada.</div>
+          <div class="dois-col mt-2">
+            <button type="button" class="btn-secundario" onclick="irPara('lista-func')">Cancelar</button>
+            <button type="submit" class="btn-primario" id="btn-salvar-func"><i class="ti ti-device-floppy" aria-hidden="true"></i> Cadastrar</button>
+          </div>
+        </form>
       </div>
-
     </div>
 
-    <!-- LISTA -->
-    <div id="panel-lista" class="panel">
-      <div class="filter-row">
-        <select class="filter-sel" id="fil-status" onchange="renderTabela()">
-          <option value="">Todos</option><option>Enviados</option><option>Pendentes</option>
+    <!-- EXAMES -->
+    <div id="pg-exames" class="pagina">
+      <div class="filtro-wrap">
+        <select id="filtro-status-exame" onchange="filtrarExames()">
+          <option value="">Todos os status</option>
+          <option>⛔ VENCIDO</option><option>⚠️ A VENCER</option><option>✅ VIGENTE</option><option>⏳ PENDENTE</option>
         </select>
-        <div class="spacer"></div>
-        <button class="btn-export"><i class="ti ti-file-spreadsheet"></i>Exportar</button>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Data</th><th>Fornecedor</th><th>Destino</th><th>Valor</th><th>Origem</th><th>Status</th></tr></thead>
-          <tbody id="tbody"></tbody>
-        </table>
+      <div id="lista-exames" class="lista"></div>
+    </div>
+
+    <!-- EPI -->
+    <div id="pg-epi" class="pagina">
+
+      <!-- Modal Estoque (oculto por padrão) -->
+      <div id="estoque-modal" style="display:none" class="card mb-3">
+        <div class="card-titulo"><i class="ti ti-box" aria-hidden="true"></i> Estoque atual</div>
+        <div id="estoque-modal-body"></div>
+      </div>
+
+      <!-- Entrega compacta -->
+      <div class="card">
+        <!-- Header com botão estoque -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div class="card-titulo" style="margin:0"><i class="ti ti-send" aria-hidden="true"></i> Nova entrega</div>
+          <button onclick="toggleEstoqueModal()" style="background:var(--surface);border:0.5px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:600;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;gap:4px">
+            <i class="ti ti-box" style="font-size:13px" aria-hidden="true"></i> Estoque
+          </button>
+        </div>
+
+        <!-- Funcionário -->
+        <div style="position:relative;margin-bottom:8px">
+          <div id="sel-func-display" class="func-selector">
+            <div class="avatar" id="sel-func-avatar">?</div>
+            <div style="flex:1;min-width:0">
+              <div id="sel-func-nome" style="font-size:13px;color:var(--text-secondary)">Selecione o funcionário...</div>
+              <div id="sel-func-sub" style="font-size:10px;color:var(--text-hint)"></div>
+            </div>
+            <i class="ti ti-chevron-down" style="color:var(--text-hint);font-size:16px" aria-hidden="true"></i>
+          </div>
+          <select id="sel-func-epi-hidden" onchange="selecionarFuncEpi(this.value)"
+            style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px">
+          </select>
+        </div>
+
+        <!-- EPIs selecionados -->
+        <div id="epi-itens-lista" style="margin-top:8px"></div>
+
+        <!-- Buscar e adicionar EPI -->
+        <div style="position:relative;margin-top:6px">
+          <div class="add-epi-trigger">
+            <i class="ti ti-plus" style="font-size:14px" aria-hidden="true"></i>
+            <span id="add-epi-hint">Buscar e adicionar EPI...</span>
+          </div>
+          <select id="sel-epi-hidden" onchange="adicionarItemEpi(this)"
+            style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px">
+            <option value="">Selecione um EPI...</option>
+          </select>
+        </div>
+
+        <!-- Motivo — chips compactos -->
+        <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:600;color:var(--text-secondary);white-space:nowrap">Motivo:</span>
+          <div id="motivo-chips" style="display:flex;gap:5px;flex-wrap:wrap">
+            <button class="motivo-chip ativo" onclick="selecionarMotivo(this,'Admissional')">Admissional</button>
+            <button class="motivo-chip" onclick="selecionarMotivo(this,'Reposição')">Reposição</button>
+            <button class="motivo-chip" onclick="selecionarMotivo(this,'Desgaste')">Desgaste</button>
+            <button class="motivo-chip" onclick="selecionarMotivo(this,'Perda')">Perda</button>
+            <button class="motivo-chip" onclick="selecionarMotivo(this,'Troca de Tamanho')">Troca</button>
+          </div>
+        </div>
+
+        <button id="btn-enviar-epi" onclick="enviarEpi()" class="btn-primario w-full" style="margin-top:10px" disabled>
+          <i class="ti ti-brand-whatsapp" aria-hidden="true"></i>
+          <span id="btn-epi-label">Gerar recibo e enviar</span>
+        </button>
+        <div id="link-assinatura-epi" class="link-assinatura-box"></div>
+      </div>
+
+      <!-- Histórico -->
+      <div class="card mt-3">
+        <div class="card-titulo"><i class="ti ti-history" aria-hidden="true"></i> Últimas entregas</div>
+        <div id="lista-entregas" class="lista"></div>
       </div>
     </div>
 
-  </div>
-</div>
+    <!-- FOLHA (FRACIONAR) -->
+    <div id="pg-fracionar" class="pagina">
 
-<div class="toast" id="toast"><span id="toast-msg"></span></div>
+      <!-- Upload e separar -->
+      <div class="card mb-3" id="card-upload-frac">
+        <div class="card-titulo"><i class="ti ti-scissors" aria-hidden="true"></i> Folha de pagamento</div>
+        <div class="campo-grupo">
+          <label>Competência *</label>
+          <select id="sel-comp-frac" required></select>
+        </div>
+        <div class="campo-grupo" style="margin-top:8px">
+          <label>PDF da folha completa *</label>
+          <input type="file" id="input-pdf-frac" accept=".pdf">
+        </div>
+        <div id="frac-preview" class="info-box" style="display:none;margin-top:8px"></div>
+        <button id="btn-fracionar" onclick="processarFracionamento()" class="btn-primario w-full" style="margin-top:10px">
+          <i class="ti ti-scissors" aria-hidden="true"></i> Separar PDF
+        </button>
+      </div>
 
-<!-- MODAL SCANNER -->
-<div class="scanner-modal" id="scanner-modal">
-  <div class="scanner-title"><i class="ti ti-scan" style="color:var(--green)"></i>Modo Scanner — Posicione o documento</div>
-  <div class="scanner-canvas-wrap">
-    <video id="scanner-video" autoplay playsinline muted></video>
-    <canvas id="scanner-capture-canvas" style="display:none"></canvas>
-    <div class="scanner-corners">
-      <span></span><span></span><span></span><span></span>
+      <!-- Barra de progresso + páginas (aparece após separar) -->
+      <div id="frac-resultado" style="display:none">
+        <!-- Step bar -->
+        <div class="card mb-3" style="padding:12px 14px">
+          <div class="step-bar">
+            <div class="step"><div class="step-dot done" id="step1"><i class="ti ti-check" style="font-size:10px" aria-hidden="true"></i></div><span class="step-label">Upload</span></div>
+            <div class="step-line"></div>
+            <div class="step"><div class="step-dot done" id="step2"><i class="ti ti-check" style="font-size:10px" aria-hidden="true"></i></div><span class="step-label">Separar</span></div>
+            <div class="step-line"></div>
+            <div class="step"><div class="step-dot active" id="step3">3</div><span class="step-label" id="step3-label" style="color:var(--verde);font-weight:600">Enviar</span></div>
+          </div>
+          <p id="frac-resumo" style="font-size:11px;color:var(--text-secondary);text-align:center;margin-top:4px"></p>
+        </div>
+
+        <!-- Botão enviar todos -->
+        <button onclick="enviarTodasPendentes()" class="btn-primario w-full mb-3" id="btn-enviar-todos">
+          <i class="ti ti-brand-whatsapp" aria-hidden="true"></i>
+          <span id="btn-todos-label">Enviar todos via WhatsApp</span>
+        </button>
+
+        <!-- Cards das páginas -->
+        <div class="card">
+          <div class="card-titulo"><i class="ti ti-files" aria-hidden="true"></i> Páginas separadas</div>
+          <div id="frac-lista"></div>
+        </div>
+      </div>
+
+      <!-- Histórico -->
+      <div class="card mt-3">
+        <div class="card-titulo"><i class="ti ti-history" aria-hidden="true"></i> Histórico de envios</div>
+        <div id="historico-folha" class="lista"></div>
+      </div>
     </div>
-  </div>
-  <div class="scanner-hint">Enquadre o documento dentro das marcas verdes · Boa iluminação · Evite sombras</div>
-  <div class="scanner-btns">
-    <button class="scanner-btn capture" id="scanner-capture-btn" onclick="capturarScanner()"><i class="ti ti-camera"></i>Capturar</button>
-    <button class="scanner-btn cancel" onclick="fecharScanner()"><i class="ti ti-x"></i>Cancelar</button>
-  </div>
-  <div class="scan-processing" id="scan-processing"><div class="ocr-spinner" style="width:20px;height:20px;margin:0"></div>Processando imagem...</div>
+
+  </main>
+
+  <nav class="nav-bottom">
+    <button class="nav-btn ativo" data-pg="inicio" onclick="irPara('inicio')"><i class="ti ti-home" aria-hidden="true"></i><span class="nav-label">Início</span></button>
+    <button class="nav-btn" data-pg="lista-func" onclick="irPara('lista-func')"><i class="ti ti-users" aria-hidden="true"></i><span class="nav-label">Funcionários</span></button>
+    <button class="nav-btn" data-pg="exames" onclick="irPara('exames')"><i class="ti ti-stethoscope" aria-hidden="true"></i><span class="nav-label">Exames</span></button>
+    <button class="nav-btn" data-pg="epi" onclick="irPara('epi')"><i class="ti ti-shield" aria-hidden="true"></i><span class="nav-label">EPI</span></button>
+    <button class="nav-btn" data-pg="fracionar" onclick="irPara('fracionar')"><i class="ti ti-file-invoice" aria-hidden="true"></i><span class="nav-label">Folha</span></button>
+  </nav>
 </div>
 
-<script>
-// ══════════════════════════════════════════════════════
-//  CONFIGURAÇÃO — cole aqui a URL do seu Web App GAS
-// ══════════════════════════════════════════════════════
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwY01CfHvH7uFWkTnYrshTdHQQXwKySPA5O0NRWw7oYXmFffEyRQjI9gNtkiBF1bDingg/exec';
-
-// ── MODO OFFLINE (fallback quando GAS_URL não configurada) ──
-const MODO_DEMO = !GAS_URL || GAS_URL.includes('COLE_AQUI');
-
-// ── DADOS LOCAIS (usados no modo demo) ──────────────────
-const USUARIOS=[
-  {id:'jovane',nome:'Jovane Gatto Cossul',sigla:'JG',fazenda:'Fazenda Água Viva',senha:'1234',
-   contas:[
-     {label:'Banco do Brasil — CC',banco:'Banco do Brasil',agencia:'1234-5',conta:'00012-3',pix:'jovane@aguaviva.agr.br'},
-     {label:'Sicredi — CC',banco:'Sicredi',agencia:'0056',conta:'78901-2',pix:'11.222.333/0001-44'},
-   ]},
-  {id:'joao',nome:'João Germano Cossul',sigla:'JC',fazenda:'Fazenda Roncador',senha:'1234',
-   contas:[
-     {label:'Caixa Econômica — CC',banco:'Caixa Econômica',agencia:'3210',conta:'00056-7',pix:'joao@roncador.agr.br'},
-   ]},
-  {id:'joaquim',nome:'Joaquim Gatto Cossul',sigla:'QC',fazenda:'Fazenda Espora',senha:'1234',
-   contas:[
-     {label:'Bradesco — CC',banco:'Bradesco',agencia:'4567',conta:'00034-8',pix:'joaquim@espora.agr.br'},
-   ]},
-];
-
-const MAQUINAS={
-  'AVIÃO AGRÍCOLA':['AIR TRATOR AT-502B','AVIAO PR-ZRM','AVIÃO'],
-  'CAMINHÕES':['CAMINHAO-VOLVO VM260','CAMINHAO-VOLVO NH380','CAMINHAO-WV 7.100','CAMINHAO-MB 1313','CAMINHÃO MB 1620','CAMINHÃO MB1113 CAÇAMBA','CAMINHÃO-VOLVO FH 540'],
-  'CARRETA AGRÍCOLA':['TRANSBORDO SANTAL','REBOQUE 3000 KG','CARRETO ADUBO 20000','CARRETO ADUBO ESPORA','CARRETA PLATAFORMA CR7.8'],
-  'COLHEDORAS':['COLHETADEIRA NH-CR9060','COLHETADEIRA CASE 2388','COLHEITADEIRA CR 8.90 NEW HOLLAND','COLHETADEIRA CR7.80'],
-  'DISTRIBUIDOR FERTILIZANTES':['DISTRIBUIDOR BRUTUS 12000','DISTRIBUIDOR HERCULES 10000','DISTRIBUIDOR JAN 20000','KAMAQ 6000'],
-  'EQUIPAMENTOS':['BALANÇA 120/240T/H','GUINDASTE GRM 14.000','HANGAR','GERADOR GMG 500 KVA','SECADOR PALINI 15 TON 01','SECADOR PALINI 15 TON 02','PRÉ-LIMPEZA 120TON/H','EMBUTIDORA SILO BOLSA - AGUA VIVA','EMBUTIDORA SILO BOLSA - ESPORA','EXTRATORA SILO BOLSA','GRUPO GERADOR CAT 130KWA','MOTO SERRA'],
-  'IMPLEMENTOS':['ESPALHADOR JAN 12000','ESPALHADOR JAN 20000','GRADE HD 9017','TRITON JAN 4600','ROÇADEIRA ECOLOGICA','CARRETA GRANELEIRA','GRADE NIVELADORA','GRADE PESADA 32','CEIFADEIRA CONJUNTO DUPLO','SEMIRREBOQUE FH 540-1','DOLLY FH540'],
-  'MAQUINAS PESADAS':['PA CARREGADEIRA LG 835 - AGUA VIVA','PA CARREGADEIRA LG 835','PATROLA'],
-  'PIVÔ AGRÍCOLA':['PIVO CENTRAL','P01 200ha','P02 120ha','P01 60ha','P02 80ha','P03 118ha','P04 130ha'],
-  'PLATAFORMAS':['PLATAFORMA 740 CF30','PLATAFORMA MILHO BRAVA 11','PLATAFORMA COLHE TUDO','PLATAFORMA 880 CF45','PLATAFORMA MACDON 35F'],
-  'PULVERIZADORES':['PULVERIZADOR JD4730','JACTO UNIPORT 2000','AVIAO PAWNEE 260','TRATADOR SEMENTE TREVISAN 1000','PULVERIZADOR JACTO ARBUS 4000'],
-  'SEMEADORAS':['PLANTADEIRA HORSCH MAESTRO DUO 36.50','PLANTADEIRA CASE ASM 1213','PLANTADEIRA JD2122','SEMEADORA PAMPEANA','PLANTADEIRA CASE 2213'],
-  'TRATORES':['TRATOR CASE STEIGER 420','TRATOR CASE MAGNUM 340','EMPILHADEIRA CPCD-25','TRATOR NH T7.260','TRATOR VALTRA BH 180','TRATOR JD 5600','TRATOR JD-6125J','TRATOR NH 7630','TRATOR NH T8.355','TRATOR JD 7505','TRATOR JD 7500','TRATOR NH-TL 75','TRATOR MF-290','TRATOR CBT 8060','TRATOR MF-65'],
-  'VEÍCULOS':['TOYOTA HILUX - JOAQUIM','TOYOTA HILUX - JOVANE','S10 LTZ - FAZENDA','S10 LTZ - JOÃO','RANGER VITOR','TOYOTA COROLLA CROSS 2.0','D20','TOYOTA HILUX - VITOR','TOYOTA HILUX - ELESIO'],
-};
-const EXTRAS={
-  'BENFEITORIAS':['Construção civil','Elétrica','Cercas e porteiras','Irrigação','Equipamentos fixos','Material de limpeza'],
-  'INSUMOS AGRÍCOLAS':['Defensivos / Acaricidas','Fertilizantes','Sementes','Embalagens','Análises de solo','Serviços técnicos','Combustível'],
-};
-
-let usuario=null,contaAtual=null,mostContas=false,userSel=null;
-let fotoBase64=null,fotoMime=null,uploadedFile=null;
-let lancamentos=[];
-
-// ── API GAS ─────────────────────────────────────────────
-// JSONP para chamadas leves (login, listar, salvar)
-// fetch POST para OCR (base64 de imagem)
-function gasPost(body){
-  if(body.acao==='ocr'||body.acao==='ocr_texto'){
-    return gasPostFetch(body);
-  }
-  return gasPostJSONP(body);
-}
-
-function gasPostJSONP(body){
-  return new Promise(function(resolve,reject){
-    var cbName='_gcb'+Date.now();
-    var bodyStr=JSON.stringify(body);
-    var payload=encodeURIComponent(bodyStr);
-    var url=GAS_URL+'?payload='+payload+'&callback='+cbName;
-    console.log('JSONP acao='+body.acao+' | payload='+bodyStr.length+'chars | url='+url.length+'chars');
-    if(url.length>8000){
-      console.error('URL muito longa: '+url.length+' chars — GAS vai rejeitar');
-      reject(new Error('Payload muito grande para JSONP: '+url.length+' chars'));
-      return;
-    }
-    var tag=document.createElement('script');
-    var timer=setTimeout(function(){cleanup();reject(new Error('Timeout GAS 30s'));},30000);
-    window[cbName]=function(data){
-      console.log('JSONP resposta acao='+body.acao+':', JSON.stringify(data));
-      cleanup();resolve(data);
-    };
-    function cleanup(){clearTimeout(timer);delete window[cbName];if(tag.parentNode)tag.parentNode.removeChild(tag);}
-    tag.onerror=function(){
-      console.error('JSONP tag.onerror — URL rejeitada pelo GAS. Tamanho: '+url.length);
-      cleanup();reject(new Error('Erro rede GAS — URL: '+url.length+' chars'));
-    };
-    tag.src=url;
-    document.head.appendChild(tag);
-  });
-}
-
-// POST direto — GAS com "Executar como: Eu" + "Acesso: Qualquer pessoa" permite isso
-async function gasPostFetch(body){
-  // Tentativa 1: fetch POST direto (funciona se GAS tiver CORS headers)
-  try{
-    var resp=await fetch(GAS_URL,{
-      method:'POST',
-      headers:{'Content-Type':'text/plain'}, // text/plain evita preflight CORS
-      body:JSON.stringify(body),
-      redirect:'follow'
-    });
-    var txt=await resp.text();
-    // GAS pode redirecionar — pegar o JSON da resposta final
-    var json=JSON.parse(txt.replace(/^[^{]*/,'').replace(/[^}]*$/,''));
-    return json;
-  }catch(e){
-    console.warn('fetch POST falhou:',e.message);
-  }
-
-  // Tentativa 2: GET com base64 particionado em parâmetros menores
-  // Dividir base64 em chunks de 1000 chars e reconstruir no GAS
-  var b=body.base64||'';
-  var chunkSize=1000;
-  var chunks=[];
-  for(var i=0;i<b.length;i+=chunkSize) chunks.push(b.substring(i,i+chunkSize));
-
-  // Enviar metadados primeiro via JSONP
-  var meta=Object.assign({},body);
-  delete meta.base64;
-  meta.chunks_total=chunks.length;
-  meta.session=Date.now().toString();
-
-  // Sempre enviar via fetch POST (sem limite de tamanho)
-  meta.base64=b;
-  return gasPostFetch(meta);
-}
-
-// ── LOGIN ──
-function renderLoginUsers(){
-  // Sempre renderiza lista local imediatamente (sem esperar GAS)
-  // Garante que o login apareça mesmo com GAS lento ou offline
-  _renderUserCards(USUARIOS.map(function(u){
-    return {id:u.id,nome:u.nome,sigla:u.sigla,fazenda:u.fazenda};
-  }));
-
-  // Em paralelo, tenta atualizar do GAS (adiciona usuários novos da planilha)
-  if(!MODO_DEMO){
-    gasPost({acao:'usuarios'}).then(function(res){
-      if(res.ok && res.usuarios && res.usuarios.length){
-        _renderUserCards(res.usuarios);
-      }
-    }).catch(function(e){
-      console.warn('GAS usuários indisponível, usando lista local:', e.message);
-    });
-  }
-}
-
-function _renderUserCards(lista){
-  document.getElementById('user-list').innerHTML=lista.map(u=>`
-    <div class="user-opt" id="uopt-${u.id}" onclick="selUser('${u.id}')">
-      <div class="u-av" id="uav-${u.id}">${u.sigla}</div>
-      <div><div class="u-name">${u.nome.split(' ').slice(0,2).join(' ')}</div><div class="u-faz">${u.fazenda}</div></div>
-    </div>`).join('');
-}
-
-function selUser(id){
-  userSel=id;
-  document.querySelectorAll('.user-opt').forEach(el=>el.classList.remove('selected'));
-  document.getElementById('uopt-'+id).classList.add('selected');
-  document.getElementById('senha').focus();
-}
-
-async function fazerLogin(){
-  const err=document.getElementById('err-login');
-  if(!userSel){err.textContent='Selecione um usuário.';err.style.display='block';return;}
-  const senha=document.getElementById('senha').value;
-  if(!senha){err.textContent='Digite a senha.';err.style.display='block';return;}
-
-  // Botão loading
-  const btn=document.querySelector('.btn-login');
-  btn.innerHTML='<i class="ti ti-loader-2" style="animation:spin 1s linear infinite"></i>Entrando...';
-  btn.disabled=true;
-
-  try{
-    let u=null;
-
-    // Tentar login via GAS; se falhar usa validação local
-    let gasOk=false;
-    if(!MODO_DEMO){
-      try{
-        const res=await gasPost({acao:'login',usuario_id:userSel,senha});
-        if(res.ok){
-          const ud=res.usuario;
-          u={
-            id:ud.id, nome:ud.nome, sigla:ud.sigla, fazenda:ud.fazenda,
-            contas:[{label:(ud.banco||'Banco')+' — CC',banco:ud.banco||'',
-                     agencia:ud.agencia||'',conta:ud.conta||'',pix:ud.pix||''}]
-          };
-          gasOk=true;
-        } else {
-          // GAS respondeu mas credenciais erradas — tentar local
-          console.warn('GAS login falhou, tentando local:', res.erro);
-        }
-      }catch(gasErr){
-        console.warn('GAS inacessível, usando login local:', gasErr.message);
-      }
-    }
-
-    // Fallback: validação local (sempre funciona)
-    if(!gasOk){
-      const local=USUARIOS.find(x=>x.id===userSel);
-      if(!local||String(local.senha)!==String(senha)){
-        err.textContent='Usuário ou senha incorretos';err.style.display='block';
-        _resetBtn(btn);return;
-      }
-      u=local;
-    }
-
-    err.style.display='none';
-    usuario=u; contaAtual=u.contas[0];
-    document.getElementById('screen-login').classList.remove('active');
-    document.getElementById('screen-app').classList.add('active');
-    iniciarApp();
-
-  }catch(e){
-    err.textContent='Erro de conexão — verifique a URL do GAS';
-    err.style.display='block';
-  }
-  _resetBtn(btn);
-}
-
-function _resetBtn(btn){
-  btn.innerHTML='<i class="ti ti-login"></i>Entrar';
-  btn.disabled=false;
-}
-
-function fazerLogout(){
-  usuario=null;contaAtual=null;userSel=null;fotoBase64=null;uploadedFile=null;lancamentos=[];
-  document.getElementById('senha').value='';
-  document.querySelectorAll('.user-opt').forEach(el=>el.classList.remove('selected'));
-  document.getElementById('screen-app').classList.remove('active');
-  document.getElementById('screen-login').classList.add('active');
-  resetarEnvio();switchTab('envio');
-}
-
-async function iniciarApp(){
-  document.getElementById('chip-av').textContent=usuario.sigla;
-  document.getElementById('chip-name').textContent=usuario.nome.split(' ')[0];
-  if(MODO_DEMO){
-    const badge=document.getElementById('modo-demo-badge');
-    if(badge) badge.style.display='flex';
-  }
-  renderConta();
-  await carregarLancamentos();
-}
-
-async function carregarLancamentos(){
-  if(MODO_DEMO){
-    // dados de demonstração
-    lancamentos=[
-      {data:'2026-06-01',fornecedor:'Agros MG',destino:'COLHEITADEIRA CR 8.90 NEW HOLLAND',valor:1250,conta:contaAtual.label,comp:true,ia:true},
-      {data:'2026-05-28',fornecedor:'Construmix',destino:'Construção civil',valor:4800,conta:contaAtual.label,comp:true,ia:false},
-      {data:'2026-05-20',fornecedor:'Copercitrus',destino:'Fertilizantes',valor:3200,conta:contaAtual.label,comp:false,ia:false},
-    ];
-  } else {
-    try{
-      const res=await gasPost({acao:'listar',usuario_id:usuario.id,limite:50});
-      if(res.ok) lancamentos=res.lancamentos.map(l=>({
-        data:l.data, fornecedor:l.fornecedor||'—', destino:l.destino,
-        valor:parseFloat(l.valor)||0, conta:l.conta,
-        comp:l.status==='Enviado', ia:l.lido_ia,
-        url:l.url,
-      }));
-    }catch(e){ console.warn('Erro ao carregar lançamentos:', e); }
-  }
-  atualizaMetricas();
-}
-
-// ── CONTA ──
-function renderConta(){
-  const c=contaAtual;
-  document.getElementById('conta-info').innerHTML=`
-    <div><div class="ci-label">Banco</div><div class="ci-val">${c.banco}</div></div>
-    <div><div class="ci-label">Conta</div><div class="ci-val">${c.conta}</div></div>
-    <div><div class="ci-label">Agência</div><div class="ci-val">${c.agencia}</div></div>
-    <div><div class="ci-label">PIX</div><div class="ci-val" style="font-size:12px">${c.pix}</div></div>`;
-  document.getElementById('conta-opts').innerHTML=usuario.contas.map((ct,i)=>`
-    <div class="conta-opt${ct===contaAtual?' sel':''}" onclick="trocarConta(${i})">${ct.label}</div>`).join('');
-}
-function toggleContas(){
-  mostContas=!mostContas;
-  const el=document.getElementById('conta-opts');
-  el.style.display=mostContas?'flex':'none';
-}
-function trocarConta(i){
-  contaAtual=usuario.contas[i];mostContas=false;
-  document.getElementById('conta-opts').style.display='none';
-  renderConta();showToast('Conta: '+contaAtual.banco,'green');
-}
-
-// ── FILE / OCR ──
-function handleFile(e){
-  const f=e.target.files[0];if(!f) return;
-  uploadedFile=f;
-  // Esconder zona de upload e falha
-  document.getElementById('upload-zone').style.display='none';
-  document.getElementById('ocr-fail').style.display='none';
-  document.getElementById('ocr-result').style.display='none';
-
-  if(f.type==='application/pdf'){
-    _processarPDF(f);
-  } else {
-    _processarImagem(f);
-  }
-}
-
-function _processarImagem(f){
-  const reader=new FileReader();
-  reader.onload=function(ev){
-    const result=ev.target.result;
-    fotoBase64=result.split(',')[1];
-    fotoMime='image/jpeg';
-    document.getElementById('img-preview').src=result;
-    document.getElementById('preview-wrap').style.display='block';
-    rodarOCR();
-  };
-  reader.readAsDataURL(f);
-}
-
-function _processarPDF(f){
-  // Mostrar loading imediatamente
-  document.getElementById('ocr-loading').style.display='block';
-  document.getElementById('preview-wrap').style.display='none';
-  _setStep(0);
-
-  const reader=new FileReader();
-  reader.onload=function(ev){
-    try{
-      const dataUrl=ev.target.result;
-      fotoBase64=dataUrl.split(',')[1];
-      fotoMime='application/pdf';
-      _setStep(1);
-
-      // Preview: ícone PDF em vez de imagem
-      const wrap=document.getElementById('preview-wrap');
-      const szKB=(uploadedFile.size/1024).toFixed(0);
-      const nome=uploadedFile.name;
-      document.getElementById('img-preview').style.display='none';
-      // Inserir card de preview PDF sem destruir os inputs ocultos
-      const existing=wrap.querySelector('.pdf-preview-card');
-      if(existing) existing.remove();
-      const card=document.createElement('div');
-      card.className='pdf-preview-card';
-      card.style.cssText='background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:center;gap:12px;margin-bottom:1rem';
-      card.innerHTML='<div style="width:42px;height:42px;background:#FDE8E8;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-file-type-pdf" style="font-size:24px;color:#A32D2D"></i></div>'
-        +'<div style="flex:1;overflow:hidden"><div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+nome+'</div>'
-        +'<div style="font-size:12px;color:var(--muted)">'+szKB+' KB · PDF — IA lendo...</div></div>'
-        +'<button onclick="removerFoto()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:20px;padding:4px"><i class="ti ti-x"></i></button>';
-      wrap.insertBefore(card, wrap.firstChild);
-      wrap.style.display='block';
-      _setStep(2);
-
-      // Rodar OCR com PDF base64 direto (Claude suporta PDF nativo)
-      rodarOCR();
-
-    }catch(err){
-      console.error('Erro PDF:',err);
-      document.getElementById('ocr-loading').style.display='none';
-      document.getElementById('ocr-fail').style.display='block';
-      showToast('Erro ao processar PDF','red');
-    }
-  };
-  reader.readAsDataURL(f);
-}
-
-function _loadScript(src){
-  return new Promise(function(res,rej){
-    if(document.querySelector('script[src="'+src+'"]')){res();return;}
-    var s=document.createElement('script');
-    s.src=src;s.onload=res;s.onerror=rej;
-    document.head.appendChild(s);
-  });
-}
-
-function _setStep(n){
-  const steps=['step-1','step-2','step-3','step-4'];
-  steps.forEach(function(s,i){
-    const el=document.getElementById(s);
-    el.classList.remove('done','active');
-    if(i<n) el.classList.add('done');
-    else if(i===n) el.classList.add('active');
-  });
-}
-
-function removerFoto(){
-  fotoBase64=null;uploadedFile=null;
-  document.getElementById('preview-wrap').style.display='none';
-  document.getElementById('upload-zone').style.display='block';
-  document.getElementById('ocr-result').style.display='none';
-  document.getElementById('ocr-fail').style.display='none';
-  document.getElementById('file-input').value='';
-}
-
-async function rodarOCR(){
-  if(!fotoBase64){showToast('Nenhuma foto carregada','red');return;}
-  document.getElementById('ocr-loading').style.display='block';
-  document.getElementById('ocr-result').style.display='none';
-  document.getElementById('ocr-fail').style.display='none';
-
-  var steps=['step-1','step-2','step-3','step-4'];
-  steps.forEach(function(s){document.getElementById(s).classList.remove('done','active');});
-  var si=0;
-  var stepTimer=setInterval(function(){
-    if(si>0){try{document.getElementById(steps[si-1]).classList.replace('active','done');}catch(e){}}
-    if(si<steps.length){document.getElementById(steps[si]).classList.add('active');si++;}
-  },700);
-
-  try{
-    var b64final=fotoBase64, mimeFinal='image/jpeg', payload;
-
-    if(fotoMime==='application/pdf'){
-      // 1. Tentar extrair texto via pdf.js
-      _setStep(1);
-      if(!window.pdfjsLib){
-        await _loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
-        pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-      }
-      var raw=atob(fotoBase64), bytes=new Uint8Array(raw.length);
-      for(var i=0;i<raw.length;i++) bytes[i]=raw.charCodeAt(i);
-      var pdf=await pdfjsLib.getDocument({data:bytes}).promise;
-      _setStep(2);
-
-      // Extrair texto
-      var textoTotal='';
-      for(var p=1;p<=Math.min(pdf.numPages,3);p++){
-        var pg=await pdf.getPage(p);
-        var tc=await pg.getTextContent();
-        textoTotal+=tc.items.map(function(it){return it.str;}).join(' ')+' ';
-      }
-
-      var textoLimpo=textoTotal.trim();
-      console.log('Texto extraído: '+textoLimpo.length+' chars | Preview: '+textoLimpo.substring(0,100));
-
-      if(textoLimpo.length > 20){
-        // PDF tem texto — enviar texto via JSONP
-        _setStep(3);
-        payload={acao:'ocr_texto', texto:textoLimpo.substring(0,3000)};
-
-      } else {
-        // PDF é imagem — renderizar primeira página em canvas
-        console.log('PDF sem texto, renderizando como imagem...');
-        var page1=await pdf.getPage(1);
-        _setStep(3);
-
-        // Renderizar com qualidade suficiente para leitura de texto
-        var scale=1.5;
-        var vp=page1.getViewport({scale:scale});
-        var canvas=document.createElement('canvas');
-
-        // Limitar largura máxima a 600px para manter legibilidade
-        var maxW=600;
-        if(vp.width>maxW){ scale=scale*(maxW/vp.width); vp=page1.getViewport({scale:scale}); }
-        canvas.width=vp.width;
-        canvas.height=vp.height;
-        await page1.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
-
-        // Comprimir mantendo legibilidade — alvo: base64 < 20000 chars
-        var quality=0.6;
-        var dataUrl=canvas.toDataURL('image/jpeg',quality);
-        b64final=dataUrl.split(',')[1];
-
-        while(b64final.length > 20000 && quality > 0.2){
-          quality=Math.max(0.2,quality-0.1);
-          dataUrl=canvas.toDataURL('image/jpeg',quality);
-          b64final=dataUrl.split(',')[1];
-        }
-
-        // Se ainda grande, reduzir resolução mantendo qualidade
-        if(b64final.length > 20000){
-          var c2=document.createElement('canvas');
-          c2.width=Math.floor(canvas.width*0.7);
-          c2.height=Math.floor(canvas.height*0.7);
-          c2.getContext('2d').drawImage(canvas,0,0,c2.width,c2.height);
-          dataUrl=c2.toDataURL('image/jpeg',0.5);
-          b64final=dataUrl.split(',')[1];
-        }
-
-        console.log('Imagem gerada: '+Math.round(b64final.length/1024)+'KB | chars: '+b64final.length);
-
-        // Mostrar preview
-        document.getElementById('img-preview').src=dataUrl;
-        document.getElementById('img-preview').style.display='block';
-
-        payload={acao:'ocr', base64:b64final, mime:'image/jpeg'};
-      }
-
-    } else {
-      // Imagem normal — reduzir e comprimir
-      _setStep(1);
-      var imgEl=new Image();
-      await new Promise(function(res,rej){imgEl.onload=res;imgEl.onerror=rej;
-        imgEl.src='data:'+fotoMime+';base64,'+fotoBase64;});
-      _setStep(2);
-
-      // Reduzir para caber no JSONP — alvo < 5000 chars base64
-      var maxW=350;
-      var sc=Math.min(1, maxW/imgEl.width);
-      var cv=document.createElement('canvas');
-      cv.width=Math.floor(imgEl.width*sc);
-      cv.height=Math.floor(imgEl.height*sc);
-      cv.getContext('2d').drawImage(imgEl,0,0,cv.width,cv.height);
-      var quality=0.3;
-      var du=cv.toDataURL('image/jpeg',quality);
-      b64final=du.split(',')[1];
-
-      while(b64final.length>5000 && quality>0.1){
-        quality=Math.max(0.1,quality-0.05);
-        du=cv.toDataURL('image/jpeg',quality);
-        b64final=du.split(',')[1];
-      }
-      if(b64final.length>5000){
-        cv.width=Math.floor(cv.width*0.5); cv.height=Math.floor(cv.height*0.5);
-        cv.getContext('2d').drawImage(imgEl,0,0,cv.width,cv.height);
-        du=cv.toDataURL('image/jpeg',0.2);
-        b64final=du.split(',')[1];
-      }
-      console.log('Imagem: '+Math.round(b64final.length/1024)+'KB | chars: '+b64final.length);
-      _setStep(3);
-      payload={acao:'ocr', base64:b64final, mime:'image/jpeg'};
-    }
-
-    // Enviar via JSONP
-    var res=await gasPost(payload);
-    if(!res.ok) throw new Error(res.erro||'Erro OCR servidor');
-
-    clearInterval(stepTimer);
-    steps.forEach(function(s){document.getElementById(s).classList.add('done');});
-    setTimeout(function(){
-      document.getElementById('ocr-loading').style.display='none';
-      preencherCampos(res.ocr);
-    },400);
-
-  }catch(err){
-    clearInterval(stepTimer);
-    console.error('OCR erro:', err);
-    document.getElementById('ocr-loading').style.display='none';
-    document.getElementById('ocr-fail').style.display='block';
-    var sub=document.querySelector('.ocr-fail-sub');
-    if(sub) sub.innerHTML='Erro: <code style="font-size:11px">'+err.message+'</code><br>Tente nova foto ou preencha manualmente.';
-    showToast('Erro OCR: '+err.message,'red');
-  }
-}
-
-function preencherCampos(ocr){
-  const mark=(id)=>{
-    const el=document.getElementById(id);
-    if(el&&el.value) el.classList.add('ai-filled');
-  };
-
-  if(ocr.valor!=null){document.getElementById('f-valor').value=ocr.valor;}
-  if(ocr.data){document.getElementById('f-data').value=String(ocr.data||'').substring(0,10);}
-  else{document.getElementById('f-data').value=new Date().toISOString().split('T')[0];}
-  if(ocr.fornecedor){document.getElementById('f-fornecedor').value=ocr.fornecedor;}
-  if(ocr.cnpj){document.getElementById('f-cnpj').value=ocr.cnpj;}
-  if(ocr.forma_pagamento){document.getElementById('f-pgto').value=ocr.forma_pagamento;}
-  if(ocr.descricao){document.getElementById('f-obs').value=ocr.descricao;}
-
-  // confidence
-  const cv=ocr.confianca?.valor??0;
-  const cf=ocr.confianca?.fornecedor??0;
-  const cg=ocr.confianca?.geral??0;
-  document.getElementById('conf-valor').style.width=cv+'%';
-  document.getElementById('conf-valor-txt').textContent=cv+'% confiança';
-  document.getElementById('conf-forn').style.width=cf+'%';
-  document.getElementById('conf-forn-txt').textContent=cf+'% confiança';
-
-  const badge=document.getElementById('conf-badge');
-  if(cg>=80){badge.textContent='●●● ALTA';badge.style.background='var(--green)';}
-  else if(cg>=50){badge.textContent='●●○ MÉDIA';badge.style.background='var(--amber)';}
-  else{badge.textContent='●○○ BAIXA';badge.style.background='var(--red)';}
-
-  ['f-valor','f-fornecedor','f-cnpj'].forEach(mark);
-
-  document.getElementById('ocr-result').style.display='block';
-  showToast('IA preencheu os campos — confirme os dados','green');
-}
-
-// ── RETRY / TROCA FOTO ──
-function triggerNovaFoto(){
-  fotoBase64=null; uploadedFile=null;
-  document.getElementById('ocr-fail').style.display='none';
-  document.getElementById('ocr-result').style.display='none';
-  document.getElementById('ocr-loading').style.display='none';
-  // Tenta pelo file-retry primeiro, senão pelo upload-zone
-  const retry=document.getElementById('file-retry');
-  if(retry){ retry.value=''; retry.click(); return; }
-  const fi=document.getElementById('file-input');
-  if(fi){ fi.value=''; fi.click(); return; }
-  // fallback: mostra upload zone
-  document.getElementById('preview-wrap').style.display='none';
-  document.getElementById('upload-zone').style.display='block';
-}
-
-function preencherManual(){
-  // Esconde falha, mostra formulário vazio para preenchimento manual
-  document.getElementById('ocr-fail').style.display='none';
-  document.getElementById('ocr-result').style.display='block';
-  document.getElementById('f-data').value=new Date().toISOString().split('T')[0];
-  // badge manual
-  const badge=document.getElementById('conf-badge');
-  badge.textContent='Manual'; badge.style.background='var(--muted)';
-  // limpar barras de confiança
-  document.getElementById('conf-valor').style.width='0%';
-  document.getElementById('conf-valor-txt').textContent='';
-  document.getElementById('conf-forn').style.width='0%';
-  document.getElementById('conf-forn-txt').textContent='';
-  showToast('Preencha os campos manualmente','');
-}
-
-// ── DESTINO ──
-function buildDestOpts(q){
-  var html='';
-  var allGroups=Object.assign({},MAQUINAS,EXTRAS);
-  Object.keys(allGroups).forEach(function(g){
-    var items=allGroups[g];
-    var hits=items.filter(function(m){return !q||m.toLowerCase().includes(q)||g.toLowerCase().includes(q);});
-    if(hits.length){
-      html+='<div class="dd-group">'+g+'</div>';
-      hits.slice(0,8).forEach(function(m){
-        var idx=_ddItems.length;
-        _ddItems.push({nome:m,grupo:g});
-        html+='<div class="dd-item" data-idx="'+idx+'">'+m+'</div>';
-      });
-    }
-  });
-  return html;
-}
-
-// Cache de itens do dropdown para evitar problemas de escape
-var _ddItems=[];
-
-function _initDDClick(containerId, inputId, valId, grupoId){
-  var dd=document.getElementById(containerId);
-  if(!dd) return;
-  dd.addEventListener('click',function(e){
-    var item=e.target.closest('.dd-item');
-    if(!item) return;
-    var idx=parseInt(item.getAttribute('data-idx'));
-    if(isNaN(idx)||!_ddItems[idx]) return;
-    var d=_ddItems[idx];
-    document.getElementById(inputId).value=d.nome;
-    if(valId) document.getElementById(valId).value=d.nome;
-    if(grupoId) document.getElementById(grupoId).value=d.grupo;
-    dd.classList.remove('open');
-  });
-}
-function filtrarDest(){
-  _ddItems=[];
-  var q=document.getElementById('f-dest').value.toLowerCase();
-  var dd=document.getElementById('dest-dd');
-  var html=buildDestOpts(q);
-  dd.innerHTML=html||'<div style="padding:10px;font-size:13px;color:var(--muted)">Nenhum resultado</div>';
-  dd.classList.toggle('open',q.length>0);
-}
-function mostrarDest(){
-  _ddItems=[];
-  var q=document.getElementById('f-dest').value.toLowerCase();
-  var dd=document.getElementById('dest-dd');
-  dd.innerHTML=buildDestOpts(q||'');
-  dd.classList.add('open');
-}
-function selDest(nome,grupo){
-  document.getElementById('f-dest').value=nome;
-  document.getElementById('f-dest-val').value=nome;
-  document.getElementById('f-dest-grupo').value=grupo;
-  document.getElementById('dest-dd').classList.remove('open');
-}
-// Inicializar listeners de click nos dropdowns após DOM carregado
-document.addEventListener('DOMContentLoaded',function(){
-  _initDDClick('dest-dd','f-dest','f-dest-val','f-dest-grupo');
-  _initDDClick('nf-dest-dd','nf-dest','nf-dest-val','nf-dest-grupo');
-});
-document.addEventListener('click',function(e){
-  if(!e.target.closest('#f-dest')&&!e.target.closest('#dest-dd'))
-    document.getElementById('dest-dd').classList.remove('open');
-});
-
-// ── SALVAR ──
-async function salvar(){
-  const val=parseFloat(document.getElementById('f-valor').value);
-  const dest=document.getElementById('f-dest-val').value||document.getElementById('f-dest').value;
-  const grupo=document.getElementById('f-dest-grupo').value||'GERAL';
-  if(!dest||isNaN(val)||val<=0){showToast('Preencha destino e valor','red');return;}
-
-  const btn=document.getElementById('btn-salvar');
-  btn.innerHTML='<i class="ti ti-loader-2" style="animation:spin 1s linear infinite"></i>Salvando...';
-  btn.disabled=true;
-
-  // Limitar tamanho dos campos texto para JSONP
-  var obsVal=(document.getElementById('f-obs').value||'').substring(0,100);
-  var fornVal=(document.getElementById('f-fornecedor').value||'').substring(0,80);
-  var cnpjVal=(document.getElementById('f-cnpj').value||'').substring(0,20);
-  var contaVal=(contaAtual.label||'').substring(0,50);
-  var destVal=dest.substring(0,80);
-  var grupoVal=grupo.substring(0,30);
-
-  const payload={
-    acao:'salvar',
-    usuario_id:  usuario.id,
-    fazenda:     usuario.fazenda,
-    fornecedor:  fornVal,
-    cnpj:        cnpjVal,
-    valor:       val,
-    forma_pgto:  document.getElementById('f-pgto').value||'',
-    conta:       contaVal,
-    destino:     destVal,
-    grupo:       grupoVal,
-    numero_nf:   '',
-    observacao:  obsVal,
-    lido_ia:     !!fotoBase64,
-    confianca_ia:null,
-    data_compra: (document.getElementById('f-data').value||'').substring(0,10)||new Date().toISOString().substring(0,10),
-  };
-
-  let urlDrive='';
-  if(!MODO_DEMO){
-    try{
-      showToast('Salvando...','');
-
-      // Salvar sem foto primeiro (via JSONP — rápido e confiável)
-      const payloadSemFoto=Object.assign({},payload);
-      delete payloadSemFoto.foto_base64;
-      delete payloadSemFoto.foto_mime;
-      delete payloadSemFoto.foto_nome;
-
-      console.log('Salvando lançamento no Sheets...');
-      const res=await gasPostJSONP(payloadSemFoto);
-      console.log('Resposta salvar:', JSON.stringify(res));
-
-      if(res.ok){
-        showToast('Lançamento salvo no Sheets ✓','green');
-
-        // Se tem foto, enviar separadamente via fetch POST
-        if(fotoBase64){
-          try{
-            showToast('Enviando foto ao Drive...','');
-            const payloadFoto={
-              acao:'salvar_foto',
-              id: res.id,
-              foto_base64: fotoBase64,
-              foto_mime: fotoMime||'image/jpeg',
-              foto_nome: uploadedFile?.name||'comprovante.jpg',
-              usuario_id: usuario.id,
-              grupo: grupo,
-              data_compra: payload.data_compra,
-              fornecedor: payload.fornecedor||'',
-            };
-            const resFoto=await gasPostFetch(payloadFoto);
-            console.log('Resposta foto:', JSON.stringify(resFoto));
-            if(resFoto.ok){
-              urlDrive=resFoto.url_comprovante||'';
-              showToast('Foto salva no Drive ✓','green');
-            } else {
-              showToast('Sheets OK · Drive: '+(resFoto.erro||'erro'),'red');
-            }
-          }catch(eFoto){
-            console.warn('Erro ao enviar foto:', eFoto.message);
-            showToast('Sheets OK · Foto pendente','');
-          }
-        }
-      } else {
-        showToast('Erro ao salvar: '+(res.erro||'desconhecido'),'red');
-      }
-    }catch(e){
-      console.error('Erro salvar:', e);
-      showToast('Erro de conexão: '+e.message,'red');
-    }
-  } else {
-    showToast('Modo demo — não enviado ao Drive','');
-  }
-
-  lancamentos.unshift({
-    data:payload.data_compra,
-    fornecedor:payload.fornecedor||'—',
-    destino:dest, valor:val,
-    conta:contaAtual.label,
-    comp:!!(uploadedFile||urlDrive),
-    ia:!!fotoBase64, url:urlDrive,
-  });
-  atualizaMetricas();
-  btn.innerHTML='<i class="ti ti-cloud-upload"></i>Salvar e enviar ao Drive';
-  btn.disabled=false;
-  resetarEnvio();
-}
-
-function resetarEnvio(){
-  fotoBase64=null;uploadedFile=null;
-  document.getElementById('upload-zone').style.display='block';
-  document.getElementById('preview-wrap').style.display='none';
-  document.getElementById('ocr-loading').style.display='none';
-  document.getElementById('ocr-result').style.display='none';
-  document.getElementById('file-input').value='';
-  ['f-valor','f-data','f-fornecedor','f-cnpj','f-obs','f-dest','f-dest-val','f-dest-grupo'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('f-pgto').value='';
-  document.querySelectorAll('.ai-filled').forEach(el=>el.classList.remove('ai-filled'));
-}
-
-// ── TABS / LISTA ──
-function switchTab(t){
-  ['envio','nf','lista'].forEach(function(n,i){
-    document.querySelectorAll('.tab')[i].classList.toggle('active',n===t);
-    document.getElementById('panel-'+n).classList.toggle('active',n===t);
-  });
-  if(t==='lista') renderTabela();
-}
-function renderTabela(){
-  const fs=document.getElementById('fil-status').value;
-  const rows=lancamentos.filter(l=>{
-    if(fs==='Enviados'&&!l.comp) return false;
-    if(fs==='Pendentes'&&l.comp) return false;
-    return true;
-  });
-  document.getElementById('tbody').innerHTML=rows.length===0
-    ? `<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted)">Nenhum lançamento encontrado</td></tr>`
-    : rows.map(l=>`<tr>
-    <td style="font-family:var(--mono);font-size:12px">${l.data||'—'}</td>
-    <td style="font-weight:500">${l.fornecedor||'—'}</td>
-    <td><div style="font-size:13px">${l.destino||'—'}</div>${l.numero_nf?'<div style="font-size:11px;color:var(--muted)">NF '+l.numero_nf+'</div>':''}</td>
-    <td style="font-weight:600;font-family:var(--mono)">R$ ${(l.valor||0).toLocaleString('pt-BR')}</td>
-    <td>${l.ia?'<span class="tag tag-ai"><i class="ti ti-sparkles"></i>IA</span>':'<span class="tag" style="background:var(--bg);color:var(--muted)">Manual</span>'}</td>
-    <td>${l.comp
-      ? (l.url ? `<a href="${l.url}" target="_blank" class="tag tag-ok" style="text-decoration:none"><i class="ti ti-check"></i>Drive ↗</a>`
-               : '<span class="tag tag-ok"><i class="ti ti-check"></i>OK</span>')
-      : '<span class="tag tag-pend"><i class="ti ti-clock"></i>Pendente</span>'}</td>
-  </tr>`).join('');
-}
-function atualizaMetricas(){
-  document.getElementById('m-total').textContent=lancamentos.length;
-  document.getElementById('m-valor').textContent='R$ '+lancamentos.reduce((s,l)=>s+l.valor,0).toLocaleString('pt-BR');
-  document.getElementById('m-pend').textContent=lancamentos.filter(l=>!l.comp).length;
-  document.getElementById('m-ia').textContent=lancamentos.filter(l=>l.ia).length;
-}
-
-// ── TOAST ──
-function showToast(msg,type=''){
-  const t=document.getElementById('toast');
-  t.textContent=msg;
-  t.className='toast'+(type?' '+type:'');
-  t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),3200);
-}
-
-// ── NOTA FISCAL ─────────────────────────────────────────
-var nfFotoBase64=null, nfFotoMime=null, nfUploadedFile=null;
-
-function handleNFFile(e){
-  var files=e.target.files;
-  if(!files||!files[0]) return;
-  var f=files[0];
-  nfUploadedFile=f;
-  var isPDF=f.type==='application/pdf'||f.name.toLowerCase().endsWith('.pdf');
-  var reader=new FileReader();
-  reader.onload=function(ev){
-    var result=ev.target.result;
-    nfFotoBase64=result.split(',')[1];
-    nfFotoMime=isPDF?'application/pdf':(f.type||'image/jpeg');
-    // Preview
-    var wrap=document.getElementById('nf-preview-wrap');
-    if(isPDF){
-      wrap.innerHTML='<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:center;gap:12px;margin-bottom:1rem">'
-        +'<div style="width:42px;height:42px;background:#FDE8E8;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-file-type-pdf" style="font-size:24px;color:#A32D2D"></i></div>'
-        +'<div style="flex:1"><div style="font-size:13px;font-weight:600">'+f.name+'</div>'
-        +'<div style="font-size:12px;color:var(--muted)">'+(f.size/1024).toFixed(0)+' KB · PDF</div></div>'
-        +'<button onclick="removerNF()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:20px;padding:4px"><i class="ti ti-x"></i></button></div>';
-    } else {
-      wrap.innerHTML='<div style="position:relative;margin-bottom:1rem">'
-        +'<img src="'+result+'" style="width:100%;max-height:180px;object-fit:contain;border-radius:var(--radius);border:1px solid var(--border)">'
-        +'<button onclick="removerNF()" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,.6);color:#fff;border:none;width:28px;height:28px;border-radius:50%;cursor:pointer"><i class="ti ti-x"></i></button></div>';
-    }
-    wrap.style.display='block';
-    document.getElementById('nf-upload-zone').style.display='none';
-    document.getElementById('nf-fail').style.display='none';
-    document.getElementById('nf-result').style.display='none';
-    rodarOCR_NF();
-  };
-  reader.readAsDataURL(f);
-}
-
-async function rodarOCR_NF(){
-  if(!nfFotoBase64){showToast('Nenhuma foto carregada','red');return;}
-  document.getElementById('nf-loading').style.display='block';
-  document.getElementById('nf-result').style.display='none';
-  document.getElementById('nf-fail').style.display='none';
-
-  var steps=['nf-step-1','nf-step-2','nf-step-3','nf-step-4'];
-  steps.forEach(function(s){document.getElementById(s).classList.remove('done','active');});
-  var si=0;
-  var st=setInterval(function(){
-    if(si>0){try{document.getElementById(steps[si-1]).classList.replace('active','done');}catch(e){}}
-    if(si<steps.length){document.getElementById(steps[si]).classList.add('active');si++;}
-  },700);
-
-  try{
-    var b64=nfFotoBase64, mime=nfFotoMime;
-
-    // PDF: tentar texto primeiro, senão renderizar como imagem
-    if(mime==='application/pdf'){
-      if(!window.pdfjsLib){
-        await _loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
-        pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-      }
-      var raw=atob(b64), bytes=new Uint8Array(raw.length);
-      for(var i=0;i<raw.length;i++) bytes[i]=raw.charCodeAt(i);
-      var pdf=await pdfjsLib.getDocument({data:bytes}).promise;
-      var texto='';
-      for(var p=1;p<=Math.min(pdf.numPages,3);p++){
-        var pg=await pdf.getPage(p);
-        var tc=await pg.getTextContent();
-        texto+=tc.items.map(function(it){return it.str;}).join(' ')+' ';
-      }
-      if(texto.trim().length>20){
-        var res=await gasPostFetch({acao:'ocr_nf_texto',texto:texto.substring(0,4000)});
-        clearInterval(st); steps.forEach(function(s){document.getElementById(s).classList.add('done');});
-        document.getElementById('nf-loading').style.display='none';
-        if(!res.ok) throw new Error(res.erro);
-        preencherCamposNF(res.ocr);
-        return;
-      }
-      // PDF sem texto: renderizar como imagem
-      var page1=await pdf.getPage(1);
-      var scale=1.5, vp=page1.getViewport({scale:scale});
-      if(vp.width>600){ scale=scale*(600/vp.width); vp=page1.getViewport({scale:scale}); }
-      var canvas=document.createElement('canvas');
-      canvas.width=vp.width; canvas.height=vp.height;
-      await page1.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
-      var quality=0.55, du=canvas.toDataURL('image/jpeg',quality);
-      b64=du.split(',')[1];
-      while(b64.length>20000&&quality>0.2){ quality-=0.1; du=canvas.toDataURL('image/jpeg',quality); b64=du.split(',')[1]; }
-      mime='image/jpeg';
-    } else {
-      // Imagem: reduzir para leitura
-      var imgEl=new Image();
-      await new Promise(function(res,rej){imgEl.onload=res;imgEl.onerror=rej;imgEl.src='data:'+mime+';base64,'+b64;});
-      var cv=document.createElement('canvas');
-      var sc=Math.min(1,600/imgEl.width);
-      cv.width=Math.floor(imgEl.width*sc); cv.height=Math.floor(imgEl.height*sc);
-      cv.getContext('2d').drawImage(imgEl,0,0,cv.width,cv.height);
-      var quality=0.55, du=cv.toDataURL('image/jpeg',quality);
-      b64=du.split(',')[1];
-      while(b64.length>20000&&quality>0.2){ quality-=0.1; du=cv.toDataURL('image/jpeg',quality); b64=du.split(',')[1]; }
-    }
-
-    var res=await gasPostFetch({acao:'ocr_nf',base64:b64,mime:'image/jpeg'});
-    clearInterval(st);
-    steps.forEach(function(s){document.getElementById(s).classList.add('done');});
-    document.getElementById('nf-loading').style.display='none';
-    if(!res.ok) throw new Error(res.erro);
-    preencherCamposNF(res.ocr);
-
-  }catch(err){
-    clearInterval(st);
-    document.getElementById('nf-loading').style.display='none';
-    document.getElementById('nf-fail').style.display='block';
-    var sub=document.querySelector('#nf-fail .ocr-fail-sub');
-    if(sub) sub.innerHTML='Erro: <code style="font-size:11px">'+err.message+'</code>';
-    showToast('Erro NF: '+err.message,'red');
-  }
-}
-
-function preencherCamposNF(ocr){
-  if(!ocr) return;
-  var set=function(id,val){var el=document.getElementById(id);if(el&&val!=null){el.value=val;el.classList.add('ai-filled');}};
-  set('nf-emitente', ocr.emitente||ocr.fornecedor||'');
-  set('nf-cnpj',     ocr.cnpj||'');
-  set('nf-data',     String(ocr.data||'').substring(0,10));
-  set('nf-numero',   ocr.numero||'');
-  set('nf-serie',    ocr.serie||'');
-  set('nf-valor',    ocr.valor||'');
-  set('nf-pgto',     ocr.forma_pagamento||'');
-  set('nf-chave',    ocr.chave_acesso||'');
-  set('nf-descricao',ocr.descricao||'');
-
-  // Confiança
-  var cg=ocr.confianca&&ocr.confianca.geral||0;
-  var badge=document.getElementById('nf-conf-badge');
-  if(badge){
-    if(cg>=80){badge.textContent='●●● ALTA';badge.style.background='var(--green)';}
-    else if(cg>=50){badge.textContent='●●○ MÉDIA';badge.style.background='var(--amber)';}
-    else{badge.textContent='●○○ BAIXA';badge.style.background='var(--red)';}
-  }
-  var cv=ocr.confianca&&ocr.confianca.valor||0;
-  var ce=ocr.confianca&&ocr.confianca.emitente||ocr.confianca&&ocr.confianca.fornecedor||0;
-  var ef=document.getElementById('nf-conf-emit'); if(ef) ef.style.width=ce+'%';
-  var et=document.getElementById('nf-conf-emit-txt'); if(et) et.textContent=ce+'% confiança';
-  var vf=document.getElementById('nf-conf-val'); if(vf) vf.style.width=cv+'%';
-  var vt=document.getElementById('nf-conf-val-txt'); if(vt) vt.textContent=cv+'% confiança';
-
-  document.getElementById('nf-result').style.display='block';
-  showToast('Nota Fiscal lida ✓ — confirme os dados','green');
-}
-
-function removerNF(){
-  nfFotoBase64=null; nfUploadedFile=null;
-  document.getElementById('nf-preview-wrap').style.display='none';
-  document.getElementById('nf-upload-zone').style.display='block';
-  document.getElementById('nf-result').style.display='none';
-  document.getElementById('nf-fail').style.display='none';
-  document.getElementById('nf-loading').style.display='none';
-  document.getElementById('nf-file-input').value='';
-}
-
-function triggerNovaNF(){
-  nfFotoBase64=null; nfUploadedFile=null;
-  document.getElementById('nf-fail').style.display='none';
-  document.getElementById('nf-result').style.display='none';
-  document.getElementById('nf-loading').style.display='none';
-  document.getElementById('nf-file-retry').value='';
-  document.getElementById('nf-file-retry').click();
-}
-
-function preencherNFManual(){
-  document.getElementById('nf-fail').style.display='none';
-  document.getElementById('nf-result').style.display='block';
-  document.getElementById('nf-data').value=new Date().toISOString().split('T')[0];
-  var badge=document.getElementById('nf-conf-badge');
-  if(badge){badge.textContent='Manual';badge.style.background='var(--muted)';}
-}
-
-function filtrarDestNF(){
-  _ddItems=[];
-  var q=document.getElementById('nf-dest').value.toLowerCase();
-  var dd=document.getElementById('nf-dest-dd');
-  var html=buildDestOpts(q);
-  dd.innerHTML=html||'<div style="padding:10px;font-size:13px;color:var(--muted)">Nenhum resultado</div>';
-  dd.classList.toggle('open',q.length>0);
-}
-function mostrarDestNF(){
-  _ddItems=[];
-  var q=document.getElementById('nf-dest').value.toLowerCase();
-  var dd=document.getElementById('nf-dest-dd');
-  dd.innerHTML=buildDestOpts(q||'');
-  dd.classList.add('open');
-}
-document.addEventListener('click',function(e){
-  if(!e.target.closest('#nf-dest')&&!e.target.closest('#nf-dest-dd'))
-    document.getElementById('nf-dest-dd').classList.remove('open');
-});
-
-async function salvarNF(){
-  var val=parseFloat(document.getElementById('nf-valor').value);
-  var dest=document.getElementById('nf-dest-val').value||document.getElementById('nf-dest').value;
-  var emitente=document.getElementById('nf-emitente').value;
-  if(!emitente||isNaN(val)||val<=0){showToast('Preencha emitente e valor','red');return;}
-
-  var btn=document.getElementById('nf-btn-salvar');
-  btn.innerHTML='<i class="ti ti-loader-2" style="animation:spin 1s linear infinite"></i>Salvando...';
-  btn.disabled=true;
-
-  var grupo=document.getElementById('nf-dest-grupo').value||'GERAL';
-  var nfNumero=document.getElementById('nf-numero').value||'';
-  var nfDescr=document.getElementById('nf-descricao').value||'';
-  var payload={
-    acao:'salvar',
-    tipo:'nf',
-    usuario_id:usuario.id, fazenda:usuario.fazenda,
-    fornecedor:emitente,
-    cnpj:document.getElementById('nf-cnpj').value||'',
-    valor:val,
-    forma_pgto:document.getElementById('nf-pgto').value||'',
-    conta:contaAtual.label,
-    destino:dest||'NF',
-    grupo:grupo,
-    numero_nf:nfNumero,
-    observacao:nfDescr,
-    lido_ia:!!nfFotoBase64,
-    confianca_ia:null,
-    data_compra:(document.getElementById('nf-data').value||'').substring(0,10)||new Date().toISOString().substring(0,10),
-  };
-
-  try{
-    showToast('Salvando NF...','');
-    var res=await gasPostJSONP(payload);
-    if(res.ok){
-      showToast('NF salva no Sheets ✓','green');
-      if(nfFotoBase64){
-        try{
-          var nfNum=document.getElementById('nf-numero').value||'';
-          var nfEmit=document.getElementById('nf-emitente').value||'';
-          var resFoto=await gasPostFetch({acao:'salvar_foto',id:res.id,foto_base64:nfFotoBase64,
-            foto_mime:nfFotoMime||'image/jpeg',foto_nome:nfUploadedFile&&nfUploadedFile.name||'nf.jpg',
-            usuario_id:usuario.id,grupo:grupo,data_compra:payload.data_compra,
-            fornecedor:nfEmit, numero_nf:nfNum});
-          if(resFoto.ok) showToast('NF e foto salvos ✓','green');
-        }catch(ef){console.warn('Foto NF erro:',ef);}
-      }
-      lancamentos.unshift({data:payload.data_compra,fornecedor:emitente,destino:dest||'NF',
-        valor:val,conta:contaAtual.label,comp:!!nfFotoBase64,ia:!!nfFotoBase64});
-      atualizaMetricas();
-      // Reset
-      removerNF();
-      ['nf-emitente','nf-cnpj','nf-numero','nf-serie','nf-valor','nf-chave','nf-descricao','nf-dest','nf-dest-val','nf-dest-grupo'].forEach(function(id){
-        var el=document.getElementById(id); if(el) el.value='';
-      });
-      document.getElementById('nf-pgto').value='';
-      document.getElementById('nf-result').style.display='none';
-    } else {
-      showToast('Erro: '+(res.erro||'desconhecido'),'red');
-    }
-  }catch(e){
-    showToast('Erro: '+e.message,'red');
-  }
-  btn.innerHTML='<i class="ti ti-cloud-upload"></i>Salvar NF e enviar ao Drive';
-  btn.disabled=false;
-}
-
-
-// ── SCANNER (câmera com processamento de imagem) ─────────
-var _scannerStream=null, _scannerTarget='comp';
-
-async function abrirScanner(target){
-  _scannerTarget = target||'comp';
-  var modal=document.getElementById('scanner-modal');
-  modal.classList.add('open');
-  document.getElementById('scan-processing').style.display='none';
-  document.getElementById('scanner-capture-btn').style.display='flex';
-  try{
-    var constraints={video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}};
-    _scannerStream=await navigator.mediaDevices.getUserMedia(constraints);
-    document.getElementById('scanner-video').srcObject=_scannerStream;
-  }catch(e){
-    fecharScanner();
-    showToast('Câmera não disponível: '+e.message,'red');
-    // Fallback: abrir galeria
-    if(target==='nf') document.getElementById('nf-file-input').click();
-    else document.getElementById('file-input').click();
-  }
-}
-
-function fecharScanner(){
-  if(_scannerStream){ _scannerStream.getTracks().forEach(function(t){t.stop();}); _scannerStream=null; }
-  document.getElementById('scanner-modal').classList.remove('open');
-}
-
-async function capturarScanner(){
-  var video=document.getElementById('scanner-video');
-  var canvas=document.getElementById('scanner-capture-canvas');
-  canvas.width=video.videoWidth||1280;
-  canvas.height=video.videoHeight||720;
-  var ctx=canvas.getContext('2d');
-
-  // Capturar frame
-  ctx.drawImage(video,0,0,canvas.width,canvas.height);
-
-  // Aplicar melhorias de scanner:
-  // 1. Converter para escala de cinza
-  // 2. Aumentar contraste
-  // 3. Limiarização adaptativa (binarização)
-  _processarImgScanner(ctx, canvas.width, canvas.height);
-
-  var dataUrl=canvas.toDataURL('image/jpeg',0.92);
-  fecharScanner();
-
-  // Mostrar processing
-  document.getElementById('scan-processing').style.display='flex';
-
-  // Enviar para OCR
-  if(_scannerTarget==='nf'){
-    var fakeEvent={target:{files:[_dataURLtoFile(dataUrl,'scanner_nf.jpg')]}};
-    handleNFFile(fakeEvent);
-  } else {
-    var fakeEvent={target:{files:[_dataURLtoFile(dataUrl,'scanner_comp.jpg')]}};
-    handleFile(fakeEvent);
-  }
-  setTimeout(function(){document.getElementById('scan-processing').style.display='none';},3000);
-}
-
-function _processarImgScanner(ctx, w, h){
-  // Pegar pixels
-  var imageData=ctx.getImageData(0,0,w,h);
-  var data=imageData.data;
-
-  // 1. Converter para grayscale + aumentar contraste
-  for(var i=0;i<data.length;i+=4){
-    // Grayscale com pesos perceptuais
-    var gray=Math.round(data[i]*0.299 + data[i+1]*0.587 + data[i+2]*0.114);
-    // Aumentar contraste: aplicar curva S
-    gray=Math.min(255,Math.max(0,Math.round((gray-128)*1.4+128)));
-    // Aumentar brilho levemente
-    gray=Math.min(255,gray+15);
-    data[i]=data[i+1]=data[i+2]=gray;
-  }
-
-  // 2. Nitidez (sharpening kernel)
-  ctx.putImageData(imageData,0,0);
-  var tempCanvas=document.createElement('canvas');
-  tempCanvas.width=w; tempCanvas.height=h;
-  var tc=tempCanvas.getContext('2d');
-  tc.filter='contrast(1.3) brightness(1.05) saturate(0)';
-  tc.drawImage(ctx.canvas,0,0);
-
-  // 3. Redimensionar para largura ideal (1200px max)
-  var maxW=1200;
-  if(w>maxW){
-    var ratio=maxW/w;
-    var finalCanvas=document.createElement('canvas');
-    finalCanvas.width=maxW; finalCanvas.height=Math.round(h*ratio);
-    var fc=finalCanvas.getContext('2d');
-    fc.filter='contrast(1.3) brightness(1.05) saturate(0)';
-    fc.drawImage(tc.canvas,0,0,finalCanvas.width,finalCanvas.height);
-    ctx.canvas.width=finalCanvas.width; ctx.canvas.height=finalCanvas.height;
-    ctx.drawImage(finalCanvas,0,0);
-  } else {
-    ctx.drawImage(tc.canvas,0,0);
-  }
-}
-
-function _dataURLtoFile(dataUrl, filename){
-  var arr=dataUrl.split(',');
-  var mime=arr[0].match(/:(.*?);/)[1];
-  var bstr=atob(arr[1]);
-  var n=bstr.length;
-  var u8arr=new Uint8Array(n);
-  while(n--){ u8arr[n]=bstr.charCodeAt(n); }
-  return new File([u8arr], filename, {type:mime});
-}
-
-// ── INIT ──
-renderLoginUsers();
-</script>
+<script src="app.js"></script>
 </body>
 </html>
