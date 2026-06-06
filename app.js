@@ -501,10 +501,17 @@ async function enviarEpi(metodo) {
     if (metodo === 'proprio' && res.data.pdf_base64) {
       // Gera link de assinatura própria
       mostrarLoading('Gerando link de assinatura...')
+      const func = funcEpiSelecionado
       const res2 = await chamarGAS({ acao: 'gerar_link_assinatura', dados: {
-        tipo: 'EPI', func_id: funcEpiSelecionado['ID'],
-        referencia: itensEpiSel.map(i => i.descricao).join(', '),
-        pdf_base64: res.data.pdf_base64
+        tipo:         'EPI',
+        func_id:      func['ID'],
+        referencia:   itensEpiSel.map(i => i.descricao).join(', '),
+        pdf_base64:   res.data.pdf_base64,
+        itens:        itensEpiSel,
+        motivo:       motivoEpiSelecionado || 'Admissional',
+        func_cpf:     func['CPF']     || '',
+        func_funcao:  func['FUNCAO']  || '',
+        func_unidade: func['UNIDADE'] || '',
       }})
       esconderLoading()
       if (res2 && res2.ok) mostrarLinkAssinaturaEpi(res2.data.link, res2.data.mensagem, res2.data.wa_link)
