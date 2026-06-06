@@ -1253,6 +1253,7 @@ async function salvar(){
     conta:       contaVal,
     destino:     destVal,
     grupo:       grupoVal,
+    numero_nf:   '',
     observacao:  obsVal,
     lido_ia:     !!fotoBase64,
     confianca_ia:null,
@@ -1362,7 +1363,7 @@ function renderTabela(){
     : rows.map(l=>`<tr>
     <td style="font-family:var(--mono);font-size:12px">${l.data||'—'}</td>
     <td style="font-weight:500">${l.fornecedor||'—'}</td>
-    <td style="font-size:12px;color:var(--muted)">${l.destino||'—'}</td>
+    <td><div style="font-size:13px">${l.destino||'—'}</div>${l.numero_nf?'<div style="font-size:11px;color:var(--muted)">NF '+l.numero_nf+'</div>':''}</td>
     <td style="font-weight:600;font-family:var(--mono)">R$ ${(l.valor||0).toLocaleString('pt-BR')}</td>
     <td>${l.ia?'<span class="tag tag-ai"><i class="ti ti-sparkles"></i>IA</span>':'<span class="tag" style="background:var(--bg);color:var(--muted)">Manual</span>'}</td>
     <td>${l.comp
@@ -1594,6 +1595,8 @@ async function salvarNF(){
   btn.disabled=true;
 
   var grupo=document.getElementById('nf-dest-grupo').value||'GERAL';
+  var nfNumero=document.getElementById('nf-numero').value||'';
+  var nfDescr=document.getElementById('nf-descricao').value||'';
   var payload={
     acao:'salvar',
     tipo:'nf',
@@ -1605,7 +1608,8 @@ async function salvarNF(){
     conta:contaAtual.label,
     destino:dest||'NF',
     grupo:grupo,
-    observacao:'NF '+document.getElementById('nf-numero').value+' | '+document.getElementById('nf-descricao').value,
+    numero_nf:nfNumero,
+    observacao:nfDescr,
     lido_ia:!!nfFotoBase64,
     confianca_ia:null,
     data_compra:(document.getElementById('nf-data').value||'').substring(0,10)||new Date().toISOString().substring(0,10),
