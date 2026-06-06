@@ -1,4 +1,3 @@
-
 let motivoEpiSelecionado = 'Admissional'
 
 function selecionarMotivo(btn, motivo) {
@@ -480,18 +479,40 @@ function atualizarBtnEpi() {
   btn.disabled = !funcEpiSelecionado || n === 0
 }
 
-async function enviarEpi() {
+async function enviarEpi(metodo) {
   if (!funcEpiSelecionado || !itensEpiSel.length) return toast('❌ Selecione funcionário e EPIs', 'erro')
+  // Se não passou metodo, mostra modal de escolha
+  if (!metodo) { mostrarModalEnvio('epi'); return }
+
   const btn = document.getElementById('btn-enviar-epi')
   const motivo = motivoEpiSelecionado || 'Admissional'
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Enviando...'
-  mostrarLoading('Gerando recibo e enviando via ZapSign...')
-  const res = await chamarGAS({ acao: 'entregar_epi', dados: { func_id: funcEpiSelecionado['ID'], itens: itensEpiSel, motivo } })
+  mostrarLoading('Gerando recibo PDF...')
+
+  // Sempre gera o recibo EPI no GAS
+  const res = await chamarGAS({ acao: 'entregar_epi', dados: {
+    func_id: funcEpiSelecionado['ID'], itens: itensEpiSel, motivo,
+    metodo_assinatura: metodo  // 'zapsign' | 'proprio'
+  }})
   esconderLoading()
   btn.disabled = false; btn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> <span id="btn-epi-label">Gerar recibo e enviar</span>'
+
   if (res && res.ok) {
-    if (res.data.link_assinatura) mostrarLinkAssinaturaEpi(res.data.link_assinatura, res.data.mensagem)
-    else toast('✅ ' + res.data.mensagem, 'sucesso')
+    if (metodo === 'proprio' && res.data.pdf_base64) {
+      // Gera link de assinatura própria
+      mostrarLoading('Gerando link de assinatura...')
+      const res2 = await chamarGAS({ acao: 'gerar_link_assinatura', dados: {
+        tipo: 'EPI', func_id: funcEpiSelecionado['ID'],
+        referencia: itensEpiSel.map(i => i.descricao).join(', '),
+        pdf_base64: res.data.pdf_base64
+      }})
+      esconderLoading()
+      if (res2 && res2.ok) mostrarLinkAssinaturaEpi(res2.data.link, res2.data.mensagem, res2.data.wa_link)
+      else toast('❌ Erro ao gerar link', 'erro')
+    } else {
+      if (res.data.link_assinatura) mostrarLinkAssinaturaEpi(res.data.link_assinatura, res.data.mensagem, '')
+      else toast('✅ ' + res.data.mensagem, 'sucesso')
+    }
     itensEpiSel = []; funcEpiSelecionado = null
     renderItensEpi()
     document.getElementById('sel-func-display').classList.remove('selecionado')
@@ -502,10 +523,10 @@ async function enviarEpi() {
   } else { toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro') }
 }
 
-function mostrarLinkAssinaturaEpi(url, msg) {
+function mostrarLinkAssinaturaEpi(url, msg, waLinkCustom) {
   const el = document.getElementById('link-assinatura-epi')
   const tel = funcEpiSelecionado ? '55' + funcEpiSelecionado['TELEFONE'].replace(/\D/g,'') : ''
-  const waUrl = tel ? `https://wa.me/${tel}?text=${encodeURIComponent('Por favor, assine o documento: '+url)}` : ''
+  const waUrl = waLinkCustom || (tel ? `https://wa.me/${tel}?text=${encodeURIComponent('Por favor, assine o documento: '+url)}` : '')
   el.style.display = 'block'
   el.innerHTML = `<p style="font-size:12px;font-weight:600;color:var(--verde-text);margin-bottom:6px">✅ ${msg}</p>
     <div style="display:flex;gap:6px;align-items:center">
@@ -535,6 +556,100 @@ function renderEntregas(lista) {
 }
 
 // ─── FOLHA / FRACIONAR ────────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════════
+// ASSINATURA PRÓPRIA
+// ═══════════════════════════════════════════════════════════════════
+function mostrarModalEnvio(tipo, dadosEnvio) {
+  // tipo: 'epi' | 'folha'
+  // Cria modal de escolha
+  const existente = document.getElementById('modal-envio')
+  if (existente) existente.remove()
+
+  const modal = document.createElement('div')
+  modal.id = 'modal-envio'
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:300;display:flex;align-items:flex-end;justify-content:center'
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 32px;width:100%;max-width:480px">
+      <div style="width:36px;height:4px;background:#E5E7EB;border-radius:2px;margin:0 auto 16px"></div>
+      <h3 style="font-size:15px;font-weight:600;color:#1A1A1A;margin-bottom:6px;text-align:center">Como deseja enviar?</h3>
+      <p style="font-size:12px;color:#6B7280;text-align:center;margin-bottom:16px">Escolha o método de assinatura</p>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button onclick="enviarComZapSign_${tipo}()" style="background:#1A5C2A;color:#fff;border:none;border-radius:12px;padding:14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">📲</span>
+          <div style="text-align:left">
+            <div>ZapSign — WhatsApp automático</div>
+            <div style="font-size:10px;opacity:0.8;font-weight:400">Link enviado automaticamente pelo WhatsApp</div>
+          </div>
+        </button>
+        <button onclick="enviarComAssinaturaPropria_${tipo}()" style="background:#E6F1FB;color:#185FA5;border:0.5px solid rgba(24,95,165,0.2);border-radius:12px;padding:14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">✍️</span>
+          <div style="text-align:left">
+            <div>Assinatura própria — sem ZapSign</div>
+            <div style="font-size:10px;opacity:0.7;font-weight:400">Gera link para assinar com o dedo no celular</div>
+          </div>
+        </button>
+        <button onclick="document.getElementById('modal-envio').remove()" style="background:none;border:none;color:#6B7280;font-size:13px;padding:10px;cursor:pointer">Cancelar</button>
+      </div>
+    </div>`
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove() })
+  document.body.appendChild(modal)
+}
+
+// ── EPI ───────────────────────────────────────────────────────────
+function enviarComZapSign_epi()          { document.getElementById('modal-envio')?.remove(); enviarEpi('zapsign') }
+function enviarComAssinaturaPropria_epi(){ document.getElementById('modal-envio')?.remove(); enviarEpi('proprio') }
+
+// ── Folha ─────────────────────────────────────────────────────────
+function enviarComZapSign_folha(idx)          { document.getElementById('modal-envio')?.remove(); enviarPaginaZapSign(idx) }
+function enviarComAssinaturaPropria_folha(idx){ document.getElementById('modal-envio')?.remove(); enviarPaginaAssinaturaPropria(idx) }
+
+async function enviarPaginaAssinaturaPropria(idx) {
+  const p = paginasFracionadas[idx]
+  if (!p.funcId) return toast('❌ Selecione o funcionário primeiro', 'erro')
+  const btn = document.getElementById('btn-zap-' + idx)
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>' }
+  mostrarLoading('Gerando link de assinatura...')
+  const res = await chamarGAS({
+    acao: 'processar_pagina_folha',
+    dados: { pdf_base64: p.pdfBase64, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: false }
+  })
+  if (res && res.ok) {
+    const res2 = await chamarGAS({
+      acao: 'gerar_link_assinatura',
+      dados: { tipo: 'Folha', func_id: p.funcId, referencia: p.competencia, pdf_base64: p.pdfBase64 }
+    })
+    esconderLoading()
+    if (res2 && res2.ok) {
+      paginasFracionadas[idx].status = 'enviado'
+      atualizarCardEnviado(idx, res2.data)
+      toast('✅ Link gerado para ' + p.nome.split(' ')[0], 'sucesso')
+      carregarEntregasFolha()
+    } else { toast('❌ Erro ao gerar link', 'erro') }
+  } else {
+    esconderLoading()
+    toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
+  }
+  if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> Enviar' }
+}
+
+function atualizarCardEnviado(idx, data) {
+  const card = document.getElementById('fpc-' + idx); if (!card) return
+  card.className = 'frac-page-card enviado'
+  const numEl = document.getElementById('fpc-num-' + idx)
+  if (numEl) { numEl.className = 'fpc-num enviado'; numEl.innerHTML = '<i class="ti ti-circle-check" style="font-size:11px;vertical-align:-1px"></i> Pág. ' + paginasFracionadas[idx].pagina + ' — Enviado' }
+  const actionEl = document.getElementById('fpc-action-' + idx)
+  if (actionEl && data) {
+    const tel = paginasFracionadas[idx].telefone.replace(/\D/g,'')
+    actionEl.innerHTML = `<div class="fpc-links">
+      <span class="btn-enviado-frac"><i class="ti ti-check"></i></span>
+      ${data.link ? `<a href="${data.link}" target="_blank" class="btn-link-frac"><i class="ti ti-external-link"></i> Link</a>` : ''}
+      ${data.wa_link ? `<a href="${data.wa_link}" target="_blank" class="btn-wa-frac"><i class="ti ti-brand-whatsapp"></i></a>` : ''}
+    </div>`
+  }
+  atualizarBtnTodos()
+}
+
 function preencherMesesFracionar() {
   const sel = document.getElementById('sel-comp-frac'); if (!sel) return
   if (sel.options.length > 1) return
@@ -606,7 +721,7 @@ function renderPaginasFracionadas() {
         <div class="fpc-actions">
           <button class="btn-ver-frac" onclick="visualizarPagina(${i})"><i class="ti ti-eye"></i> Ver</button>
           <div id="fpc-action-${i}">
-            <button class="btn-enviar-frac" onclick="enviarPaginaZapSign(${i})" id="btn-zap-${i}" disabled>
+            <button class="btn-enviar-frac" onclick="abrirModalEnvioFolha(${i})" id="btn-zap-${i}" disabled>
               <i class="ti ti-brand-whatsapp"></i> Enviar
             </button>
           </div>
@@ -729,6 +844,31 @@ function visualizarPagina(idx) {
   const url = URL.createObjectURL(new Blob([Uint8Array.from(atob(p.pdfBase64), c => c.charCodeAt(0))], { type: 'application/pdf' }))
   window.open(url, '_blank')
   setTimeout(() => URL.revokeObjectURL(url), 60000)
+}
+
+function abrirModalEnvioFolha(idx) {
+  const modal = document.createElement('div')
+  modal.id = 'modal-envio-folha-' + idx
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:300;display:flex;align-items:flex-end;justify-content:center'
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 32px;width:100%;max-width:480px">
+      <div style="width:36px;height:4px;background:#E5E7EB;border-radius:2px;margin:0 auto 16px"></div>
+      <h3 style="font-size:15px;font-weight:600;color:#1A1A1A;margin-bottom:6px;text-align:center">Como deseja enviar?</h3>
+      <p style="font-size:12px;color:#6B7280;text-align:center;margin-bottom:16px">Página ${paginasFracionadas[idx].pagina} — ${paginasFracionadas[idx].nome.split(' ')[0]}</p>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button onclick="document.getElementById('modal-envio-folha-${idx}').remove();enviarPaginaZapSign(${idx})" style="background:#1A5C2A;color:#fff;border:none;border-radius:12px;padding:14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">📲</span>
+          <div style="text-align:left"><div>ZapSign — WhatsApp automático</div><div style="font-size:10px;opacity:0.8;font-weight:400">Link via WhatsApp automático</div></div>
+        </button>
+        <button onclick="document.getElementById('modal-envio-folha-${idx}').remove();enviarPaginaAssinaturaPropria(${idx})" style="background:#E6F1FB;color:#185FA5;border:0.5px solid rgba(24,95,165,0.2);border-radius:12px;padding:14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">✍️</span>
+          <div style="text-align:left"><div>Assinatura própria</div><div style="font-size:10px;opacity:0.7;font-weight:400">Link para assinar com o dedo</div></div>
+        </button>
+        <button onclick="document.getElementById('modal-envio-folha-${idx}').remove()" style="background:none;border:none;color:#6B7280;font-size:13px;padding:10px;cursor:pointer">Cancelar</button>
+      </div>
+    </div>`
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove() })
+  document.body.appendChild(modal)
 }
 
 async function enviarPaginaZapSign(idx) {
