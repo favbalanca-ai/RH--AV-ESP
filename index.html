@@ -253,11 +253,17 @@
           <p id="frac-resumo" style="font-size:11px;color:var(--text-secondary);text-align:center;margin-top:4px"></p>
         </div>
 
-        <!-- Botão enviar todos -->
-        <button onclick="enviarTodasPendentes()" class="btn-primario w-full mb-3" id="btn-enviar-todos">
-          <i class="ti ti-brand-whatsapp" aria-hidden="true"></i>
-          <span id="btn-todos-label">Enviar todos via WhatsApp</span>
-        </button>
+        <!-- Botões enviar todos -->
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button onclick="enviarTodasPendentes('zapsign')" class="btn-primario" id="btn-enviar-todos" style="flex:1;font-size:12px">
+            <i class="ti ti-brand-whatsapp" aria-hidden="true"></i>
+            <span id="btn-todos-label">ZapSign</span>
+          </button>
+          <button onclick="enviarTodasPendentes('proprio')" class="btn-primario" id="btn-enviar-todos-proprio" style="flex:1;font-size:12px;background:var(--blue-text)">
+            <i class="ti ti-writing" aria-hidden="true"></i>
+            <span>Assinatura Própria</span>
+          </button>
+        </div>
 
         <!-- Cards das páginas -->
         <div class="card">
