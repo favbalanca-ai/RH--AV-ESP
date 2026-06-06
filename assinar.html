@@ -286,46 +286,51 @@ async function sobreporAssinaturaFolha(pdfBase64, sigBase64, hoje) {
   pages.forEach(page => {
     const { width, height } = page.getSize()
 
-    // ── Campos do holerite (lateral direita, rotacionados 90°) ──
-    // Via superior (funcionário) — campo assinatura vermelho
-    // Posição aproximada: x=93%, y=25-48% da altura
-    const sigW = height * 0.20   // largura da assinatura (rotacionada = altura visual)
-    const sigH = width  * 0.025  // altura da assinatura (rotacionada = largura visual)
+    // ── Coordenadas baseadas na estrutura real do holerite ──
+    // PDF em landscape: width ~842pt, height ~595pt
+    // Campos ficam na faixa lateral direita (últimos ~5% da largura)
+    // Assinatura (campo vermelho): rotacionada 90°, fica acima da linha
 
-    // Assinatura via superior — campo lateral direito superior
+    const sigW = height * 0.18   // altura visual da assinatura
+    const sigH = width  * 0.022  // largura visual da assinatura
+
+    // ── Via SUPERIOR (funcionário) ──
+    // Linha de assinatura fica em ~y=54% (da base)
+    // Assinatura vai ACIMA da linha → y começa em ~57%
     page.drawImage(sigImg, {
-      x:      width  * 0.935,
-      y:      height * 0.30,
-      width:  sigW,
-      height: sigH,
-      rotate: { type: 'degrees', angle: 90 },
-      opacity: 0.9,
+      x:       width  * 0.934,
+      y:       height * 0.555,   // acima da linha de assinatura
+      width:   sigW,
+      height:  sigH,
+      rotate:  { type: 'degrees', angle: 90 },
+      opacity: 0.85,
     })
 
-    // Assinatura via inferior — campo lateral direito inferior
-    page.drawImage(sigImg, {
-      x:      width  * 0.935,
-      y:      height * 0.80,
-      width:  sigW,
-      height: sigH,
-      rotate: { type: 'degrees', angle: 90 },
-      opacity: 0.9,
-    })
-
-    // Data via superior — campo verde superior (abaixo da assinatura)
+    // Data via superior — campo verde fica ABAIXO da linha (~48%)
     page.drawText(hoje, {
-      x:    width  * 0.963,
-      y:    height * 0.26,
-      size: 7,
+      x:     width  * 0.960,
+      y:     height * 0.385,    // campo data superior
+      size:  6.5,
       color: rgb(0, 0, 0),
       rotate: { type: 'degrees', angle: 90 },
     })
 
-    // Data via inferior — campo verde inferior
+    // ── Via INFERIOR (empresa) ──
+    // Linha de assinatura fica em ~y=7% (da base)
+    page.drawImage(sigImg, {
+      x:       width  * 0.934,
+      y:       height * 0.065,   // acima da linha inferior
+      width:   sigW,
+      height:  sigH,
+      rotate:  { type: 'degrees', angle: 90 },
+      opacity: 0.85,
+    })
+
+    // Data via inferior — campo data fica logo abaixo da linha inferior
     page.drawText(hoje, {
-      x:    width  * 0.963,
-      y:    height * 0.76,
-      size: 7,
+      x:     width  * 0.960,
+      y:     height * 0.005,   // campo data inferior (próximo à base)
+      size:  6.5,
       color: rgb(0, 0, 0),
       rotate: { type: 'degrees', angle: 90 },
     })
