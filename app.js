@@ -27,6 +27,8 @@ let funcionarios = [], estoque = [], itensEpiSel = []
 let funcEpiSelecionado = null
 let paginaAtual = 'inicio', todosExames = []
 let paginasFracionadas = []
+let tipoDocAtual = 'Folha'
+let tipoDocAtual = 'Folha'
 
 async function carregarPdfLib() {
   if (window.PDFLib) return window.PDFLib
@@ -611,33 +613,36 @@ function enviarComAssinaturaPropria_epi(){ document.getElementById('modal-envio'
 function enviarComZapSign_folha(idx)          { document.getElementById('modal-envio')?.remove(); enviarPaginaZapSign(idx) }
 function enviarComAssinaturaPropria_folha(idx){ document.getElementById('modal-envio')?.remove(); enviarPaginaAssinaturaPropria(idx) }
 
-async function enviarPaginaAssinaturaPropria(idx) {
+async function enviarPaginaAssinaturaPropria(idx, tipo) {
   const p = paginasFracionadas[idx]
   if (!p.funcId) return toast('❌ Selecione o funcionário primeiro', 'erro')
+  const tipoDoc = tipo || p.tipoDoc || 'Folha'
   const btn = document.getElementById('btn-zap-' + idx)
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>' }
   mostrarLoading('Gerando link de assinatura...')
+
   const res = await chamarGAS({
-    acao: 'processar_pagina_folha',
-    dados: { pdf_base64: p.pdfBase64, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: false }
+    acao: 'processar_pagina_proprio',
+    dados: {
+      pdf_base64:  p.pdfBase64,
+      tipo:        tipoDoc,
+      competencia: p.competencia,
+      func_id:     p.funcId,
+      func_nome:   p.nome,
+      pagina:      p.pagina,
+    }
   })
+  esconderLoading()
+
   if (res && res.ok) {
-    const res2 = await chamarGAS({
-      acao: 'gerar_link_assinatura',
-      dados: { tipo: 'Folha', func_id: p.funcId, referencia: p.competencia, pdf_base64: p.pdfBase64 }
-    })
-    esconderLoading()
-    if (res2 && res2.ok) {
-      paginasFracionadas[idx].status = 'enviado'
-      atualizarCardEnviado(idx, res2.data)
-      toast('✅ Link gerado para ' + p.nome.split(' ')[0], 'sucesso')
-      carregarEntregasFolha()
-    } else { toast('❌ Erro ao gerar link', 'erro') }
+    paginasFracionadas[idx].status = 'enviado'
+    atualizarCardEnviado(idx, res.data)
+    toast('✅ Link gerado para ' + p.nome.split(' ')[0], 'sucesso')
+    carregarEntregasFolha()
   } else {
-    esconderLoading()
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> Enviar' }
     toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
   }
-  if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> Enviar' }
 }
 
 function atualizarCardEnviado(idx, data) {
@@ -703,7 +708,7 @@ async function processarFracionamento() {
       const novoDoc = await PDFLib.PDFDocument.create()
       const [pag]   = await novoDoc.copyPages(pdfDoc, [i])
       novoDoc.addPage(pag)
-      paginasFracionadas.push({ pagina:i+1, funcId:'', nome:'', funcao:'', telefone:'', pdfBase64:arrayBufferToBase64(await novoDoc.save()), status:'pronto', signUrl:'', competencia })
+      paginasFracionadas.push({ pagina:i+1, funcId:'', nome:'', funcao:'', telefone:'', pdfBase64:arrayBufferToBase64(await novoDoc.save()), status:'pronto', signUrl:'', competencia, tipoDoc: tipoDocAtual })
     }
     esconderLoading()
     btn.disabled = false; btn.innerHTML = '<i class="ti ti-scissors"></i> Separar PDF'
@@ -867,9 +872,9 @@ function abrirModalEnvioFolha(idx) {
           <span style="font-size:20px">📲</span>
           <div style="text-align:left"><div>ZapSign — WhatsApp automático</div><div style="font-size:10px;opacity:0.8;font-weight:400">Link via WhatsApp automático</div></div>
         </button>
-        <button onclick="document.getElementById('modal-envio-folha-${idx}').remove();enviarPaginaAssinaturaPropria(${idx})" style="background:#E6F1FB;color:#185FA5;border:0.5px solid rgba(24,95,165,0.2);border-radius:12px;padding:14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
+        <button onclick="document.getElementById('modal-envio-folha-${idx}').remove();enviarPaginaAssinaturaPropria(${idx}, paginasFracionadas[${idx}].tipoDoc || tipoDocAtual)" style="background:#E6F1FB;color:#185FA5;border:0.5px solid rgba(24,95,165,0.2);border-radius:12px;padding:14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
           <span style="font-size:20px">✍️</span>
-          <div style="text-align:left"><div>Assinatura própria</div><div style="font-size:10px;opacity:0.7;font-weight:400">Link para assinar com o dedo</div></div>
+          <div style="text-align:left"><div>Assinatura própria — sem ZapSign</div><div style="font-size:10px;opacity:0.7;font-weight:400">Gera link para assinar com o dedo</div></div>
         </button>
         <button onclick="document.getElementById('modal-envio-folha-${idx}').remove()" style="background:none;border:none;color:#6B7280;font-size:13px;padding:10px;cursor:pointer">Cancelar</button>
       </div>
