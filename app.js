@@ -69,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('input-pdf-frac').addEventListener('change', async e => {
     const file = e.target.files[0]; if (!file) return
+    mostrarPdfSelecionado(file.name)
     const preview = document.getElementById('frac-preview')
     preview.style.display = 'block'; preview.textContent = '⏳ Lendo PDF...'
     try {
@@ -659,6 +660,108 @@ function atualizarCardEnviado(idx, data) {
     </div>`
   }
   atualizarBtnTodos()
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// GOOGLE DRIVE PICKER
+// ═══════════════════════════════════════════════════════════════════
+const DRIVE_CLIENT_ID  = '206449842246-your-client-id.apps.googleusercontent.com' // ← preencher
+const DRIVE_API_KEY    = 'YOUR_API_KEY'  // ← preencher
+const DRIVE_APP_ID     = '206449842246'  // ← número do projeto GCP
+
+let pickerApiLoaded = false
+let oauthToken      = null
+
+function abrirDrivePicker() {
+  gapi.load('picker', () => {
+    pickerApiLoaded = true
+    // Autentica com Google
+    const tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: DRIVE_CLIENT_ID,
+      scope:     'https://www.googleapis.com/auth/drive.readonly',
+      callback:  (response) => {
+        if (response.access_token) {
+          oauthToken = response.access_token
+          criarPicker()
+        }
+      },
+    })
+    tokenClient.requestAccessToken({ prompt: oauthToken ? '' : 'consent' })
+  })
+}
+
+function criarPicker() {
+  if (!pickerApiLoaded || !oauthToken) return
+
+  const view = new google.picker.DocsView(google.picker.ViewId.DOCS)
+    .setMimeTypes('application/pdf')
+    .setMode(google.picker.DocsViewMode.LIST)
+    .setIncludeFolders(true)
+
+  const picker = new google.picker.PickerBuilder()
+    .enableFeature(google.picker.Feature.NAV_HIDDEN)
+    .setAppId(DRIVE_APP_ID)
+    .setOAuthToken(oauthToken)
+    .addView(view)
+    .setDeveloperKey(DRIVE_API_KEY)
+    .setCallback(pickerCallback)
+    .setTitle('Selecione o PDF da folha')
+    .build()
+
+  picker.setVisible(true)
+}
+
+async function pickerCallback(data) {
+  if (data.action !== google.picker.Action.PICKED) return
+  const file = data.docs[0]
+  const nome = file.name
+
+  mostrarLoading('Carregando PDF do Drive...')
+
+  try {
+    // Baixa o arquivo via Drive API
+    const res = await fetch(
+      'https://www.googleapis.com/drive/v3/files/' + file.id + '?alt=media',
+      { headers: { Authorization: 'Bearer ' + oauthToken } }
+    )
+    const buffer    = await res.arrayBuffer()
+    const bytes     = new Uint8Array(buffer)
+    const base64    = btoa(String.fromCharCode(...bytes))
+    const blob      = new Blob([buffer], { type: 'application/pdf' })
+
+    // Simula o mesmo comportamento do input file
+    esconderLoading()
+    mostrarPdfSelecionado(nome)
+
+    // Conta páginas com pdf-lib
+    const PDFLib = await carregarPdfLib()
+    const pdfDoc = await PDFLib.PDFDocument.load(buffer)
+    const total  = pdfDoc.getPageCount()
+    const preview = document.getElementById('frac-preview')
+    preview.style.display = 'block'
+    preview.innerHTML = '<i class="ti ti-file-check" style="vertical-align:-2px"></i> ' + total + ' página(s) — ' + total + ' funcionário(s)'
+
+    // Armazena como File object para o processamento normal
+    const fileObj = new File([blob], nome, { type: 'application/pdf' })
+    // Injeta no input file para o processarFracionamento funcionar
+    const dt = new DataTransfer()
+    dt.items.add(fileObj)
+    const inputFrac = document.getElementById('input-pdf-frac')
+    if (inputFrac) inputFrac.files = dt.files
+
+    toast('✅ PDF do Drive carregado: ' + nome, 'sucesso')
+  } catch(e) {
+    esconderLoading()
+    toast('❌ Erro ao carregar PDF: ' + e.message, 'erro')
+  }
+}
+
+function mostrarPdfSelecionado(nome) {
+  const el = document.getElementById('pdf-selecionado')
+  const nomeEl = document.getElementById('pdf-nome')
+  if (el) el.style.display = 'flex'
+  if (nomeEl) nomeEl.textContent = nome
 }
 
 function preencherMesesFracionar() {
