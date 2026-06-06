@@ -285,54 +285,36 @@ async function sobreporAssinaturaFolha(pdfBase64, sigBase64, hoje) {
   const pages = pdfDoc.getPages()
   pages.forEach(page => {
     const { width, height } = page.getSize()
+    // A4 retrato: 595 x 842 pt — coordenadas calculadas da imagem real
+    // Origem: canto inferior esquerdo do PDF
+    // Campos na lateral direita, assinatura rotacionada 90°
 
-    // ── Coordenadas baseadas na estrutura real do holerite ──
-    // PDF em landscape: width ~842pt, height ~595pt
-    // Campos ficam na faixa lateral direita (últimos ~5% da largura)
-    // Assinatura (campo vermelho): rotacionada 90°, fica acima da linha
-
-    const sigW = height * 0.18   // altura visual da assinatura
-    const sigH = width  * 0.022  // largura visual da assinatura
+    const sigVisW = 160   // comprimento visual da assinatura (campo ~172pt mas deixa margem)
+    const sigVisH = 16    // espessura da assinatura no campo
+    const sigX    = 572   // x do campo lateral (calculado: 574 - margem)
 
     // ── Via SUPERIOR (funcionário) ──
-    // Linha de assinatura fica em ~y=54% (da base)
-    // Assinatura vai ACIMA da linha → y começa em ~57%
+    // Base da assinatura em y=560 (acima da linha do campo)
     page.drawImage(sigImg, {
-      x:       width  * 0.934,
-      y:       height * 0.555,   // acima da linha de assinatura
-      width:   sigW,
-      height:  sigH,
-      rotate:  { type: 'degrees', angle: 90 },
-      opacity: 0.85,
+      x: sigX, y: 560, width: sigVisW, height: sigVisH,
+      rotate: { type: 'degrees', angle: 90 }, opacity: 0.9,
     })
-
-    // Data via superior — campo verde fica ABAIXO da linha (~48%)
+    // Data: campo abaixo da assinatura, y=523
     page.drawText(hoje, {
-      x:     width  * 0.960,
-      y:     height * 0.385,    // campo data superior
-      size:  6.5,
-      color: rgb(0, 0, 0),
-      rotate: { type: 'degrees', angle: 90 },
+      x: 585, y: 523, size: 6,
+      color: rgb(0,0,0), rotate: { type: 'degrees', angle: 90 },
     })
 
     // ── Via INFERIOR (empresa) ──
-    // Linha de assinatura fica em ~y=7% (da base)
+    // Base da assinatura em y=132
     page.drawImage(sigImg, {
-      x:       width  * 0.934,
-      y:       height * 0.065,   // acima da linha inferior
-      width:   sigW,
-      height:  sigH,
-      rotate:  { type: 'degrees', angle: 90 },
-      opacity: 0.85,
+      x: sigX, y: 132, width: sigVisW, height: sigVisH,
+      rotate: { type: 'degrees', angle: 90 }, opacity: 0.9,
     })
-
-    // Data via inferior — campo data fica logo abaixo da linha inferior
+    // Data: y=101
     page.drawText(hoje, {
-      x:     width  * 0.960,
-      y:     height * 0.005,   // campo data inferior (próximo à base)
-      size:  6.5,
-      color: rgb(0, 0, 0),
-      rotate: { type: 'degrees', angle: 90 },
+      x: 585, y: 101, size: 6,
+      color: rgb(0,0,0), rotate: { type: 'degrees', angle: 90 },
     })
   })
 
