@@ -8,181 +8,74 @@
 <title>Assinar Documento — Fazenda Água Viva</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif}
-:root{--verde:#1A5C2A;--verde-claro:#EAF3DE;--verde-text:#3B6D11;--border:rgba(0,0,0,0.1)}
+:root{--verde:#1A5C2A;--verde-claro:#EAF3DE;--border:rgba(0,0,0,0.1)}
 body{background:#F4F6F4;min-height:100vh;display:flex;flex-direction:column}
-
 .header{background:var(--verde);color:#fff;padding:12px 16px;text-align:center;flex-shrink:0}
 .header h1{font-size:15px;font-weight:600}
 .header p{font-size:10px;opacity:0.7;margin-top:1px}
-
 .content{flex:1;padding:10px;display:flex;flex-direction:column;gap:10px;max-width:540px;margin:0 auto;width:100%}
-
 .card{background:#fff;border-radius:14px;padding:12px 14px;border:0.5px solid var(--border)}
 .card-title{font-size:13px;font-weight:600;color:#1A1A1A;margin-bottom:10px;display:flex;align-items:center;gap:6px}
-
 .doc-info{display:flex;flex-direction:column;gap:5px}
 .doc-row{display:flex;gap:8px;font-size:12px}
 .doc-label{font-weight:600;color:#6B7280;min-width:80px}
-.doc-valor{color:#1A1A1A}
-.doc-tipo{display:inline-flex;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:600;background:var(--verde-claro);color:var(--verde-text)}
-
-/* PDF */
+.doc-tipo{display:inline-flex;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:600;background:var(--verde-claro);color:#3B6D11}
 #pdf-viewer-wrap{background:#f0f0f0;border-radius:10px;overflow:hidden;text-align:center;min-height:180px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px}
 #pdf-canvas{max-width:100%;border-radius:8px;display:none}
 .pdf-nav{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px}
 .pdf-nav button{background:var(--verde);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer}
 .pdf-nav button:disabled{background:#E5E7EB;color:#9CA3AF;cursor:not-allowed}
 #pdf-page-info{font-size:11px;color:#6B7280}
-
-/* ── TELA DE ASSINATURA ── */
-#sig-overlay{
-  display:none;
-  position:fixed;inset:0;
-  background:#1A1A1A;
-  z-index:500;
-  flex-direction:column;
-}
-
-/* Forçar landscape via CSS e JS */
-#sig-overlay.ativo{ display:flex; }
-
-.sig-header{
-  background:var(--verde);
-  color:#fff;
-  padding:10px 16px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  flex-shrink:0;
-}
+#sig-overlay{display:none;position:fixed;inset:0;background:#1A1A1A;z-index:500;flex-direction:column}
+#sig-overlay.ativo{display:flex}
+.sig-header{background:var(--verde);color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .sig-header h2{font-size:14px;font-weight:600}
 .sig-header p{font-size:10px;opacity:0.7}
-
-.sig-body{
-  flex:1;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  padding:12px;
-  gap:10px;
-}
-
-.sig-instrucao{
-  color:#fff;
-  font-size:11px;
-  text-align:center;
-  opacity:0.7;
-}
-
-#sig-canvas{
-  background:#fff;
-  border-radius:10px;
-  touch-action:none;
-  cursor:crosshair;
-  display:block;
-  width:100%;
-  max-width:600px;
-}
-
-.sig-actions{
-  display:flex;
-  gap:10px;
-  width:100%;
-  max-width:600px;
-}
-.btn-limpar{
-  flex:1;background:#333;color:#fff;
-  border:none;border-radius:10px;
-  padding:12px;font-size:13px;font-weight:600;
-  cursor:pointer;font-family:inherit;
-}
-.btn-confirmar{
-  flex:2;background:var(--verde);color:#fff;
-  border:none;border-radius:10px;
-  padding:12px;font-size:14px;font-weight:600;
-  cursor:pointer;font-family:inherit;
-  display:flex;align-items:center;justify-content:center;gap:6px;
-}
-.btn-confirmar:disabled{background:#555;color:#999;cursor:not-allowed}
-.btn-cancelar-sig{
-  background:none;border:none;color:rgba(255,255,255,0.6);
-  font-size:12px;cursor:pointer;padding:4px 8px;font-family:inherit;
-}
-
-/* Botão abrir assinatura */
-.btn-abrir-sig{
-  background:var(--verde);color:#fff;
-  border:none;border-radius:12px;
-  padding:14px;font-size:14px;font-weight:600;
-  cursor:pointer;width:100%;
-  display:flex;align-items:center;justify-content:center;gap:8px;
-  font-family:inherit;
-}
+.sig-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;gap:10px}
+.sig-instrucao{color:#fff;font-size:11px;text-align:center;opacity:0.7}
+#sig-canvas{background:#fff;border-radius:10px;touch-action:none;cursor:crosshair;display:block;width:100%;max-width:600px}
+.sig-actions{display:flex;gap:10px;width:100%;max-width:600px}
+.btn-limpar{flex:1;background:#333;color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.btn-ok-sig{flex:2;background:var(--verde);color:#fff;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-ok-sig:disabled{background:#555;color:#999;cursor:not-allowed}
+.btn-cancelar-sig{background:none;border:none;color:rgba(255,255,255,0.6);font-size:12px;cursor:pointer;padding:4px 8px;font-family:inherit}
+.btn-abrir-sig{background:var(--verde);color:#fff;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:600;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;font-family:inherit}
 .btn-abrir-sig:disabled{background:#E5E7EB;color:#9CA3AF;cursor:not-allowed}
-
-/* Prévia da assinatura */
 #sig-preview-wrap{display:none;margin-top:8px;text-align:center}
 #sig-preview-img{max-width:200px;border:1px solid var(--border);border-radius:8px;padding:4px;background:#fff}
 .btn-refazer{background:none;border:0.5px solid var(--border);border-radius:8px;padding:6px 14px;font-size:11px;color:#6B7280;cursor:pointer;margin-top:6px;font-family:inherit}
-
-/* Estados */
+.btn-confirmar{flex:2;background:var(--verde);color:#fff;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:8px}
+.btn-confirmar:disabled{background:#E5E7EB;color:#9CA3AF;cursor:not-allowed}
 .estado{text-align:center;padding:24px;display:flex;flex-direction:column;align-items:center;gap:10px}
 .estado-icon{font-size:48px}
 .estado h2{font-size:16px;font-weight:600}
 .estado p{font-size:13px;color:#6B7280;line-height:1.5}
-
 .loading-spinner{width:32px;height:32px;border:3px solid var(--verde-claro);border-top-color:var(--verde);border-radius:50%;animation:spin 0.7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-
 .aviso{background:#FFF8E1;border:0.5px solid rgba(133,79,11,0.2);border-radius:10px;padding:10px 12px;font-size:11px;color:#854F0B;line-height:1.5}
-
-/* Girar em landscape quando necessário */
-@media (orientation:portrait) and (max-width:600px) {
-  #sig-overlay.ativo{
-    transform-origin: top left;
-    transform: rotate(90deg) translateY(-100%);
-    width: 100vh;
-    height: 100vw;
-  }
+@media (orientation:portrait) and (max-width:600px){
+  #sig-overlay.ativo{transform-origin:top left;transform:rotate(90deg) translateY(-100%);width:100vh;height:100vw}
 }
 </style>
 </head>
 <body>
-
 <div class="header">
   <h1>🌿 Fazenda Água Viva</h1>
   <p>Assinatura Digital de Documento</p>
 </div>
 
 <div class="content">
-
   <div id="estado-loading" class="card">
-    <div class="estado">
-      <div class="loading-spinner"></div>
-      <h2>Carregando documento...</h2>
-      <p>Aguarde um momento</p>
-    </div>
+    <div class="estado"><div class="loading-spinner"></div><h2>Carregando documento...</h2><p>Aguarde</p></div>
   </div>
-
   <div id="estado-erro" class="card" style="display:none">
-    <div class="estado">
-      <div class="estado-icon">❌</div>
-      <h2>Link inválido</h2>
-      <p>Este link não foi encontrado ou já expirou.<br>Entre em contato com o responsável.</p>
-    </div>
+    <div class="estado"><div class="estado-icon">❌</div><h2>Link inválido</h2><p>Este link não foi encontrado ou já expirou.</p></div>
   </div>
-
   <div id="estado-assinado" class="card" style="display:none">
-    <div class="estado">
-      <div class="estado-icon">✅</div>
-      <h2>Documento já assinado</h2>
-      <p id="assinado-data"></p>
-    </div>
+    <div class="estado"><div class="estado-icon">✅</div><h2>Documento já assinado</h2><p id="assinado-data"></p></div>
   </div>
 
   <div id="estado-assinar" style="display:none">
-
     <div class="card">
       <div class="card-title">📄 Documento</div>
       <div class="doc-info">
@@ -209,58 +102,39 @@ body{background:#F4F6F4;min-height:100vh;display:flex;flex-direction:column}
 
     <div class="card">
       <div class="card-title">✍️ Assinatura digital</div>
-      <div class="aviso">
-        Ao assinar, você confirma que leu e concorda com o conteúdo do documento acima.
-      </div>
-
-      <!-- Prévia após assinar -->
+      <div class="aviso">Ao assinar, você confirma que leu e concorda com o conteúdo do documento acima.</div>
       <div id="sig-preview-wrap">
-        <img id="sig-preview-img" src="" alt="Prévia da assinatura">
-        <br>
-        <button class="btn-refazer" onclick="refazerAssinatura()">🔄 Refazer assinatura</button>
+        <img id="sig-preview-img" src="" alt="Prévia">
+        <br><button class="btn-refazer" onclick="refazerAssinatura()">🔄 Refazer</button>
       </div>
-
-      <button class="btn-abrir-sig" id="btn-abrir-sig" onclick="abrirTelaSig()" style="margin-top:10px">
-        ✍️ Tocar para assinar
-      </button>
-
-      <button class="btn-confirmar" id="btn-confirmar" onclick="confirmarAssinatura()"
-        style="margin-top:8px;width:100%;border-radius:12px;padding:14px;font-size:14px" disabled>
-        ✅ Confirmar e enviar assinatura
-      </button>
+      <button class="btn-abrir-sig" id="btn-abrir-sig" onclick="abrirTelaSig()" style="margin-top:10px">✍️ Tocar para assinar</button>
+      <button class="btn-confirmar" id="btn-confirmar" onclick="confirmarAssinatura()" disabled>✅ Confirmar e enviar assinatura</button>
     </div>
-
   </div>
 
   <div id="estado-sucesso" class="card" style="display:none">
-    <div class="estado">
-      <div class="estado-icon">🎉</div>
-      <h2>Documento assinado!</h2>
-      <p>Sua assinatura foi registrada com sucesso.<br>O documento foi salvo automaticamente.</p>
-    </div>
+    <div class="estado"><div class="estado-icon">🎉</div><h2>Documento assinado!</h2><p>Assinatura registrada com sucesso.<br>Documento salvo automaticamente.</p></div>
   </div>
-
 </div>
 
-<!-- TELA DE ASSINATURA (fullscreen landscape) -->
+<!-- TELA DE ASSINATURA FULLSCREEN -->
 <div id="sig-overlay">
   <div class="sig-header">
-    <div>
-      <h2>✍️ Assine com o dedo</h2>
-      <p>Use o dedo para assinar no espaço abaixo</p>
-    </div>
+    <div><h2>✍️ Assine com o dedo</h2><p>Use o dedo no espaço abaixo</p></div>
     <button class="btn-cancelar-sig" onclick="fecharTelaSig()">✕ Cancelar</button>
   </div>
   <div class="sig-body">
     <canvas id="sig-canvas"></canvas>
-    <p class="sig-instrucao">Assine como no documento oficial — ocupe bem o espaço</p>
+    <p class="sig-instrucao">Assine como no documento oficial</p>
     <div class="sig-actions">
       <button class="btn-limpar" onclick="limparSig()">🗑 Limpar</button>
-      <button class="btn-confirmar" id="btn-ok-sig" onclick="salvarSig()" disabled>✅ OK — usar esta assinatura</button>
+      <button class="btn-ok-sig" id="btn-ok-sig" onclick="salvarSig()" disabled>✅ OK — usar esta assinatura</button>
     </div>
   </div>
 </div>
 
+<!-- pdf-lib para sobrepor assinatura no PDF original -->
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxayJeiQeUeHNfl0oz1xcJh6xzymXLREH-wosmRaLHTazaV6fo62y0bMgivnJTyv1oP/exec'
@@ -269,30 +143,25 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 let docData = null, pdfDoc = null, paginaAtual = 1, totalPags = 1
 let assinaturaB64 = null, enviando = false
 
-// ── Canvas de assinatura ──────────────────────────────────────────
+// ── Canvas assinatura ─────────────────────────────────────────────
 const sigCanvas = document.getElementById('sig-canvas')
 const sigCtx    = sigCanvas.getContext('2d')
 let desenhando = false, temTraco = false, ultimoX = 0, ultimoY = 0
 
 function configurarCanvas() {
-  // Canvas ocupa toda a largura disponível com altura proporcional
-  const body   = document.querySelector('.sig-body')
-  const w      = body.clientWidth - 24
-  const h      = Math.min(body.clientHeight - 160, window.innerHeight * 0.45)
-  sigCanvas.width  = w
-  sigCanvas.height = Math.max(h, 160)
-  sigCtx.strokeStyle = '#1A1A1A'
-  sigCtx.lineWidth   = 2.8
-  sigCtx.lineCap     = 'round'
-  sigCtx.lineJoin    = 'round'
+  const body = document.querySelector('.sig-body')
+  const w = body.clientWidth - 24
+  const h = Math.min(body.clientHeight - 160, window.innerHeight * 0.45)
+  sigCanvas.width = w; sigCanvas.height = Math.max(h, 160)
+  sigCtx.strokeStyle = '#1A1A1A'; sigCtx.lineWidth = 2.8
+  sigCtx.lineCap = 'round'; sigCtx.lineJoin = 'round'
 }
 
 function getPos(e) {
-  const rect   = sigCanvas.getBoundingClientRect()
-  const scaleX = sigCanvas.width  / rect.width
-  const scaleY = sigCanvas.height / rect.height
-  const src    = e.touches ? e.touches[0] : e
-  return { x: (src.clientX - rect.left) * scaleX, y: (src.clientY - rect.top) * scaleY }
+  const rect = sigCanvas.getBoundingClientRect()
+  const src  = e.touches ? e.touches[0] : e
+  return { x: (src.clientX - rect.left) * sigCanvas.width  / rect.width,
+           y: (src.clientY - rect.top)  * sigCanvas.height / rect.height }
 }
 
 function startDraw(e) { e.preventDefault(); desenhando = true; const p = getPos(e); ultimoX = p.x; ultimoY = p.y }
@@ -302,39 +171,22 @@ function endDraw(e)   { e.preventDefault(); desenhando = false }
 sigCanvas.addEventListener('mousedown',  startDraw)
 sigCanvas.addEventListener('mousemove',  moveDraw)
 sigCanvas.addEventListener('mouseup',    endDraw)
-sigCanvas.addEventListener('touchstart', startDraw, { passive:false })
-sigCanvas.addEventListener('touchmove',  moveDraw,  { passive:false })
-sigCanvas.addEventListener('touchend',   endDraw,   { passive:false })
+sigCanvas.addEventListener('touchstart', startDraw, {passive:false})
+sigCanvas.addEventListener('touchmove',  moveDraw,  {passive:false})
+sigCanvas.addEventListener('touchend',   endDraw,   {passive:false})
 
 function desenhar(x, y) {
-  sigCtx.beginPath()
-  sigCtx.moveTo(ultimoX, ultimoY)
-  sigCtx.lineTo(x, y)
-  sigCtx.stroke()
+  sigCtx.beginPath(); sigCtx.moveTo(ultimoX, ultimoY); sigCtx.lineTo(x, y); sigCtx.stroke()
   ultimoX = x; ultimoY = y
-  if (!temTraco) {
-    temTraco = true
-    document.getElementById('btn-ok-sig').disabled = false
-  }
+  if (!temTraco) { temTraco = true; document.getElementById('btn-ok-sig').disabled = false }
 }
+function limparSig() { sigCtx.clearRect(0,0,sigCanvas.width,sigCanvas.height); temTraco = false; document.getElementById('btn-ok-sig').disabled = true }
 
-function limparSig() {
-  sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height)
-  temTraco = false
-  document.getElementById('btn-ok-sig').disabled = true
-}
-
-// ── Tela de assinatura fullscreen ─────────────────────────────────
 function abrirTelaSig() {
-  const overlay = document.getElementById('sig-overlay')
-  overlay.classList.add('ativo')
-  // Trava orientação se API disponível
-  if (screen.orientation && screen.orientation.lock) {
-    screen.orientation.lock('landscape').catch(() => {})
-  }
+  document.getElementById('sig-overlay').classList.add('ativo')
+  if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{})
   setTimeout(() => { configurarCanvas(); limparSig() }, 100)
 }
-
 function fecharTelaSig() {
   document.getElementById('sig-overlay').classList.remove('ativo')
   if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock()
@@ -342,54 +194,38 @@ function fecharTelaSig() {
 
 function salvarSig() {
   if (!temTraco) return
-  // Captura assinatura com fundo branco
-  const tmpCanvas = document.createElement('canvas')
-  tmpCanvas.width  = sigCanvas.width
-  tmpCanvas.height = sigCanvas.height
-  const tmpCtx = tmpCanvas.getContext('2d')
-  tmpCtx.fillStyle = '#ffffff'
-  tmpCtx.fillRect(0, 0, tmpCanvas.width, tmpCanvas.height)
-  tmpCtx.drawImage(sigCanvas, 0, 0)
-
-  // Recorta só a área com traços (sem espaço vazio em volta)
-  assinaturaB64 = recortarAssinatura(tmpCanvas)
-
-  // Mostra prévia
-  const preview = document.getElementById('sig-preview-img')
-  preview.src = 'data:image/png;base64,' + assinaturaB64
+  const tmp = document.createElement('canvas')
+  tmp.width = sigCanvas.width; tmp.height = sigCanvas.height
+  const ctx = tmp.getContext('2d')
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,tmp.width,tmp.height)
+  ctx.drawImage(sigCanvas, 0, 0)
+  assinaturaB64 = recortarAssinatura(tmp)
+  document.getElementById('sig-preview-img').src = 'data:image/png;base64,' + assinaturaB64
   document.getElementById('sig-preview-wrap').style.display = 'block'
   document.getElementById('btn-abrir-sig').textContent = '🔄 Assinar novamente'
   document.getElementById('btn-confirmar').disabled = false
-
   fecharTelaSig()
 }
 
 function recortarAssinatura(canvas) {
-  // Encontra bounding box dos pixels não-brancos
-  const ctx  = canvas.getContext('2d')
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height)
-  const px   = data.data
+  const ctx = canvas.getContext('2d'), data = ctx.getImageData(0,0,canvas.width,canvas.height).data
   let minX = canvas.width, maxX = 0, minY = canvas.height, maxY = 0
-
   for (let y = 0; y < canvas.height; y++) {
     for (let x = 0; x < canvas.width; x++) {
       const i = (y * canvas.width + x) * 4
-      if (px[i] < 240 || px[i+1] < 240 || px[i+2] < 240) {
+      if (data[i] < 240 || data[i+1] < 240 || data[i+2] < 240) {
         if (x < minX) minX = x; if (x > maxX) maxX = x
         if (y < minY) minY = y; if (y > maxY) maxY = y
       }
     }
   }
   if (maxX < minX) return canvas.toDataURL('image/png').split(',')[1]
-
-  const pad = 12
-  minX = Math.max(0, minX - pad); maxX = Math.min(canvas.width,  maxX + pad)
-  minY = Math.max(0, minY - pad); maxY = Math.min(canvas.height, maxY + pad)
-
-  const w = maxX - minX, h = maxY - minY
+  const pad = 10
+  minX = Math.max(0, minX-pad); maxX = Math.min(canvas.width, maxX+pad)
+  minY = Math.max(0, minY-pad); maxY = Math.min(canvas.height, maxY+pad)
   const out = document.createElement('canvas')
-  out.width = w; out.height = h
-  out.getContext('2d').drawImage(canvas, minX, minY, w, h, 0, 0, w, h)
+  out.width = maxX-minX; out.height = maxY-minY
+  out.getContext('2d').drawImage(canvas, minX, minY, out.width, out.height, 0, 0, out.width, out.height)
   return out.toDataURL('image/png').split(',')[1]
 }
 
@@ -401,20 +237,135 @@ function refazerAssinatura() {
   abrirTelaSig()
 }
 
-// ── Confirmar e enviar ─────────────────────────────────────────────
+// ── Sobrepor assinatura no PDF com pdf-lib ────────────────────────
+async function sobreporAssinaturaEPI(pdfBase64, sigBase64, hoje) {
+  const { PDFDocument, rgb } = PDFLib
+  const pdfBytes = Uint8Array.from(atob(pdfBase64), c => c.charCodeAt(0))
+  const sigBytes = Uint8Array.from(atob(sigBase64),  c => c.charCodeAt(0))
+  const pdfDoc  = await PDFDocument.load(pdfBytes)
+  const sigImg  = await pdfDoc.embedPng(sigBytes)
+
+  const pages = pdfDoc.getPages()
+  pages.forEach(page => {
+    const { width, height } = page.getSize()
+    // Posição da assinatura — ajuste fino baseado no PDF real
+    // Campo assinatura: canto inferior direito, acima da linha
+    const sigX = width  * 0.60   // 60% da largura
+    const sigW = width  * 0.35   // 35% de largura
+    const sigH = height * 0.045  // ~4.5% de altura
+
+    // Via superior (funcionário): ~48% do topo
+    const sigY1 = height * 0.50
+    // Via inferior (empresa): ~2% do topo
+    const sigY2 = height * 0.025
+
+    // Desenha assinatura nas duas vias
+    page.drawImage(sigImg, { x: sigX, y: sigY1, width: sigW, height: sigH })
+    page.drawImage(sigImg, { x: sigX, y: sigY2, width: sigW, height: sigH })
+
+    // Data nos campos verdes (à direita da assinatura)
+    const dataX = width * 0.92
+    const fontSize = height * 0.012
+
+    page.drawText(hoje, { x: dataX - 25, y: sigY1 + 2, size: fontSize, color: rgb(0,0,0), rotate: { type: 'degrees', angle: 90 } })
+    page.drawText(hoje, { x: dataX - 25, y: sigY2 + 2, size: fontSize, color: rgb(0,0,0), rotate: { type: 'degrees', angle: 90 } })
+  })
+
+  const outBytes = await pdfDoc.save()
+  return btoa(String.fromCharCode(...new Uint8Array(outBytes)))
+}
+
+async function sobreporAssinaturaFolha(pdfBase64, sigBase64, hoje) {
+  const { PDFDocument, rgb } = PDFLib
+  const pdfBytes = Uint8Array.from(atob(pdfBase64), c => c.charCodeAt(0))
+  const sigBytes = Uint8Array.from(atob(sigBase64),  c => c.charCodeAt(0))
+  const pdfDoc  = await PDFDocument.load(pdfBytes)
+  const sigImg  = await pdfDoc.embedPng(sigBytes)
+
+  const pages = pdfDoc.getPages()
+  pages.forEach(page => {
+    const { width, height } = page.getSize()
+
+    // ── Campos do holerite (lateral direita, rotacionados 90°) ──
+    // Via superior (funcionário) — campo assinatura vermelho
+    // Posição aproximada: x=93%, y=25-48% da altura
+    const sigW = height * 0.20   // largura da assinatura (rotacionada = altura visual)
+    const sigH = width  * 0.025  // altura da assinatura (rotacionada = largura visual)
+
+    // Assinatura via superior — campo lateral direito superior
+    page.drawImage(sigImg, {
+      x:      width  * 0.935,
+      y:      height * 0.30,
+      width:  sigW,
+      height: sigH,
+      rotate: { type: 'degrees', angle: 90 },
+      opacity: 0.9,
+    })
+
+    // Assinatura via inferior — campo lateral direito inferior
+    page.drawImage(sigImg, {
+      x:      width  * 0.935,
+      y:      height * 0.80,
+      width:  sigW,
+      height: sigH,
+      rotate: { type: 'degrees', angle: 90 },
+      opacity: 0.9,
+    })
+
+    // Data via superior — campo verde superior (abaixo da assinatura)
+    page.drawText(hoje, {
+      x:    width  * 0.963,
+      y:    height * 0.26,
+      size: 7,
+      color: rgb(0, 0, 0),
+      rotate: { type: 'degrees', angle: 90 },
+    })
+
+    // Data via inferior — campo verde inferior
+    page.drawText(hoje, {
+      x:    width  * 0.963,
+      y:    height * 0.76,
+      size: 7,
+      color: rgb(0, 0, 0),
+      rotate: { type: 'degrees', angle: 90 },
+    })
+  })
+
+  const outBytes = await pdfDoc.save()
+  return btoa(String.fromCharCode(...new Uint8Array(outBytes)))
+}
+
+// ── Confirmar e enviar ────────────────────────────────────────────
 async function confirmarAssinatura() {
   if (!assinaturaB64 || enviando) return
   enviando = true
   const btn = document.getElementById('btn-confirmar')
-  btn.disabled = true; btn.innerHTML = '⏳ Enviando...'
+  btn.disabled = true; btn.innerHTML = '⏳ Processando...'
 
   try {
-    const res  = await fetch(GAS_URL, {
+    const tipo = docData.tipo || 'EPI'
+    const hoje = new Date().toLocaleDateString('pt-BR')
+
+    // Sobrepõe assinatura no PDF original usando pdf-lib no browser
+    let pdfAssinadoB64 = docData.pdf_base64
+    if (pdfAssinadoB64) {
+      btn.innerHTML = '⏳ Inserindo assinatura no PDF...'
+      if (tipo === 'Folha' || tipo === 'Ponto') {
+        pdfAssinadoB64 = await sobreporAssinaturaFolha(pdfAssinadoB64, assinaturaB64, hoje)
+      } else {
+        // EPI — sobrepõe no espaço sig-img (parte inferior centralizada)
+        pdfAssinadoB64 = await sobreporAssinaturaEPI(pdfAssinadoB64, assinaturaB64, hoje)
+      }
+    }
+
+    btn.innerHTML = '⏳ Enviando...'
+    const res = await fetch(GAS_URL, {
       method: 'POST',
       body: JSON.stringify({
-        acao:       'confirmar_assinatura',
-        token:      new URLSearchParams(window.location.search).get('t'),
-        assinatura: assinaturaB64,
+        acao:        'confirmar_assinatura',
+        token:       new URLSearchParams(window.location.search).get('t'),
+        assinatura:  assinaturaB64,
+        pdf_assinado: pdfAssinadoB64,  // PDF já com assinatura sobreposta
       })
     })
     const data = await res.json()
@@ -428,33 +379,30 @@ async function confirmarAssinatura() {
   } catch(e) {
     btn.disabled = false; btn.innerHTML = '✅ Confirmar e enviar assinatura'
     enviando = false
-    alert('Erro de conexão. Verifique sua internet e tente novamente.')
+    alert('Erro: ' + e.message)
   }
 }
 
-// ── PDF viewer ─────────────────────────────────────────────────────
+// ── PDF viewer ────────────────────────────────────────────────────
 async function carregarPdf(base64) {
   try {
     const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
-    pdfDoc      = await pdfjsLib.getDocument({ data: bytes }).promise
-    totalPags   = pdfDoc.numPages
+    pdfDoc = await pdfjsLib.getDocument({ data: bytes }).promise
+    totalPags = pdfDoc.numPages
     await renderPagina(1)
     document.getElementById('pdf-viewer-wrap').style.display = 'none'
     document.getElementById('pdf-canvas').style.display = 'block'
-    if (totalPags > 1) {
-      document.getElementById('pdf-nav').style.display = 'flex'
-      atualizarNavPdf()
-    }
+    if (totalPags > 1) { document.getElementById('pdf-nav').style.display = 'flex'; atualizarNavPdf() }
   } catch(e) {
     document.getElementById('pdf-viewer-wrap').innerHTML = '<p style="font-size:12px;color:#9CA3AF;padding:20px">Não foi possível carregar o PDF</p>'
   }
 }
 
 async function renderPagina(num) {
-  const page     = await pdfDoc.getPage(num)
+  const page = await pdfDoc.getPage(num)
   const viewport = page.getViewport({ scale: 1.4 })
-  const canvas   = document.getElementById('pdf-canvas')
-  canvas.height  = viewport.height; canvas.width = viewport.width
+  const canvas = document.getElementById('pdf-canvas')
+  canvas.height = viewport.height; canvas.width = viewport.width
   await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
   paginaAtual = num; atualizarNavPdf()
 }
@@ -466,31 +414,25 @@ function atualizarNavPdf() {
 }
 function mudarPagina(delta) { renderPagina(paginaAtual + delta) }
 
-// ── Inicialização ──────────────────────────────────────────────────
+// ── Inicialização ─────────────────────────────────────────────────
 window.addEventListener('load', async () => {
   const token = new URLSearchParams(window.location.search).get('t')
   if (!token) { mostrarEstado('erro'); return }
-
   try {
-    const res  = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({ acao: 'buscar_doc_assinatura', token })
-    })
+    const res  = await fetch(GAS_URL, { method:'POST', body: JSON.stringify({ acao:'buscar_doc_assinatura', token }) })
     const data = await res.json()
     if (!data.ok || !data.data) { mostrarEstado('erro'); return }
     docData = data.data
-
     if (docData.assinado) {
       document.getElementById('assinado-data').textContent = 'Assinado em ' + (docData.data_assinatura || '')
       mostrarEstado('assinado'); return
     }
-
     document.getElementById('info-nome').textContent = docData.nome_funcionario
     document.getElementById('info-tipo').textContent = docData.tipo
     document.getElementById('info-ref').textContent  = docData.referencia
     document.getElementById('info-data').textContent = docData.data_criacao
-
-    await carregarPdf(docData.pdf_base64)
+    if (docData.pdf_base64) await carregarPdf(docData.pdf_base64)
+    else document.getElementById('pdf-viewer-wrap').innerHTML = '<p style="font-size:12px;color:#9CA3AF;padding:20px">PDF não disponível para visualização</p>'
     mostrarEstado('assinar')
   } catch(e) { mostrarEstado('erro') }
 })
@@ -502,7 +444,7 @@ window.addEventListener('resize', () => {
 function mostrarEstado(estado) {
   ['loading','erro','assinado','assinar','sucesso'].forEach(s => {
     const el = document.getElementById('estado-' + s)
-    if (el) el.style.display = s === estado ? (s === 'assinar' ? 'block' : 'block') : 'none'
+    if (el) el.style.display = s === estado ? 'block' : 'none'
   })
 }
 </script>
