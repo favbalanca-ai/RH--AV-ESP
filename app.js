@@ -763,39 +763,48 @@ function carregarMapeamentoSalvo(competencia) {
 
 async function identificarFuncionariosAutomatico() {
   const competencia = paginasFracionadas[0]?.competencia || ''
-
-  // Tenta mapeamento salvo do mês anterior / mesmo mês
   const mapaAnterior = carregarMapeamentoSalvo(competencia)
   let identificados = 0
 
-  // Identifica todas as páginas em paralelo (sem esperar uma a uma)
+  // Dispara todas as identificações com IA em paralelo
   const promessas = paginasFracionadas.map((p, i) =>
-    chamarGAS({ acao: 'identificar_funcionario_pdf', dados: { pdf_base64: p.pdfBase64 } })
+    chamarGAS({ acao: 'identificar_com_ia', dados: { pdf_base64: p.pdfBase64 } })
       .catch(() => null)
   )
 
-  // Processa resultados conforme chegam
   for (let i = 0; i < promessas.length; i++) {
     const res = await promessas[i]
     let func = null
+    let tipoIA = '', compIA = ''
 
-    if (res && res.ok && res.data && res.data.func_id) {
-      func = funcionarios.find(f => String(f['ID']) === String(res.data.func_id))
+    if (res && res.ok && res.data) {
+      const d = res.data
+      tipoIA = d.tipo_documento || ''
+      compIA = d.competencia    || ''
+
+      // Atualiza tipo e competência detectados pela IA
+      if (tipoIA) paginasFracionadas[i].tipoDoc    = tipoIA
+      if (compIA) paginasFracionadas[i].competencia = compIA
+
+      if (d.func_id) {
+        func = funcionarios.find(f => String(f['ID']) === String(d.func_id))
+        if (func) func._metodo = 'ia'
+      }
     }
 
-    // Fallback: mapeamento salvo pela posição da página
+    // Fallback: mapeamento salvo
     if (!func && mapaAnterior && mapaAnterior[paginasFracionadas[i].pagina]) {
       const savedId = mapaAnterior[paginasFracionadas[i].pagina]
       func = funcionarios.find(f => String(f['ID']) === String(savedId))
-      if (func) func._fromCache = true
+      if (func) func._metodo = 'cache'
     }
 
     if (func) {
-      paginasFracionadas[i].funcId   = String(func['ID'])
-      paginasFracionadas[i].nome     = func['NOME_COMPLETO']
-      paginasFracionadas[i].funcao   = func['FUNCAO']
-      paginasFracionadas[i].telefone = func['TELEFONE']
-      renderCardIdentificado(i, func, func._fromCache ? 'cache' : 'auto')
+      paginasFracionadas[i].funcId    = String(func['ID'])
+      paginasFracionadas[i].nome      = func['NOME_COMPLETO']
+      paginasFracionadas[i].funcao    = func['FUNCAO']
+      paginasFracionadas[i].telefone  = func['TELEFONE']
+      renderCardIdentificado(i, func, func._metodo || 'auto')
       identificados++
     } else {
       renderCardManual(i)
@@ -803,12 +812,12 @@ async function identificarFuncionariosAutomatico() {
     atualizarBtnTodos()
   }
 
-  // Salva mapeamento para próximo uso
   if (identificados > 0) salvarMapeamento(competencia)
 
   toast(identificados === paginasFracionadas.length
-    ? '✅ Todos os ' + identificados + ' identificados!'
-    : '✅ ' + identificados + ' identificados · ' + (paginasFracionadas.length - identificados) + ' selecione manualmente', 'sucesso')
+    ? '🤖 IA identificou todos os ' + identificados + ' funcionários!'
+    : '🤖 ' + identificados + ' identificados · ' + (paginasFracionadas.length - identificados) + ' selecione manualmente',
+    identificados > 0 ? 'sucesso' : '')
 }
 
 function renderCardIdentificado(i, func, metodo) {
@@ -821,7 +830,7 @@ function renderCardIdentificado(i, func, metodo) {
       <div>
         <div class="fpc-nome">${func['NOME_COMPLETO']}</div>
         <div class="fpc-sub">${func['FUNCAO']||''} · ${func['UNIDADE']||''}</div>
-        ${metodo === 'auto' ? `<div class="fpc-auto"><i class="ti ti-robot" style="font-size:9px"></i> Identificado automaticamente</div>` : metodo === 'cache' ? `<div class="fpc-auto"><i class="ti ti-history" style="font-size:9px"></i> Do mapeamento salvo — confirme</div>` : ''}
+        ${metodo === 'ia' || metodo === 'auto' ? `<div class="fpc-auto"><i class="ti ti-robot" style="font-size:9px"></i> Identificado pela IA</div>` : metodo === 'cache' ? `<div class="fpc-auto"><i class="ti ti-history" style="font-size:9px"></i> Mapeamento salvo — confirme</div>` : '<div class="fpc-manual-tag">Selecionado manualmente</div>'}
       </div>
     </div>`
   const btnEl = document.getElementById('btn-zap-' + i)
@@ -924,15 +933,84 @@ async function enviarTodasPendentes(metodo) {
   metodo = metodo || 'zapsign'
   const pendentes = paginasFracionadas.filter(p => p.funcId && p.status === 'pronto')
   if (!pendentes.length) return toast('⚠️ Nenhum pronto para enviar', 'erro')
-  for (let i = 0; i < paginasFracionadas.length; i++) {
-    const p = paginasFracionadas[i]
-    if (!p.funcId || p.status !== 'pronto') continue
-    if (metodo === 'proprio') {
-      await enviarPaginaAssinaturaPropria(i, p.tipoDoc || tipoDocAtual)
-    } else {
+
+  if (metodo === 'proprio') {
+    // Gera todos os links primeiro, depois abre WhatsApp em sequência
+    mostrarLoading('Gerando links de assinatura para ' + pendentes.length + ' funcionários...')
+    const links = []  // { nome, telefone, link, wa_link }
+
+    for (let i = 0; i < paginasFracionadas.length; i++) {
+      const p = paginasFracionadas[i]
+      if (!p.funcId || p.status !== 'pronto') continue
+      mostrarLoading('Gerando link ' + (links.length + 1) + '/' + pendentes.length + ' — ' + p.nome.split(' ')[0])
+      const res = await chamarGAS({
+        acao: 'processar_pagina_proprio',
+        dados: { pdf_base64: p.pdfBase64, tipo: p.tipoDoc || tipoDocAtual,
+                 competencia: p.competencia, func_id: p.funcId, func_nome: p.nome, pagina: p.pagina }
+      })
+      if (res && res.ok) {
+        paginasFracionadas[i].status = 'enviado'
+        atualizarCardEnviado(i, res.data)
+        links.push({ nome: p.nome.split(' ')[0], telefone: p.telefone, link: res.data.link, wa_link: res.data.wa_link })
+      }
+    }
+    esconderLoading()
+    atualizarBtnTodos()
+
+    // Abre WhatsApp para cada funcionário em sequência com delay
+    if (links.length) {
+      toast('✅ ' + links.length + ' links gerados! Abrindo WhatsApp...', 'sucesso')
+      await abrirWhatsAppSequencial(links)
+    }
+    carregarEntregasFolha()
+
+  } else {
+    for (let i = 0; i < paginasFracionadas.length; i++) {
+      const p = paginasFracionadas[i]
+      if (!p.funcId || p.status !== 'pronto') continue
       await enviarPaginaZapSign(i)
     }
   }
+}
+
+async function abrirWhatsAppSequencial(links) {
+  // Mostra modal com todos os links e botão WhatsApp por funcionário
+  const existente = document.getElementById('modal-wa-lote')
+  if (existente) existente.remove()
+
+  const modal = document.createElement('div')
+  modal.id = 'modal-wa-lote'
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:400;display:flex;align-items:flex-end;justify-content:center'
+
+  const lista = links.map((l, i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px;background:#F9FAFB;border-radius:10px;margin-bottom:6px">
+      <div class="avatar" style="background:var(--verde-claro);color:var(--verde-text);width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">
+        ${l.nome.substring(0,2).toUpperCase()}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600">${l.nome}</div>
+        <div style="font-size:10px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.link}</div>
+      </div>
+      <a href="${l.wa_link}" target="_blank"
+        style="background:#22C55E;color:#fff;border-radius:8px;padding:8px 10px;font-size:13px;text-decoration:none;display:flex;align-items:center;gap:4px;flex-shrink:0;font-weight:600">
+        <i class="ti ti-brand-whatsapp"></i>
+      </a>
+    </div>`).join('')
+
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 32px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto">
+      <div style="width:36px;height:4px;background:#E5E7EB;border-radius:2px;margin:0 auto 16px"></div>
+      <h3 style="font-size:15px;font-weight:600;color:#1A1A1A;margin-bottom:4px">✅ ${links.length} links gerados</h3>
+      <p style="font-size:12px;color:#6B7280;margin-bottom:14px">Toque no botão WhatsApp para enviar o link para cada funcionário</p>
+      ${lista}
+      <button onclick="document.getElementById('modal-wa-lote').remove()"
+        style="background:var(--verde);color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:600;cursor:pointer;width:100%;margin-top:10px">
+        ✓ Concluído
+      </button>
+    </div>`
+
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove() })
+  document.body.appendChild(modal)
 }
 
 function atualizarBtnTodos() {
