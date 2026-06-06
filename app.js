@@ -920,11 +920,18 @@ async function enviarPaginaZapSign(idx) {
   }
 }
 
-async function enviarTodasPendentes() {
+async function enviarTodasPendentes(metodo) {
+  metodo = metodo || 'zapsign'
   const pendentes = paginasFracionadas.filter(p => p.funcId && p.status === 'pronto')
   if (!pendentes.length) return toast('⚠️ Nenhum pronto para enviar', 'erro')
   for (let i = 0; i < paginasFracionadas.length; i++) {
-    if (paginasFracionadas[i].funcId && paginasFracionadas[i].status === 'pronto') await enviarPaginaZapSign(i)
+    const p = paginasFracionadas[i]
+    if (!p.funcId || p.status !== 'pronto') continue
+    if (metodo === 'proprio') {
+      await enviarPaginaAssinaturaPropria(i, p.tipoDoc || tipoDocAtual)
+    } else {
+      await enviarPaginaZapSign(i)
+    }
   }
 }
 
