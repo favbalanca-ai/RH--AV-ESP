@@ -666,9 +666,9 @@ function atualizarCardEnviado(idx, data) {
 // ═══════════════════════════════════════════════════════════════════
 // GOOGLE DRIVE PICKER
 // ═══════════════════════════════════════════════════════════════════
-const DRIVE_CLIENT_ID  = '206449842246-your-client-id.apps.googleusercontent.com' // ← preencher
-const DRIVE_API_KEY    = 'YOUR_API_KEY'  // ← preencher
-const DRIVE_APP_ID     = '206449842246'  // ← número do projeto GCP
+const DRIVE_CLIENT_ID  = '850932556005-m1tdqleh9ffgcfddavlcar51p0padce3.apps.googleusercontent.com'
+const DRIVE_API_KEY    = 'AIzaSyBK0ADivSbDVb0kox6gGeCGepDQR9nWtSw'
+const DRIVE_APP_ID     = '850932556005'
 
 let pickerApiLoaded = false
 let oauthToken      = null
