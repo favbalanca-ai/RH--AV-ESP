@@ -119,6 +119,7 @@ async function sincronizarManual() {
 const TITULOS = {
   'inicio':'Início','lista-func':'Funcionários','novo-func':'Novo Funcionário',
   'exames':'Exames','epi':'EPI','fracionar':'Folha de Pagamento',
+  'pagamento':'💰 Controle de Pagamento',
 }
 
 function irPara(pg) {
@@ -132,6 +133,7 @@ function irPara(pg) {
   if (pg === 'exames')     carregarExames()
   if (pg === 'epi')        carregarEpi()
   if (pg === 'fracionar')  { preencherMesesFracionar(); carregarEntregasFolha() }
+  if (pg === 'pagamento')  iniciarPagamento()
 }
 
 async function chamarGAS(dados) {
@@ -1281,12 +1283,6 @@ const TITULOS_PGTO = { ...TITULOS, 'pagamento': '💰 Controle de Pagamento' }
 let funcPgtoSelecionado = null
 
 // Adiciona 'pagamento' ao irPara
-const _irParaOriginal = irPara
-function irPara(pg) {
-  _irParaOriginal(pg)
-  if (pg === 'pagamento') iniciarPagamento()
-}
-
 function iniciarPagamento() {
   // Preenche select de funcionários
   const sel = document.getElementById('sel-func-pgto')
