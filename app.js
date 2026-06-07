@@ -726,10 +726,14 @@ async function pickerCallback(data) {
       'https://www.googleapis.com/drive/v3/files/' + file.id + '?alt=media',
       { headers: { Authorization: 'Bearer ' + oauthToken } }
     )
-    const buffer    = await res.arrayBuffer()
-    const bytes     = new Uint8Array(buffer)
-    const base64    = btoa(String.fromCharCode(...bytes))
-    const blob      = new Blob([buffer], { type: 'application/pdf' })
+    const buffer = await res.arrayBuffer()
+    const blob   = new Blob([buffer], { type: 'application/pdf' })
+    // Converte para base64 sem usar spread (evita stack overflow em PDFs grandes)
+    const base64 = await new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result.split(',')[1])
+      reader.readAsDataURL(blob)
+    })
 
     // Simula o mesmo comportamento do input file
     esconderLoading()
