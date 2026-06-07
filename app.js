@@ -717,15 +717,22 @@ async function pickerCallback(data) {
   if (data.action !== google.picker.Action.PICKED) return
   const file = data.docs[0]
   const nome = file.name
+  console.log('Drive picker: arquivo selecionado', file.id, nome)
 
   mostrarLoading('Carregando PDF do Drive...')
 
   try {
-    // Baixa o arquivo via Drive API
+    console.log('Baixando arquivo via Drive API...')
     const res = await fetch(
       'https://www.googleapis.com/drive/v3/files/' + file.id + '?alt=media',
       { headers: { Authorization: 'Bearer ' + oauthToken } }
     )
+    console.log('Status HTTP:', res.status, res.statusText)
+    if (!res.ok) {
+      const errText = await res.text()
+      console.log('Erro Drive API:', errText)
+      throw new Error('Erro HTTP ' + res.status + ': ' + errText.substring(0, 100))
+    }
     const buffer = await res.arrayBuffer()
     const blob   = new Blob([buffer], { type: 'application/pdf' })
     // Converte para base64 sem usar spread (evita stack overflow em PDFs grandes)
