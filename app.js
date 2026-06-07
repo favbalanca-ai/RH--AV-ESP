@@ -1,4 +1,3 @@
-
 let motivoEpiSelecionado = 'Admissional'
 
 function selecionarMotivo(btn, motivo) {
@@ -790,15 +789,108 @@ async function carregarEntregasFolha() {
 function renderHistoricoFolha(lista) {
   const el = document.getElementById('historico-folha'); if (!el) return
   if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum envio</p>'; return }
-  el.innerHTML = lista.map(f => `
+
+  // Agrupa assinados por competência para botão de lote
+  const assinados = lista.filter(f => f['STATUS'] === 'Assinado')
+  const competencias = [...new Set(assinados.map(f => f['COMPETÊNCIA']))]
+
+  let header = ''
+  if (assinados.length > 0) {
+    const optsComp = competencias.map(c => `<option value="${c}">${c}</option>`).join('')
+    header = `<div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
+      <select id="sel-comp-notif" style="flex:1;border:0.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px;font-family:inherit">
+        ${optsComp}
+      </select>
+      <button onclick="notificarPagamentoLote()" style="background:#25D366;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px">
+        <i class="ti ti-brand-whatsapp"></i> Notificar todos
+      </button>
+    </div>`
+  }
+
+  el.innerHTML = header + lista.map(f => `
     <div class="lista-item">
       <div class="avatar" style="background:var(--purple-bg);color:var(--purple-text)">${getIniciais(f['FUNCIONÁRIO']||'?')}</div>
       <div class="lista-item-info">
         <div class="lista-item-nome">${f['FUNCIONÁRIO']}</div>
         <div class="lista-item-sub">${f['COMPETÊNCIA']} · ${f['DATA ENVIO']}</div>
         ${f['LINK DOC ASSINADO'] ? `<a href="${f['LINK DOC ASSINADO']}" target="_blank" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px;margin-top:2px"><i class="ti ti-file-check" style="font-size:10px"></i> Ver assinado</a>` : ''}
-      </div>${badge(f['STATUS'])}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        ${badge(f['STATUS'])}
+        ${f['STATUS'] === 'Assinado' ? `<button onclick="notificarPagamentoIndividual('${f['ID FUNC.']}','${f['COMPETÊNCIA']}')"
+          style="background:#25D366;color:#fff;border:none;border-radius:6px;padding:3px 7px;font-size:10px;cursor:pointer;display:flex;align-items:center;gap:3px">
+          <i class="ti ti-brand-whatsapp"></i>
+        </button>` : ''}
+      </div>
     </div>`).join('')
+}
+
+async function notificarPagamentoIndividual(funcId, competencia) {
+  mostrarLoading('Gerando mensagem...')
+  const res = await chamarGAS({ acao: 'gerar_msg_pagamento', dados: { func_id: funcId, competencia } })
+  esconderLoading()
+  if (!res || !res.ok || !res.data.length) return toast('❌ Erro ao gerar mensagem', 'erro')
+  const m = res.data[0]
+  if (!m.wa_link) return toast('❌ WhatsApp do empregador não cadastrado', 'erro')
+  mostrarModalNotificacao([m])
+}
+
+async function notificarPagamentoLote() {
+  const competencia = document.getElementById('sel-comp-notif')?.value
+  if (!competencia) return toast('❌ Selecione a competência', 'erro')
+
+  mostrarLoading('Gerando mensagens...')
+  const resFolhas = await chamarGAS({ acao: 'listar_folhas' })
+  if (!resFolhas || !resFolhas.ok) { esconderLoading(); return }
+
+  const assinados = resFolhas.data.filter(f => f['COMPETÊNCIA'] === competencia && f['STATUS'] === 'Assinado')
+  const funcIds   = assinados.map(f => f['ID FUNC.'])
+
+  const res = await chamarGAS({ acao: 'gerar_msg_pagamento', dados: { func_ids: funcIds, competencia } })
+  esconderLoading()
+  if (!res || !res.ok || !res.data.length) return toast('❌ Erro ao gerar mensagens', 'erro')
+  mostrarModalNotificacao(res.data)
+}
+
+function mostrarModalNotificacao(mensagens) {
+  const existente = document.getElementById('modal-notif-pgto')
+  if (existente) existente.remove()
+
+  const modal = document.createElement('div')
+  modal.id = 'modal-notif-pgto'
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:400;display:flex;align-items:flex-end;justify-content:center'
+
+  const lista = mensagens.map(m => `
+    <div style="background:#F9FAFB;border-radius:10px;padding:10px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div>
+          <div style="font-size:13px;font-weight:600">${m.nome.split(' ')[0]}</div>
+          ${m.valor ? `<div style="font-size:11px;color:var(--verde-text);font-weight:600">R$ ${parseFloat(m.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>` : ''}
+        </div>
+        ${m.wa_link
+          ? `<a href="${m.wa_link}" target="_blank" style="background:#25D366;color:#fff;border-radius:8px;padding:8px 14px;font-size:12px;text-decoration:none;font-weight:600;display:flex;align-items:center;gap:5px">
+              <i class="ti ti-brand-whatsapp"></i> Enviar
+             </a>`
+          : `<span style="font-size:10px;color:var(--red-text)">⚠️ Sem WhatsApp</span>`
+        }
+      </div>
+      <div style="font-size:10px;color:var(--text-secondary);background:#fff;border-radius:6px;padding:6px 8px;white-space:pre-wrap">${m.mensagem.replace(/\*/g,'')}</div>
+    </div>`).join('')
+
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px 20px 0 0;padding:16px 16px 32px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto">
+      <div style="width:36px;height:4px;background:#E5E7EB;border-radius:2px;margin:0 auto 14px"></div>
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:4px">💬 Notificações de Pagamento</h3>
+      <p style="font-size:12px;color:#6B7280;margin-bottom:14px">${mensagens.length} funcionário(s) — toque em Enviar para cada um</p>
+      ${lista}
+      <button onclick="document.getElementById('modal-notif-pgto').remove()"
+        style="background:var(--verde);color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:600;cursor:pointer;width:100%;margin-top:6px">
+        ✓ Concluído
+      </button>
+    </div>`
+
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove() })
+  document.body.appendChild(modal)
 }
 
 async function processarFracionamento() {
@@ -1180,3 +1272,275 @@ function mostrarLoading(msg) {
   document.getElementById('loading').style.display = 'flex'
 }
 function esconderLoading() { document.getElementById('loading').style.display = 'none' }
+
+// ═══════════════════════════════════════════════════════════════════
+// MÓDULO: CONTROLE DE PAGAMENTO
+// ═══════════════════════════════════════════════════════════════════
+
+const TITULOS_PGTO = { ...TITULOS, 'pagamento': '💰 Controle de Pagamento' }
+let funcPgtoSelecionado = null
+
+// Adiciona 'pagamento' ao irPara
+const _irParaOriginal = irPara
+function irPara(pg) {
+  _irParaOriginal(pg)
+  if (pg === 'pagamento') iniciarPagamento()
+}
+
+function iniciarPagamento() {
+  // Preenche select de funcionários
+  const sel = document.getElementById('sel-func-pgto')
+  if (sel && sel.options.length <= 1) {
+    sel.innerHTML = '<option value="">Selecione...</option>'
+    funcionarios.forEach(f => { sel.innerHTML += `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>` })
+  }
+  // Preenche anos
+  const selAno = document.getElementById('sel-ano-pgto')
+  if (selAno && selAno.options.length === 0) {
+    const ano = new Date().getFullYear()
+    for (let a = ano; a >= ano - 3; a--) selAno.innerHTML += `<option value="${a}">${a}</option>`
+  }
+  // Preenche competências
+  const selComp = document.getElementById('sel-comp-autorizacao')
+  if (selComp && selComp.options.length === 0) {
+    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+    const anoAtual = new Date().getFullYear()
+    const mesAtual = new Date().getMonth()
+    for (let m = mesAtual; m >= 0; m--) selComp.innerHTML += `<option value="${meses[m]}/${anoAtual}">${meses[m]}/${anoAtual}</option>`
+    for (let m = 11; m > mesAtual; m--) selComp.innerHTML += `<option value="${meses[m]}/${anoAtual-1}">${meses[m]}/${anoAtual-1}</option>`
+  }
+  // Data padrão hoje
+  const inpData = document.getElementById('inp-data-adiant')
+  if (inpData && !inpData.value) inpData.value = new Date().toISOString().split('T')[0]
+}
+
+function selecionarFuncPgto(funcId) {
+  const func = funcionarios.find(f => String(f['ID']) === String(funcId))
+  if (!func) return
+  funcPgtoSelecionado = func
+
+  document.getElementById('pgto-func-avatar').textContent = getIniciais(func['NOME_COMPLETO'])
+  document.getElementById('pgto-func-nome').textContent   = func['NOME_COMPLETO']
+  document.getElementById('pgto-func-nome').style.color   = 'var(--text-primary)'
+  document.getElementById('pgto-func-sub').textContent    = (func['FUNCAO']||'') + ' · ' + (func['UNIDADE']||'')
+
+  carregarResumoPgto()
+  document.getElementById('card-autorizacao').style.display = 'block'
+  document.getElementById('card-relatorio').style.display    = 'block'
+
+  // Preenche datas padrão: 1º do ano até hoje
+  const hoje2 = new Date()
+  const anoAtual2 = hoje2.getFullYear()
+  const inpIni = document.getElementById('inp-relat-inicio')
+  const inpFim = document.getElementById('inp-relat-fim')
+  if (inpIni && !inpIni.value) inpIni.value = anoAtual2 + '-01-01'
+  if (inpFim && !inpFim.value) inpFim.value = hoje2.toISOString().split('T')[0]
+}
+
+async function carregarResumoPgto() {
+  if (!funcPgtoSelecionado) return
+  const ano = document.getElementById('sel-ano-pgto')?.value || new Date().getFullYear()
+  document.getElementById('ano-label-pgto').textContent = ano
+
+  mostrarLoading('Carregando dados...')
+  const res = await chamarGAS({ acao: 'resumo_comissao', dados: { func_id: funcPgtoSelecionado['ID'], ano } })
+  esconderLoading()
+
+  if (res && res.ok) {
+    const d = res.data
+    // Preenche campo de comissão anual
+    const inp = document.getElementById('inp-comissao-anual')
+    if (inp) inp.value = d.valor_anual || ''
+
+    // Mostra resumo
+    const card = document.getElementById('card-comissao-func')
+    card.style.display = 'block'
+
+    const pct = d.percentual || 0
+    const corBarra = pct >= 100 ? 'var(--verde)' : pct >= 50 ? 'var(--amber-text)' : 'var(--blue-text)'
+
+    document.getElementById('comissao-resumo-body').innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;font-size:12px">
+          <span style="color:var(--text-secondary)">Total anual</span>
+          <span style="font-weight:600">R$ ${formatarValor(d.valor_anual)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px">
+          <span style="color:var(--text-secondary)">Total pago</span>
+          <span style="font-weight:600;color:var(--verde-text)">R$ ${formatarValor(d.total_pago)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px">
+          <span style="color:var(--text-secondary)">Saldo restante</span>
+          <span style="font-weight:700;color:${d.saldo > 0 ? 'var(--amber-text)' : 'var(--verde-text)'}">R$ ${formatarValor(d.saldo)}</span>
+        </div>
+        <div style="background:var(--border);border-radius:4px;height:8px;margin-top:4px;overflow:hidden">
+          <div style="height:100%;width:${Math.min(pct,100)}%;background:${corBarra};border-radius:4px;transition:width 0.5s"></div>
+        </div>
+        <div style="font-size:10px;color:var(--text-secondary);text-align:right">${pct}% pago</div>
+      </div>`
+
+    // Mostra histórico de adiantamentos
+    renderAdiantamentos(d.adiantamentos || [])
+    document.getElementById('card-hist-adiant').style.display = d.adiantamentos?.length ? 'block' : 'none'
+  }
+}
+
+function renderAdiantamentos(lista) {
+  const el = document.getElementById('lista-adiantamentos')
+  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum adiantamento registrado</p>'; return }
+  el.innerHTML = lista.map(a => `
+    <div class="lista-item">
+      <div class="lista-item-info">
+        <div class="lista-item-nome">R$ ${formatarValor(a['VALOR'])}</div>
+        <div class="lista-item-sub">${a['DATA_PAGTO']} · ${a['FORMA_PAGTO']}</div>
+        ${a['OBSERVACOES'] ? `<div class="lista-item-sub">${a['OBSERVACOES']}</div>` : ''}
+      </div>
+      <span class="badge badge-verde">Pago</span>
+    </div>`).join('')
+}
+
+async function salvarComissao() {
+  if (!funcPgtoSelecionado) return toast('❌ Selecione o funcionário', 'erro')
+  const ano   = document.getElementById('sel-ano-pgto')?.value
+  const valor = document.getElementById('inp-comissao-anual')?.value
+  if (!valor) return toast('❌ Informe o valor da comissão', 'erro')
+
+  mostrarLoading('Salvando comissão...')
+  const res = await chamarGAS({ acao: 'cadastrar_comissao', dados: {
+    func_id: funcPgtoSelecionado['ID'], ano, valor_anual: parseFloat(valor)
+  }})
+  esconderLoading()
+
+  if (res && res.ok) { toast('✅ Comissão salva!', 'sucesso'); carregarResumoPgto() }
+  else toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
+}
+
+async function registrarAdiantamento() {
+  if (!funcPgtoSelecionado) return toast('❌ Selecione o funcionário', 'erro')
+  const ano    = document.getElementById('sel-ano-pgto')?.value
+  const data   = document.getElementById('inp-data-adiant')?.value
+  const valor  = document.getElementById('inp-valor-adiant')?.value
+  const forma  = document.getElementById('sel-forma-adiant')?.value
+  const obs    = document.getElementById('inp-obs-adiant')?.value
+
+  if (!data || !valor) return toast('❌ Informe data e valor', 'erro')
+
+  mostrarLoading('Registrando adiantamento...')
+  const res = await chamarGAS({ acao: 'registrar_adiantamento', dados: {
+    func_id: funcPgtoSelecionado['ID'], ano, data_pagto: data,
+    valor: parseFloat(valor), forma_pagto: forma, observacoes: obs
+  }})
+  esconderLoading()
+
+  if (res && res.ok) {
+    toast('✅ Adiantamento registrado!', 'sucesso')
+    document.getElementById('inp-valor-adiant').value = ''
+    document.getElementById('inp-obs-adiant').value   = ''
+    carregarResumoPgto()
+  } else toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
+}
+
+async function gerarAutorizacao() {
+  if (!funcPgtoSelecionado) return toast('❌ Selecione o funcionário', 'erro')
+  const comp  = document.getElementById('sel-comp-autorizacao')?.value
+  const valor = document.getElementById('inp-valor-salario')?.value
+  if (!comp || !valor) return toast('❌ Informe competência e valor', 'erro')
+
+  mostrarLoading('Gerando autorização de pagamento...')
+  const res = await chamarGAS({ acao: 'gerar_autorizacao_pagamento', dados: {
+    func_id: funcPgtoSelecionado['ID'], competencia: comp, valor_salario: parseFloat(valor)
+  }})
+  esconderLoading()
+
+  if (res && res.ok) {
+    toast('✅ Autorização gerada!', 'sucesso')
+    const el = document.getElementById('autorizacao-resultado')
+    el.style.display = 'block'
+    el.innerHTML = `
+      <div style="background:var(--verde-claro);border-radius:var(--radius-md);padding:10px 12px">
+        <div style="font-size:12px;font-weight:600;color:var(--verde-text);margin-bottom:6px">✅ Autorização gerada — salva no Drive</div>
+        ${res.data.link_drive ? `<a href="${res.data.link_drive}" target="_blank" style="font-size:11px;color:var(--blue-text);display:flex;align-items:center;gap:4px"><i class="ti ti-file-check"></i> Ver documento no Drive</a>` : ''}
+      </div>`
+    document.getElementById('card-hist-autorizacoes').style.display = 'block'
+    carregarHistAutorizacoes()
+  } else toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
+}
+
+async function carregarHistAutorizacoes() {
+  if (!funcPgtoSelecionado) return
+  const res = await chamarGAS({ acao: 'listar_autorizacoes', dados: { func_id: funcPgtoSelecionado['ID'] } })
+  if (!res || !res.ok) return
+  const el = document.getElementById('lista-autorizacoes')
+  if (!res.data.length) { el.innerHTML = '<p class="lista-vazia">Nenhuma autorização</p>'; return }
+  el.innerHTML = res.data.slice(0,10).map(a => `
+    <div class="lista-item">
+      <div class="lista-item-info">
+        <div class="lista-item-nome">${a['COMPETENCIA']} — R$ ${formatarValor(a['VALOR_SALARIO'])}</div>
+        <div class="lista-item-sub">${a['DATA_GERACAO']}</div>
+        ${a['LINK_DOC'] ? `<a href="${a['LINK_DOC']}" target="_blank" style="font-size:10px;color:var(--blue-text)"><i class="ti ti-file-check" style="font-size:10px"></i> Ver no Drive</a>` : ''}
+      </div>
+      <span class="badge badge-azul">${a['STATUS']||'Gerada'}</span>
+    </div>`).join('')
+}
+
+
+async function gerarRelatorio() {
+  if (!funcPgtoSelecionado) return toast('❌ Selecione o funcionário', 'erro')
+  const inicio = document.getElementById('inp-relat-inicio')?.value
+  const fim    = document.getElementById('inp-relat-fim')?.value
+  if (!inicio || !fim) return toast('❌ Informe o período', 'erro')
+  if (inicio > fim) return toast('❌ Data início deve ser antes da data fim', 'erro')
+
+  const btn = document.querySelector('[onclick="gerarRelatorio()"]')
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Gerando...' }
+  mostrarLoading('Gerando relatório PDF...')
+
+  const res = await chamarGAS({
+    acao: 'gerar_relatorio_pagamentos',
+    dados: { func_id: funcPgtoSelecionado['ID'], data_inicio: inicio, data_fim: fim }
+  })
+  esconderLoading()
+  if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-file-analytics"></i> Gerar relatório PDF' }
+
+  if (res && res.ok) {
+    const d = res.data
+    // Abre PDF direto no browser
+    const bytes = Uint8Array.from(atob(d.pdf_base64), c => c.charCodeAt(0))
+    const blob  = new Blob([bytes], { type: 'application/pdf' })
+    const url   = URL.createObjectURL(blob)
+    window.open(url, '_blank')
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
+
+    // Mostra resumo
+    const el = document.getElementById('relatorio-resultado')
+    el.style.display = 'block'
+    el.innerHTML = `
+      <div style="background:var(--verde-claro);border-radius:var(--radius-md);padding:10px 12px">
+        <div style="font-size:11px;font-weight:600;color:var(--verde-text);margin-bottom:6px">
+          ✅ Relatório gerado — ${d.num_folhas} holerite(s) + ${d.num_adiantamentos} adiantamento(s)
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;font-size:11px">
+          <div style="display:flex;justify-content:space-between">
+            <span style="color:var(--text-secondary)">Total salários</span>
+            <span style="font-weight:600">R$ ${formatarValor(d.total_salarios)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between">
+            <span style="color:var(--text-secondary)">Total adiantamentos</span>
+            <span style="font-weight:600">R$ ${formatarValor(d.total_adiantamentos)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;border-top:0.5px solid rgba(26,92,42,0.2);margin-top:4px;padding-top:4px">
+            <span style="font-weight:700;color:var(--verde-text)">Total geral</span>
+            <span style="font-weight:700;color:var(--verde-text)">R$ ${formatarValor(d.total_geral)}</span>
+          </div>
+          ${d.saldo_comissao > 0 ? `<div style="display:flex;justify-content:space-between;margin-top:2px"><span style="color:var(--amber-text)">Saldo comissão</span><span style="font-weight:600;color:var(--amber-text)">R$ ${formatarValor(d.saldo_comissao)}</span></div>` : ''}
+        </div>
+      </div>`
+    toast('✅ PDF aberto em nova aba', 'sucesso')
+  } else {
+    toast('❌ ' + ((res&&res.erro)||'Erro ao gerar relatório'), 'erro')
+  }
+}
+
+function formatarValor(v) {
+  return parseFloat(v||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
