@@ -1279,10 +1279,8 @@ function esconderLoading() { document.getElementById('loading').style.display = 
 // MÓDULO: CONTROLE DE PAGAMENTO
 // ═══════════════════════════════════════════════════════════════════
 
-const TITULOS_PGTO = { ...TITULOS, 'pagamento': '💰 Controle de Pagamento' }
 let funcPgtoSelecionado = null
 
-// Adiciona 'pagamento' ao irPara
 function iniciarPagamento() {
   // Preenche select de funcionários
   const sel = document.getElementById('sel-func-pgto')
