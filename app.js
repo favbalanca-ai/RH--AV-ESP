@@ -266,6 +266,9 @@ function renderFuncionarios(lista) {
         <div class="lista-item-sub">${f['TELEFONE']||''}</div>
       </div>
       <div style="display:flex;gap:5px;align-items:center">
+        <button onclick="editarFuncionario('${f['ID']}')" class="btn-epi-rapido" title="Editar" style="background:var(--blue-bg);color:var(--blue-text)">
+          <i class="ti ti-pencil" aria-hidden="true"></i>
+        </button>
         <button onclick="abrirEpiRapido('${f['ID']}')" class="btn-epi-rapido" title="Entregar EPI">
           <i class="ti ti-shield-plus" aria-hidden="true"></i>
         </button>
@@ -274,17 +277,84 @@ function renderFuncionarios(lista) {
     </div>`).join('')
 }
 
+
+// ─── EDITAR FUNCIONÁRIO ───────────────────────────────────────────
+function editarFuncionario(funcId) {
+  const func = funcionarios.find(f => String(f['ID']) === String(funcId))
+  if (!func) return toast('❌ Funcionário não encontrado', 'erro')
+
+  // Vai para a aba de cadastro
+  irPara('novo-func')
+
+  // Aguarda DOM renderizar e preenche os campos
+  setTimeout(() => {
+    const form = document.querySelector('#pg-novo-func form')
+    if (!form) return
+
+    // Campos de texto/select
+    const map = {
+      'nome_completo':        func['NOME_COMPLETO'],
+      'nome_curto':           func['NOME_CURTO'],
+      'funcao':               func['FUNCAO'],
+      'unidade':              func['UNIDADE'],
+      'cpf':                  func['CPF'],
+      'rg':                   func['RG'],
+      'data_nascimento':      func['DATA_NASCIMENTO'],
+      'data_admissao':        func['DATA_ADMISSAO'],
+      'telefone':             func['TELEFONE'],
+      'email':                func['EMAIL'],
+      'perfil_sst':           func['PERFIL_SST'],
+      'tam_camisa':           func['TAM_CAMISA'],
+      'tam_bota':             func['TAM_BOTA'],
+      'whatsapp_empregador':  func['WHATSAPP_EMPREGADOR'],
+      'banco':                func['BANCO'],
+      'agencia':              func['AGENCIA'],
+      'conta':                func['CONTA'],
+      'pix':                  func['PIX'],
+      'salario_base':         func['SALARIO_BASE'],
+      'observacoes':          func['OBSERVACOES'],
+    }
+
+    Object.entries(map).forEach(([name, val]) => {
+      const el = form.querySelector(`[name="${name}"]`)
+      if (el && val) el.value = val
+    })
+
+    // Atualiza título e botão
+    const titulo = document.getElementById('titulo-pagina')
+    if (titulo) titulo.textContent = '✏️ Editar Funcionário'
+
+    const btn = document.getElementById('btn-salvar-func')
+    if (btn) btn.innerHTML = '<i class="ti ti-device-floppy"></i> Salvar alterações'
+
+    // Armazena o ID para o salvar saber que é edição
+    form.dataset.editandoId = funcId
+
+    toast('✏️ Editando ' + func['NOME_COMPLETO'].split(' ')[0], 'sucesso')
+  }, 100)
+}
+
 async function salvarFuncionario(e) {
   e.preventDefault()
   const btn = document.getElementById('btn-salvar-func')
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Salvando...'
   mostrarLoading('Cadastrando e criando pasta no Drive...')
   const dados = Object.fromEntries(new FormData(e.target).entries())
-  const res = await chamarGAS({ acao: 'cadastrar_funcionario', dados })
-  esconderLoading(); btn.disabled = false; btn.innerHTML = '<i class="ti ti-device-floppy"></i> Cadastrar'
+  const editandoId = e.target.dataset.editandoId
+  const acao = editandoId ? 'atualizar_funcionario' : 'cadastrar_funcionario'
+  if (editandoId) dados.id = editandoId
+
+  const res = await chamarGAS({ acao, dados })
+  esconderLoading()
+  btn.disabled = false
+  btn.innerHTML = editandoId
+    ? '<i class="ti ti-device-floppy"></i> Salvar alterações'
+    : '<i class="ti ti-device-floppy"></i> Cadastrar'
+
   if (res && res.ok) {
-    toast('✅ Cadastrado! ID: ' + res.data.id, 'sucesso')
-    e.target.reset()
+    toast(editandoId ? '✅ Dados atualizados!' : '✅ Cadastrado! ID: ' + res.data.id, 'sucesso')
+    if (!editandoId) e.target.reset()
+    e.target.dataset.editandoId = ''
     const r2 = await chamarGAS({ acao: 'listar_funcionarios' })
     if (r2 && r2.ok) { funcionarios = r2.data; preencherSelectsOcultos() }
     setTimeout(() => irPara('lista-func'), 1500)
