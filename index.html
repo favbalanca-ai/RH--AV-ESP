@@ -1,4 +1,4 @@
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -7,6 +7,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 <link rel="stylesheet" href="style.css">
+<script src="https://apis.google.com/js/api.js"></script>
+<script src="https://accounts.google.com/gsi/client"></script>
 <script src="https://apis.google.com/js/api.js"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <title>SST — Fazenda Água Viva</title>
@@ -232,8 +234,22 @@
           <select id="sel-comp-frac" required></select>
         </div>
         <div class="campo-grupo" style="margin-top:8px">
-          <label>PDF da folha completa *</label>
-          <input type="file" id="input-pdf-frac" accept=".pdf">
+          <label>PDF completo *</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button type="button" onclick="abrirDrivePicker()" id="btn-drive-picker"
+              style="flex:1;background:var(--blue-bg);color:var(--blue-text);border:0.5px solid rgba(24,95,165,0.2);border-radius:var(--radius-md);padding:10px 12px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;justify-content:center">
+              <i class="ti ti-brand-google-drive" aria-hidden="true"></i> Drive
+            </button>
+            <span style="font-size:11px;color:var(--text-hint)">ou</span>
+            <label style="flex:1;background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-md);padding:10px 12px;font-size:12px;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;gap:6px;justify-content:center">
+              <i class="ti ti-upload" aria-hidden="true"></i> Upload
+              <input type="file" id="input-pdf-frac" accept=".pdf" style="display:none">
+            </label>
+          </div>
+          <div id="pdf-selecionado" style="display:none;margin-top:6px;font-size:11px;color:var(--verde-text);background:var(--verde-claro);padding:6px 10px;border-radius:8px;align-items:center;gap:6px">
+            <i class="ti ti-file-check"></i>
+            <span id="pdf-nome"></span>
+          </div>
         </div>
         <div id="frac-preview" class="info-box" style="display:none;margin-top:8px"></div>
         <button id="btn-fracionar" onclick="processarFracionamento()" class="btn-primario w-full" style="margin-top:10px">
