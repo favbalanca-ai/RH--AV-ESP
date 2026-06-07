@@ -739,21 +739,17 @@ async function pickerCallback(data) {
     esconderLoading()
     mostrarPdfSelecionado(nome)
 
-    // Conta páginas com pdf-lib
-    const PDFLib = await carregarPdfLib()
-    const pdfDoc = await PDFLib.PDFDocument.load(buffer)
-    const total  = pdfDoc.getPageCount()
-    const preview = document.getElementById('frac-preview')
-    preview.style.display = 'block'
-    preview.innerHTML = '<i class="ti ti-file-check" style="vertical-align:-2px"></i> ' + total + ' página(s) — ' + total + ' funcionário(s)'
-
     // Armazena como File object para o processamento normal
     const fileObj = new File([blob], nome, { type: 'application/pdf' })
-    // Injeta no input file para o processarFracionamento funcionar
+    // Injeta no input file
     const dt = new DataTransfer()
     dt.items.add(fileObj)
     const inputFrac = document.getElementById('input-pdf-frac')
-    if (inputFrac) inputFrac.files = dt.files
+    if (inputFrac) {
+      inputFrac.files = dt.files
+      // Dispara o evento change para contar páginas normalmente
+      inputFrac.dispatchEvent(new Event('change'))
+    }
 
     toast('✅ PDF do Drive carregado: ' + nome, 'sucesso')
   } catch(e) {
