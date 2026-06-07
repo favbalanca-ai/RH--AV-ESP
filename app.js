@@ -898,8 +898,12 @@ function renderHistoricoFolha(lista) {
 }
 
 async function notificarPagamentoIndividual(funcId, competencia) {
+  // Pede valor líquido antes de gerar a mensagem
+  const valorStr = prompt('💰 Valor líquido do salário (R$):\nEx: 3565.07\n\nDeixe em branco se não souber', '')
+  const valorLiquido = valorStr !== null ? valorStr.replace(',', '.') : ''
+
   mostrarLoading('Gerando mensagem...')
-  const res = await chamarGAS({ acao: 'gerar_msg_pagamento', dados: { func_id: funcId, competencia } })
+  const res = await chamarGAS({ acao: 'gerar_msg_pagamento', dados: { func_id: funcId, competencia, valor_liquido: valorLiquido } })
   esconderLoading()
   if (!res || !res.ok || !res.data.length) return toast('❌ Erro ao gerar mensagem', 'erro')
   const m = res.data[0]
@@ -921,10 +925,11 @@ async function notificarPagamentoLote() {
   const res = await chamarGAS({ acao: 'gerar_msg_pagamento', dados: { func_ids: funcIds, competencia } })
   esconderLoading()
   if (!res || !res.ok || !res.data.length) return toast('❌ Erro ao gerar mensagens', 'erro')
-  mostrarModalNotificacao(res.data)
+  // Para lote, mostra modal onde ADM pode ver e editar valor antes de enviar
+  mostrarModalNotificacao(res.data, true)
 }
 
-function mostrarModalNotificacao(mensagens) {
+function mostrarModalNotificacao(mensagens, editavel) {
   const existente = document.getElementById('modal-notif-pgto')
   if (existente) existente.remove()
 
@@ -935,9 +940,9 @@ function mostrarModalNotificacao(mensagens) {
   const lista = mensagens.map(m => `
     <div style="background:#F9FAFB;border-radius:10px;padding:10px;margin-bottom:8px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <div>
+        <div style="flex:1;margin-right:8px">
           <div style="font-size:13px;font-weight:600">${m.nome.split(' ')[0]}</div>
-          ${m.valor ? `<div style="font-size:11px;color:var(--verde-text);font-weight:600">R$ ${parseFloat(m.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>` : ''}
+          ${m.valor ? `<div style="font-size:11px;color:var(--verde-text);font-weight:600">R$ ${parseFloat(m.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>` : '<div style="font-size:10px;color:var(--amber-text)">Valor não informado</div>'}
         </div>
         ${m.wa_link
           ? `<a href="${m.wa_link}" target="_blank" style="background:#25D366;color:#fff;border-radius:8px;padding:8px 14px;font-size:12px;text-decoration:none;font-weight:600;display:flex;align-items:center;gap:5px">
