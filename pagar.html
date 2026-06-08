@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Confirmação de Pagamento — Fazenda Água Viva</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif}
+:root{--verde:#1A5C2A;--verde-claro:#EAF3DE;--verde-text:#3B6D11;--border:rgba(0,0,0,0.1)}
+body{background:#F4F6F4;min-height:100vh;display:flex;flex-direction:column}
+.header{background:var(--verde);color:#fff;padding:14px 16px;text-align:center;flex-shrink:0}
+.header h1{font-size:16px;font-weight:600}
+.header p{font-size:10px;opacity:0.7;margin-top:2px}
+.content{flex:1;padding:12px;display:flex;flex-direction:column;gap:10px;max-width:480px;margin:0 auto;width:100%}
+.card{background:#fff;border-radius:14px;padding:14px;border:0.5px solid var(--border)}
+.card-title{font-size:13px;font-weight:600;color:#1A1A1A;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12px}
+.row:last-child{border:none}
+.row-label{color:#6B7280;font-weight:500}
+.row-value{font-weight:600;color:#1A1A1A}
+.valor-destaque{background:var(--verde-claro);border-radius:10px;padding:14px;text-align:center;margin:10px 0}
+.valor-num{font-size:28px;font-weight:700;color:var(--verde);display:block}
+.valor-label{font-size:11px;color:var(--verde-text);margin-top:2px}
+.btn-principal{background:var(--verde);color:#fff;border:none;border-radius:12px;padding:16px;font-size:15px;font-weight:600;width:100%;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;font-family:inherit;margin-top:6px}
+.btn-principal:disabled{background:#E5E7EB;color:#9CA3AF;cursor:not-allowed}
+.upload-area{border:1.5px dashed rgba(0,0,0,0.2);border-radius:10px;padding:20px;text-align:center;cursor:pointer;background:#FAFAFA;margin-top:8px}
+.upload-area:active{background:#F0F0F0}
+.upload-icon{font-size:32px;margin-bottom:8px;display:block}
+.upload-label{font-size:13px;font-weight:500;color:#6B7280}
+.upload-sub{font-size:11px;color:#9CA3AF;margin-top:4px}
+#preview-img{max-width:100%;border-radius:8px;margin-top:10px;display:none}
+.estado{text-align:center;padding:30px 16px;display:flex;flex-direction:column;align-items:center;gap:12px}
+.estado-icon{font-size:56px}
+.estado h2{font-size:18px;font-weight:600}
+.estado p{font-size:13px;color:#6B7280;line-height:1.6}
+.loading-spinner{width:32px;height:32px;border:3px solid var(--verde-claro);border-top-color:var(--verde);border-radius:50%;animation:spin 0.7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.aviso{background:#FFF8E1;border:0.5px solid rgba(133,79,11,0.2);border-radius:10px;padding:10px 12px;font-size:11px;color:#854F0B;line-height:1.5}
+.dados-pix{background:#F0F4FF;border:0.5px solid rgba(24,95,165,0.2);border-radius:10px;padding:12px}
+.dado-pix-label{font-size:10px;color:#6B7280;font-weight:600;margin-bottom:2px}
+.dado-pix-value{font-size:13px;font-weight:600;color:#185FA5;word-break:break-all}
+.copy-btn{background:none;border:0.5px solid rgba(24,95,165,0.3);border-radius:6px;padding:4px 8px;font-size:10px;color:#185FA5;cursor:pointer;margin-top:4px;font-family:inherit}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🌿 Fazenda Água Viva</h1>
+  <p>Confirmação de Pagamento</p>
+</div>
+<div class="content">
+
+  <!-- Carregando -->
+  <div id="estado-loading" class="card">
+    <div class="estado"><div class="loading-spinner"></div><p>Carregando dados...</p></div>
+  </div>
+
+  <!-- Erro -->
+  <div id="estado-erro" class="card" style="display:none">
+    <div class="estado"><div class="estado-icon">❌</div><h2>Link inválido</h2><p>Este link não foi encontrado ou já expirou.</p></div>
+  </div>
+
+  <!-- Já confirmado -->
+  <div id="estado-pago" class="card" style="display:none">
+    <div class="estado"><div class="estado-icon">✅</div><h2>Pagamento já confirmado</h2><p id="pago-data"></p></div>
+  </div>
+
+  <!-- Formulário de confirmação -->
+  <div id="estado-confirmar" style="display:none">
+
+    <!-- Dados do pagamento -->
+    <div class="card">
+      <div class="card-title">📋 Dados do pagamento</div>
+      <div class="row"><span class="row-label">Funcionário</span><span class="row-value" id="info-nome"></span></div>
+      <div class="row"><span class="row-label">Função</span><span class="row-value" id="info-funcao"></span></div>
+      <div class="row"><span class="row-label">Competência</span><span class="row-value" id="info-comp"></span></div>
+      <div class="valor-destaque">
+        <span class="valor-num" id="info-valor">—</span>
+        <span class="valor-label">Valor líquido a pagar</span>
+      </div>
+    </div>
+
+    <!-- Dados bancários -->
+    <div class="card" id="card-dados-bancarios" style="display:none">
+      <div class="card-title">🏦 Dados para pagamento</div>
+      <div id="dados-bancarios-body"></div>
+    </div>
+
+    <!-- Comprovante -->
+    <div class="card">
+      <div class="card-title">📎 Comprovante de pagamento</div>
+      <div class="aviso">Após efetuar o pagamento, anexe o comprovante aqui para confirmar.</div>
+
+      <label for="file-comprovante">
+        <div class="upload-area" id="upload-area">
+          <span class="upload-icon">📤</span>
+          <div class="upload-label" id="upload-label">Toque para anexar comprovante</div>
+          <div class="upload-sub">Foto, print ou PDF do comprovante</div>
+        </div>
+      </label>
+      <input type="file" id="file-comprovante" accept="image/*,application/pdf" style="display:none" onchange="selecionarComprovante()">
+      <img id="preview-img" alt="Comprovante">
+
+      <div class="card-title" style="margin-top:14px">📅 Data do pagamento</div>
+      <input type="date" id="data-pagamento" style="width:100%;border:0.5px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;font-family:inherit">
+
+      <button class="btn-principal" id="btn-confirmar" onclick="confirmarPagamento()" disabled>
+        ✅ Confirmar pagamento
+      </button>
+    </div>
+
+  </div>
+
+  <!-- Sucesso -->
+  <div id="estado-sucesso" class="card" style="display:none">
+    <div class="estado">
+      <div class="estado-icon">🎉</div>
+      <h2>Pagamento confirmado!</h2>
+      <p>O comprovante foi salvo automaticamente.<br>O sistema foi atualizado.</p>
+    </div>
+  </div>
+
+</div>
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxayJeiQeUeHNfl0oz1xcJh6xzymXLREH-wosmRaLHTazaV6fo62y0bMgivnJTyv1oP/exec'
+let dadosPagto = null
+let arquivoBase64 = null
+let arquivoExt = 'jpg'
+
+// Inicializa data com hoje
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('data-pagamento').value = new Date().toISOString().split('T')[0]
+  const token = new URLSearchParams(window.location.search).get('t')
+  if (!token) { mostrar('erro'); return }
+  carregarDados(token)
+})
+
+async function carregarDados(token) {
+  try {
+    const res  = await fetch(GAS_URL, { method:'POST', body: JSON.stringify({ acao:'buscar_pagamento', token }) })
+    const data = await res.json()
+    if (!data.ok || !data.data) { mostrar('erro'); return }
+    dadosPagto = data.data
+
+    if (dadosPagto.status === 'Pago' || dadosPagto.status === 'Confirmado') {
+      document.getElementById('pago-data').textContent = 'Confirmado em ' + (dadosPagto.data_pagamento || '')
+      mostrar('pago'); return
+    }
+
+    // Preenche dados
+    document.getElementById('info-nome').textContent   = dadosPagto.nome_func
+    document.getElementById('info-funcao').textContent = dadosPagto.funcao || '—'
+    document.getElementById('info-comp').textContent   = dadosPagto.competencia
+
+    if (dadosPagto.valor_liquido) {
+      document.getElementById('info-valor').textContent = 'R$ ' +
+        parseFloat(dadosPagto.valor_liquido).toLocaleString('pt-BR', {minimumFractionDigits:2})
+    }
+
+    // Dados bancários
+    const banco   = dadosPagto.banco   || ''
+    const agencia = dadosPagto.agencia || ''
+    const conta   = dadosPagto.conta   || ''
+    const pix     = dadosPagto.pix     || ''
+    if (pix || banco) {
+      document.getElementById('card-dados-bancarios').style.display = 'block'
+      let html = ''
+      if (pix)     html += `<div class="dados-pix"><div class="dado-pix-label">PIX</div><div class="dado-pix-value">${pix}</div><button class="copy-btn" onclick="copiar('${pix}')">📋 Copiar</button></div><br>`
+      if (banco)   html += `<div class="row"><span class="row-label">Banco</span><span class="row-value">${banco}</span></div>`
+      if (agencia) html += `<div class="row"><span class="row-label">Agência</span><span class="row-value">${agencia}</span></div>`
+      if (conta)   html += `<div class="row"><span class="row-label">Conta</span><span class="row-value">${conta}</span></div>`
+      document.getElementById('dados-bancarios-body').innerHTML = html
+    }
+
+    mostrar('confirmar')
+  } catch(e) { mostrar('erro') }
+}
+
+function selecionarComprovante() {
+  const file = document.getElementById('file-comprovante').files[0]
+  if (!file) return
+  arquivoExt = file.name.split('.').pop().toLowerCase()
+  document.getElementById('upload-label').textContent = '✅ ' + file.name
+  document.getElementById('btn-confirmar').disabled = false
+
+  if (file.type.startsWith('image/')) {
+    const reader = new FileReader()
+    reader.onload = e => {
+      const img = document.getElementById('preview-img')
+      img.src = e.target.result; img.style.display = 'block'
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // Converte para base64
+  const r2 = new FileReader()
+  r2.onload = () => { arquivoBase64 = r2.result.split(',')[1] }
+  r2.readAsDataURL(file)
+}
+
+async function confirmarPagamento() {
+  if (!arquivoBase64) return alert('Selecione o comprovante primeiro')
+  const btn = document.getElementById('btn-confirmar')
+  btn.disabled = true; btn.textContent = '⏳ Confirmando...'
+
+  try {
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        acao:               'confirmar_pagamento_empregador',
+        token:              dadosPagto.token,
+        comprovante_base64: arquivoBase64,
+        extensao:           arquivoExt,
+        data_pagamento:     document.getElementById('data-pagamento').value,
+      })
+    })
+    const data = await res.json()
+    if (data.ok) { mostrar('sucesso') }
+    else {
+      btn.disabled = false; btn.textContent = '✅ Confirmar pagamento'
+      alert('Erro: ' + (data.erro || 'Tente novamente'))
+    }
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '✅ Confirmar pagamento'
+    alert('Erro de conexão. Tente novamente.')
+  }
+}
+
+function copiar(texto) {
+  navigator.clipboard.writeText(texto).then(() => alert('Copiado!'))
+}
+
+function mostrar(estado) {
+  ['loading','erro','pago','confirmar','sucesso'].forEach(s => {
+    const el = document.getElementById('estado-' + s)
+    if (el) el.style.display = s === estado ? 'block' : 'none'
+  })
+}
+</script>
+</body>
+</html>
