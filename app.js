@@ -1398,9 +1398,24 @@ function selecionarFuncPgto(funcId) {
   document.getElementById('pgto-func-nome').style.color   = 'var(--text-primary)'
   document.getElementById('pgto-func-sub').textContent    = (func['FUNCAO']||'') + ' · ' + (func['UNIDADE']||'')
 
-  // Mostra comissão do cadastro
+  // Comissão do cadastro
   const comp = document.getElementById('txt-comissao-anual')
   if (comp) comp.value = func['COMISSAO_ANUAL'] ? 'R$ ' + formatarValor(func['COMISSAO_ANUAL']) : 'Não cadastrado'
+
+  // Busca valor líquido identificado pela IA nas páginas fracionadas
+  const pagFunc = paginasFracionadas.find(p => String(p.funcId) === String(funcId))
+  if (pagFunc && pagFunc.valorLiquido) {
+    const inpValor = document.getElementById('inp-valor-liquidar')
+    const hintIA   = document.getElementById('hint-valor-ia')
+    const selComp  = document.getElementById('sel-comp-liquidar')
+    if (inpValor) inpValor.value = pagFunc.valorLiquido
+    if (hintIA)   hintIA.style.display = 'block'
+    if (selComp && pagFunc.competencia) {
+      for (let opt of selComp.options) {
+        if (opt.value === pagFunc.competencia) { selComp.value = pagFunc.competencia; break }
+      }
+    }
+  }
 
   // Mostra cards
   ;['card-liquidar','card-comissao-func','card-hist-pagamentos','card-relatorio'].forEach(id => {
