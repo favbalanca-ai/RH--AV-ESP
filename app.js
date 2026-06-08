@@ -696,12 +696,13 @@ async function enviarPaginaAssinaturaPropria(idx, tipo) {
   const res = await chamarGAS({
     acao: 'processar_pagina_proprio',
     dados: {
-      pdf_base64:  p.pdfBase64,
-      tipo:        tipoDoc,
-      competencia: p.competencia,
-      func_id:     p.funcId,
-      func_nome:   p.nome,
-      pagina:      p.pagina,
+      pdf_base64:   p.pdfBase64,
+      tipo:         tipoDoc,
+      competencia:  p.competencia,
+      func_id:      p.funcId,
+      func_nome:    p.nome,
+      pagina:       p.pagina,
+      valor_liquido: p.valorLiquido || null,
     }
   })
   esconderLoading()
@@ -1063,8 +1064,9 @@ async function identificarFuncionariosAutomatico() {
       compIA = d.competencia    || ''
 
       // Atualiza tipo e competência detectados pela IA
-      if (tipoIA) paginasFracionadas[i].tipoDoc    = tipoIA
-      if (compIA) paginasFracionadas[i].competencia = compIA
+      if (tipoIA) paginasFracionadas[i].tipoDoc     = tipoIA
+      if (compIA) paginasFracionadas[i].competencia  = compIA
+      if (d.valor_liquido) paginasFracionadas[i].valorLiquido = d.valor_liquido
 
       if (d.func_id) {
         func = funcionarios.find(f => String(f['ID']) === String(d.func_id))
@@ -1639,7 +1641,9 @@ async function carregarNotifPendentes() {
       <div style="display:flex;flex-direction:column;gap:6px">
         <div style="display:flex;gap:4px">
           <input type="number" id="val-${p['ID']}" placeholder="Valor líquido R$" step="0.01"
+            value="${p['VALOR_LIQUIDO'] || ''}"
             style="flex:1;border:0.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px">
+          ${p['VALOR_LIQUIDO'] ? '<div style="font-size:9px;color:var(--verde-text);margin-top:2px">🤖 Valor identificado pela IA</div>' : ''}
           <button onclick="confirmarNotifPagamento('${p['ID']}')"
             style="background:#22C55E;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap">
             <i class="ti ti-brand-whatsapp"></i> Enviar
