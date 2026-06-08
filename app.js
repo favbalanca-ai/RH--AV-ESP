@@ -182,7 +182,9 @@ function renderLembretes(pendentesEpi, pendentesFolha) {
     <div style="display:flex;flex-direction:column;gap:8px">
     ${todos.map(item => {
       const func = funcionarios.find(f => f['NOME_COMPLETO'] === item.nome)
-      const tel  = func ? '55' + func['TELEFONE'].replace(/\D/g,'') : ''
+      var telRaw = func ? String(func['TELEFONE']||'').replace(/\D/g,'') : ''
+  if (telRaw.length >= 12 && telRaw.substring(0,2) === '55') telRaw = telRaw.substring(2)
+  const tel  = telRaw ? '55' + telRaw : ''
       return `<div style="display:flex;align-items:center;gap:10px;padding:10px;background:#fff;border-radius:var(--radius-md);border:0.5px solid rgba(133,79,11,0.15)">
         <div class="avatar" style="background:var(--amber-bg);color:var(--amber-text)">${getIniciais(item.nome||'?')}</div>
         <div style="flex:1;min-width:0">
@@ -428,25 +430,8 @@ function renderEstoqueModal(lista) {
   }).join('')
 }
 
-function renderEstoque(lista) {
-  const icones = { 'Capacete':'🪖','Óculos':'🥽','Protetor':'👂','Respirador':'😷','Luva':'🧤','Bota':'👟','Avental':'🦺','Macacão':'👔','Colete':'🦺','Cinto':'🔒','Protetor Facial':'😷','Chapéu':'👒','Camisa':'👕','Botina':'👟','Máscara':'😷' }
-  function getIcone(nome) { for (const [k,v] of Object.entries(icones)) { if (nome.toLowerCase().includes(k.toLowerCase())) return v } return '🦺' }
-  document.getElementById('lista-estoque').innerHTML = lista.map(e => {
-    const sit = situacaoEpi(e)
-    const badgeCls = sit === '✅ OK' ? 'badge-verde' : sit === '⚠️ REPOR' ? 'badge-amarelo' : 'badge-vermelho'
-    return `<div class="epi-estoque-item">
-      <div class="epi-icone-wrap">${getIcone(e['DESCRIÇÃO DO EPI'])}</div>
-      <div class="epi-est-info">
-        <div class="epi-est-nome">${e['DESCRIÇÃO DO EPI']}</div>
-        <div class="epi-est-ca">CA ${e['Nº CA']||'—'} · ${e['UNIDADE']||'un'}</div>
-      </div>
-      <div class="epi-est-right">
-        <span class="epi-est-qty">${e['ESTOQUE ATUAL']}</span>
-        <span class="badge ${badgeCls}">${sit.replace('✅ ','').replace('⚠️ ','').replace('⛔ ','')}</span>
-      </div>
-    </div>`
-  }).join('')
-}
+// renderEstoque legada removida (usar renderEstoqueModal)
+
 
 function situacaoEpi(e) {
   const est = parseInt(e['ESTOQUE ATUAL'])||0, min = parseInt(e['ESTOQUE MÍNIMO'])||0
@@ -606,7 +591,9 @@ async function enviarEpi(metodo) {
 
 function mostrarLinkAssinaturaEpi(url, msg, waLinkCustom) {
   const el = document.getElementById('link-assinatura-epi')
-  const tel = funcEpiSelecionado ? '55' + funcEpiSelecionado['TELEFONE'].replace(/\D/g,'') : ''
+  var _telEpi = funcEpiSelecionado ? String(funcEpiSelecionado['TELEFONE']||'').replace(/\D/g,'') : ''
+  if (_telEpi.length >= 12 && _telEpi.substring(0,2) === '55') _telEpi = _telEpi.substring(2)
+  const tel = _telEpi ? '55' + _telEpi : ''
   const waUrl = waLinkCustom || (tel ? `https://wa.me/${tel}?text=${encodeURIComponent('Por favor, assine o documento: '+url)}` : '')
   el.style.display = 'block'
   el.innerHTML = `<p style="font-size:12px;font-weight:600;color:var(--verde-text);margin-bottom:6px">✅ ${msg}</p>
@@ -725,7 +712,7 @@ function atualizarCardEnviado(idx, data) {
   if (numEl) { numEl.className = 'fpc-num enviado'; numEl.innerHTML = '<i class="ti ti-circle-check" style="font-size:11px;vertical-align:-1px"></i> Pág. ' + paginasFracionadas[idx].pagina + ' — Enviado' }
   const actionEl = document.getElementById('fpc-action-' + idx)
   if (actionEl && data) {
-    const tel = paginasFracionadas[idx].telefone.replace(/\D/g,'')
+    const telRaw2 = String(paginasFracionadas[idx].telefone||'').replace(/\D/g,''); const tel = telRaw2
     actionEl.innerHTML = `<div class="fpc-links">
       <span class="btn-enviado-frac"><i class="ti ti-check"></i></span>
       ${data.link ? `<a href="${data.link}" target="_blank" class="btn-link-frac"><i class="ti ti-external-link"></i> Link</a>` : ''}
@@ -1343,7 +1330,7 @@ function toast(msg, tipo) {
   const el = document.getElementById('toast')
   el.textContent = msg; el.className = 'toast ' + (tipo||'')
   el.style.display = 'block'
-  setTimeout(() => el.style.display = 'none', 5000)
+  setTimeout(() => el.style.display = 'none', 3000)
 }
 
 function mostrarLoading(msg) {
@@ -1359,9 +1346,11 @@ function esconderLoading() { document.getElementById('loading').style.display = 
 let funcPgtoSelecionado = null
 
 function iniciarPagamento() {
+  carregarNotifPendentes()
+  carregarHistoricoPagamentos()
   // Preenche select de funcionários
   const sel = document.getElementById('sel-func-pgto')
-  if (sel && sel.options.length <= 1) {
+  if (sel) {
     sel.innerHTML = '<option value="">Selecione...</option>'
     funcionarios.forEach(f => { sel.innerHTML += `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>` })
   }
@@ -1396,8 +1385,11 @@ function selecionarFuncPgto(funcId) {
   document.getElementById('pgto-func-sub').textContent    = (func['FUNCAO']||'') + ' · ' + (func['UNIDADE']||'')
 
   carregarResumoPgto()
-  document.getElementById('card-autorizacao').style.display = 'block'
-  document.getElementById('card-relatorio').style.display    = 'block'
+  carregarHistoricoPagamentos()
+  const _ca = document.getElementById('card-autorizacao')
+  const _cr = document.getElementById('card-relatorio')
+  if (_ca) _ca.style.display = 'block'
+  if (_cr) _cr.style.display = 'block'
 
   // Preenche datas padrão: 1º do ano até hoje
   const hoje2 = new Date()
@@ -1804,9 +1796,5 @@ async function carregarHistoricoPagamentos() {
     </div>`).join('')
 }
 
-// Chama ao entrar na aba pagamento
-const _iniciarPagamentoOriginal = iniciarPagamento
-function iniciarPagamento() {
-  _iniciarPagamentoOriginal()
-  carregarNotifPendentes()
-}
+// carregarNotifPendentes é chamada dentro de iniciarPagamento diretamente
+// (override removido — causava recursão infinita)
