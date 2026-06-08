@@ -1053,7 +1053,23 @@ async function identificarFuncionariosAutomatico() {
       // Atualiza tipo e competência detectados pela IA
       if (tipoIA) paginasFracionadas[i].tipoDoc     = tipoIA
       if (compIA) paginasFracionadas[i].competencia  = compIA
-      if (d.valor_liquido) paginasFracionadas[i].valorLiquido = d.valor_liquido
+      if (d.valor_liquido) {
+        paginasFracionadas[i].valorLiquido = d.valor_liquido
+        // Preenche campo de liquidar se for o único funcionário ou o primeiro
+        const inpValor = document.getElementById('inp-valor-liquidar')
+        const hintIA   = document.getElementById('hint-valor-ia')
+        if (inpValor && !inpValor.value) {
+          inpValor.value = d.valor_liquido
+          if (hintIA) hintIA.style.display = 'block'
+        }
+        // Atualiza competência no select de liquidar
+        const selComp = document.getElementById('sel-comp-liquidar')
+        if (selComp && compIA) {
+          for (let opt of selComp.options) {
+            if (opt.value === compIA) { selComp.value = compIA; break }
+          }
+        }
+      }
 
       if (d.func_id) {
         func = funcionarios.find(f => String(f['ID']) === String(d.func_id))
