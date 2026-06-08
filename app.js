@@ -19,7 +19,7 @@ const EPI_SUGERIDOS_PERFIL = {
   BIOFABRICA:                  ['EPI-004','EPI-005','EPI-010','EPI-002'],
 }
 
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxayJeiQeUeHNfl0oz1xcJh6xzymXLREH-wosmRaLHTazaV6fo62y0bMgivnJTyv1oP/exec'
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxZAoTs9hTLs3LbOgjGKPiytHTEP6N0O34WpUHUYPRaFh5yKS6P6gXNRS9dMLlmHLtW/exec'
 const PDFLIB_URL = 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js'
 
 let USUARIO = null, SENHA_ADM = null
