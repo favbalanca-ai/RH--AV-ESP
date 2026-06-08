@@ -1174,7 +1174,7 @@ async function enviarPaginaZapSign(idx) {
   const btn = document.getElementById('btn-zap-' + idx)
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>'
   mostrarLoading('Enviando para ' + p.nome.split(' ')[0] + '...')
-  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfBase64, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true } })
+  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfBase64, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true, valor_liquido: p.valorLiquido || null } })
   esconderLoading()
   if (res && res.ok) {
     paginasFracionadas[idx].status  = 'enviado'
