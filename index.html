@@ -320,123 +320,16 @@
     <!-- PAGAMENTO -->
     <div id="pg-pagamento" class="pagina">
 
-      <!-- Resumo geral -->
-      <div class="card mb-3" id="card-resumo-pgto" style="display:none">
-        <div class="card-titulo"><i class="ti ti-chart-bar" aria-hidden="true"></i> Resumo do Ano</div>
-        <div id="resumo-pgto-body"></div>
+      <!-- Notificações pendentes -->
+      <div class="card mb-3" id="card-notif-pendentes" style="display:none">
+        <div class="card-titulo" style="color:var(--amber-text)"><i class="ti ti-bell-ringing" aria-hidden="true"></i> Aguardando pagamento</div>
+        <div id="lista-notif-pendentes"></div>
       </div>
 
       <!-- Seletor de funcionário -->
       <div class="card mb-3">
         <div class="card-titulo"><i class="ti ti-user" aria-hidden="true"></i> Funcionário</div>
-        <div style="position:relative">
-          <div id="pgto-func-display" class="func-selector" style="margin-bottom:8px">
-            <div class="avatar" id="pgto-func-avatar">?</div>
-            <div style="flex:1">
-              <div id="pgto-func-nome" style="font-size:13px;color:var(--text-secondary)">Selecione o funcionário...</div>
-              <div id="pgto-func-sub" style="font-size:10px;color:var(--text-hint)"></div>
-            </div>
-            <i class="ti ti-chevron-down" style="color:var(--text-hint);font-size:16px" aria-hidden="true"></i>
-          </div>
-          <select id="sel-func-pgto" onchange="selecionarFuncPgto(this.value)"
-            style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px"></select>
-        </div>
-        <div class="dois-col">
-          <div class="campo-grupo">
-            <label>Ano</label>
-            <select id="sel-ano-pgto" onchange="carregarResumoPgto()">
-            </select>
-          </div>
-          <div class="campo-grupo">
-            <label>Comissão anual (R$)</label>
-            <input type="number" id="inp-comissao-anual" placeholder="0,00" step="0.01">
-          </div>
-        </div>
-        <button onclick="salvarComissao()" class="btn-primario w-full mt-2">
-          <i class="ti ti-device-floppy" aria-hidden="true"></i> Salvar comissão anual
-        </button>
-      </div>
-
-      <!-- Resumo da comissão -->
-      <div class="card mb-3" id="card-comissao-func" style="display:none">
-        <div class="card-titulo"><i class="ti ti-coin" aria-hidden="true"></i> Comissão <span id="ano-label-pgto"></span></div>
-        <div id="comissao-resumo-body"></div>
-        <div style="margin-top:10px;border-top:0.5px solid var(--border);padding-top:10px">
-          <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">Registrar adiantamento</div>
-          <div class="dois-col">
-            <div class="campo-grupo">
-              <label>Data do pagamento</label>
-              <input type="date" id="inp-data-adiant">
-            </div>
-            <div class="campo-grupo">
-              <label>Valor (R$)</label>
-              <input type="number" id="inp-valor-adiant" placeholder="0,00" step="0.01">
-            </div>
-          </div>
-          <div class="campo-grupo">
-            <label>Forma de pagamento</label>
-            <select id="sel-forma-adiant">
-              <option>Pix</option><option>Dinheiro</option><option>Transferência</option><option>Cheque</option>
-            </select>
-          </div>
-          <div class="campo-grupo">
-            <label>Observações</label>
-            <input type="text" id="inp-obs-adiant" placeholder="opcional">
-          </div>
-          <button onclick="registrarAdiantamento()" class="btn-primario w-full mt-2">
-            <i class="ti ti-plus" aria-hidden="true"></i> Registrar adiantamento
-          </button>
-        </div>
-      </div>
-
-      <!-- Histórico de adiantamentos -->
-      <div class="card mb-3" id="card-hist-adiant" style="display:none">
-        <div class="card-titulo"><i class="ti ti-history" aria-hidden="true"></i> Adiantamentos registrados</div>
-        <div id="lista-adiantamentos" class="lista"></div>
-      </div>
-
-      <!-- Autorização de pagamento de salário -->
-      <div class="card" id="card-autorizacao" style="display:none">
-        <div class="card-titulo"><i class="ti ti-file-check" aria-hidden="true"></i> Autorização de pagamento (salário)</div>
-        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">
-          Gera documento interno com o valor do salário para autorização do proprietário.
-        </p>
-        <div class="dois-col">
-          <div class="campo-grupo">
-            <label>Competência</label>
-            <select id="sel-comp-autorizacao"></select>
-          </div>
-          <div class="campo-grupo">
-            <label>Valor do salário (R$)</label>
-            <input type="number" id="inp-valor-salario" placeholder="0,00" step="0.01">
-          </div>
-        </div>
-        <button onclick="gerarAutorizacao()" class="btn-primario w-full mt-2">
-          <i class="ti ti-file-plus" aria-hidden="true"></i> Gerar autorização
-        </button>
-        <div id="autorizacao-resultado" style="display:none;margin-top:10px"></div>
-        <div id="lista-autorizacoes" class="lista" style="margin-top:10px"></div>
-      </div>
-
-    </div>
-
-
-    <!-- PAGAMENTO -->
-    <div id="pg-pagamento" class="pagina">
-      <!-- Notificações pendentes de pagamento -->
-      <div class="card mb-3" id="card-notif-pendentes">
-        <div class="card-titulo"><i class="ti ti-bell-ringing" aria-hidden="true" style="color:var(--amber-text)"></i> Pagamentos pendentes</div>
-        <div id="lista-notif-pendentes"><p class="lista-vazia">Carregando...</p></div>
-      </div>
-
-      <!-- Notificações pendentes de pagamento -->
-      <div class="card mb-3" id="card-notif-pendentes">
-        <div class="card-titulo"><i class="ti ti-bell-ringing" aria-hidden="true" style="color:var(--amber-text)"></i> Pagamentos pendentes</div>
-        <div id="lista-notif-pendentes"><p class="lista-vazia">Nenhum pendente</p></div>
-      </div>
-      <div class="card mb-3">
-        <div class="card-titulo"><i class="ti ti-user" aria-hidden="true"></i> Funcionário &amp; Comissão</div>
-        <div style="position:relative;margin-bottom:8px">
+        <div style="position:relative;margin-bottom:10px">
           <div id="pgto-func-display" class="func-selector">
             <div class="avatar" id="pgto-func-avatar">?</div>
             <div style="flex:1"><div id="pgto-func-nome" style="font-size:13px;color:var(--text-secondary)">Selecione o funcionário...</div><div id="pgto-func-sub" style="font-size:10px;color:var(--text-hint)"></div></div>
@@ -446,80 +339,66 @@
         </div>
         <div class="dois-col">
           <div class="campo-grupo"><label>Ano</label><select id="sel-ano-pgto" onchange="carregarResumoPgto()"></select></div>
-          <div class="campo-grupo"><label>Comissão anual (R$)</label><input type="number" id="inp-comissao-anual" placeholder="0,00" step="0.01"></div>
+          <div class="campo-grupo"><label>Comissão anual 🔒</label><input type="text" id="txt-comissao-anual" readonly style="background:var(--surface);color:var(--text-secondary)"></div>
         </div>
-        <button onclick="salvarComissao()" class="btn-primario w-full mt-2"><i class="ti ti-device-floppy" aria-hidden="true"></i> Salvar comissão anual</button>
       </div>
 
+      <!-- Liquidar salário -->
+      <div class="card mb-3" id="card-liquidar" style="display:none">
+        <div class="card-titulo"><i class="ti ti-send" aria-hidden="true" style="color:var(--verde-text)"></i> Liquidar salário</div>
+        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">Gera link de confirmação enviado ao empregador via WhatsApp.</p>
+        <div class="dois-col">
+          <div class="campo-grupo"><label>Competência</label><select id="sel-comp-liquidar"></select></div>
+          <div class="campo-grupo"><label>Valor líquido (R$)</label><input type="number" id="inp-valor-liquidar" placeholder="0,00" step="0.01"><div id="hint-valor-ia" style="font-size:9px;color:var(--verde-text);margin-top:2px;display:none">🤖 Valor da IA</div></div>
+        </div>
+        <button onclick="liquidarSalario()" class="btn-primario w-full mt-2">
+          <i class="ti ti-brand-whatsapp" aria-hidden="true"></i> Gerar link e enviar ao empregador
+        </button>
+        <div id="liquidar-resultado" style="display:none;margin-top:8px"></div>
+      </div>
+
+      <!-- Comissão / adiantamentos -->
       <div class="card mb-3" id="card-comissao-func" style="display:none">
-        <div class="card-titulo"><i class="ti ti-coin" aria-hidden="true"></i> Comissão <span id="ano-label-pgto"></span></div>
+        <div class="card-titulo"><i class="ti ti-coin" aria-hidden="true"></i> Comissão <span id="ano-label-pgto"></span> 🔒</div>
         <div id="comissao-resumo-body"></div>
-        <div style="margin-top:10px;border-top:0.5px solid var(--border);padding-top:10px">
+        <div style="border-top:0.5px solid var(--border);padding-top:10px;margin-top:6px">
           <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">Registrar adiantamento</div>
           <div class="dois-col">
             <div class="campo-grupo"><label>Data</label><input type="date" id="inp-data-adiant"></div>
             <div class="campo-grupo"><label>Valor (R$)</label><input type="number" id="inp-valor-adiant" placeholder="0,00" step="0.01"></div>
           </div>
-          <div class="campo-grupo"><label>Forma</label><select id="sel-forma-adiant"><option>Pix</option><option>Dinheiro</option><option>Transferência</option><option>Cheque</option></select></div>
-          <div class="campo-grupo"><label>Observações</label><input type="text" id="inp-obs-adiant" placeholder="opcional"></div>
+          <div class="dois-col">
+            <div class="campo-grupo"><label>Forma</label><select id="sel-forma-adiant"><option>Pix</option><option>Dinheiro</option><option>Transferência</option><option>Cheque</option></select></div>
+            <div class="campo-grupo"><label>Observações</label><input type="text" id="inp-obs-adiant" placeholder="opcional"></div>
+          </div>
           <button onclick="registrarAdiantamento()" class="btn-primario w-full mt-2"><i class="ti ti-plus" aria-hidden="true"></i> Registrar adiantamento</button>
         </div>
       </div>
 
+      <!-- Histórico adiantamentos -->
       <div class="card mb-3" id="card-hist-adiant" style="display:none">
-        <div class="card-titulo"><i class="ti ti-history" aria-hidden="true"></i> Adiantamentos registrados</div>
+        <div class="card-titulo"><i class="ti ti-history" aria-hidden="true"></i> Adiantamentos de comissão</div>
         <div id="lista-adiantamentos" class="lista"></div>
       </div>
 
-      <div class="card mb-3" id="card-autorizacao" style="display:none">
-        <div class="card-titulo"><i class="ti ti-file-check" aria-hidden="true"></i> Autorização de pagamento</div>
-        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">Documento interno — autorização do proprietário para pagamento do salário.</p>
-        <div class="dois-col">
-          <div class="campo-grupo"><label>Competência</label><select id="sel-comp-autorizacao"></select></div>
-          <div class="campo-grupo"><label>Valor salário (R$)</label><input type="number" id="inp-valor-salario" placeholder="0,00" step="0.01"></div>
-        </div>
-        <button onclick="gerarAutorizacao()" class="btn-primario w-full mt-2"><i class="ti ti-file-plus" aria-hidden="true"></i> Gerar autorização</button>
-        <div id="autorizacao-resultado" style="display:none;margin-top:10px"></div>
+      <!-- Histórico de pagamentos de salário -->
+      <div class="card mb-3" id="card-hist-pagamentos" style="display:none">
+        <div class="card-titulo"><i class="ti ti-receipt" aria-hidden="true"></i> Histórico de salários</div>
+        <div id="historico-pagamentos" class="lista"></div>
       </div>
 
-      <!-- Relatório de pagamentos -->
-      <div class="card mb-3" id="card-relatorio" style="display:none">
-        <div class="card-titulo"><i class="ti ti-file-analytics" aria-hidden="true"></i> Relatório de pagamentos</div>
-        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">Gera PDF confidencial com salários e adiantamentos do período.</p>
+      <!-- Relatório -->
+      <div class="card" id="card-relatorio" style="display:none">
+        <div class="card-titulo"><i class="ti ti-file-analytics" aria-hidden="true"></i> Relatório do período</div>
         <div class="dois-col">
           <div class="campo-grupo"><label>Data início</label><input type="date" id="inp-relat-inicio"></div>
           <div class="campo-grupo"><label>Data fim</label><input type="date" id="inp-relat-fim"></div>
         </div>
-        <button onclick="gerarRelatorio()" class="btn-primario w-full mt-2">
-          <i class="ti ti-file-analytics" aria-hidden="true"></i> Gerar relatório PDF
-        </button>
-        <div id="relatorio-resultado" style="display:none;margin-top:10px"></div>
+        <button onclick="gerarRelatorio()" class="btn-primario w-full mt-2"><i class="ti ti-file-analytics" aria-hidden="true"></i> Gerar relatório PDF</button>
+        <div id="relatorio-resultado" style="display:none;margin-top:8px"></div>
       </div>
 
-      <!-- Relatório de pagamentos -->
-      <div class="card mb-3" id="card-relatorio" style="display:none">
-        <div class="card-titulo"><i class="ti ti-file-analytics" aria-hidden="true"></i> Relatório de pagamentos</div>
-        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">PDF confidencial com salários + adiantamentos do período.</p>
-        <div class="dois-col">
-          <div class="campo-grupo"><label>Data início</label><input type="date" id="inp-relat-inicio"></div>
-          <div class="campo-grupo"><label>Data fim</label><input type="date" id="inp-relat-fim"></div>
-        </div>
-        <button onclick="gerarRelatorio()" class="btn-primario w-full mt-2">
-          <i class="ti ti-file-analytics" aria-hidden="true"></i> Gerar relatório PDF
-        </button>
-        <div id="relatorio-resultado" style="display:none;margin-top:10px"></div>
-      </div>
-      <div class="card" id="card-hist-autorizacoes" style="display:none">
-        <div class="card-titulo"><i class="ti ti-history" aria-hidden="true"></i> Autorizações geradas</div>
-        <div id="lista-autorizacoes" class="lista"></div>
-      </div>
     </div>
-
-      <!-- Histórico de pagamentos -->
-      <div class="card mt-3">
-        <div class="card-titulo"><i class="ti ti-receipt" aria-hidden="true"></i> Histórico de pagamentos</div>
-        <div id="historico-pagamentos" class="lista"><p class="lista-vazia">Nenhum pagamento registrado</p></div>
-      </div>
 
   </main>
 
