@@ -1613,3 +1613,196 @@ async function gerarRelatorio() {
 function formatarValor(v) {
   return parseFloat(v||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// FLUXO DE PAGAMENTO COMPLETO
+// ═══════════════════════════════════════════════════════════════════
+
+async function carregarNotifPendentes() {
+  const res = await chamarGAS({ acao: 'listar_pagamentos', dados: { status: 'Aguardando Notificação' } })
+  const card = document.getElementById('card-notif-pendentes')
+  const el   = document.getElementById('lista-notif-pendentes')
+  if (!res || !res.ok || !res.data.length) {
+    if (card) card.style.display = 'none'
+    return
+  }
+  if (card) card.style.display = 'block'
+  el.innerHTML = res.data.map(p => `
+    <div style="background:#FFFBF5;border:0.5px solid rgba(133,79,11,0.2);border-radius:10px;padding:10px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+        <div>
+          <div style="font-size:13px;font-weight:600">${p['NOME_FUNC'].split(' ')[0]} ${p['NOME_FUNC'].split(' ')[1]||''}</div>
+          <div style="font-size:10px;color:var(--text-secondary)">${p['COMPETENCIA']} · Holerite assinado</div>
+        </div>
+        <span class="badge ba">Aguardando</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;gap:4px">
+          <input type="number" id="val-${p['ID']}" placeholder="Valor líquido R$" step="0.01"
+            style="flex:1;border:0.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px">
+          <button onclick="confirmarNotifPagamento('${p['ID']}')"
+            style="background:#22C55E;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap">
+            <i class="ti ti-brand-whatsapp"></i> Enviar
+          </button>
+        </div>
+        <button onclick="cancelarNotifPagamento('${p['ID']}')"
+          style="background:none;border:0.5px solid var(--border);border-radius:8px;padding:6px;font-size:11px;color:var(--text-secondary);cursor:pointer">
+          ✕ Cancelar notificação
+        </button>
+      </div>
+    </div>`).join('')
+}
+
+async function confirmarNotifPagamento(id) {
+  const valInput = document.getElementById('val-' + id)
+  const valor = valInput ? valInput.value : ''
+  if (!valor) { toast('❌ Informe o valor líquido', 'erro'); return }
+
+  mostrarLoading('Enviando notificação...')
+  const res = await chamarGAS({ acao: 'confirmar_notificacao', dados: { id, valor_liquido: parseFloat(valor) } })
+  esconderLoading()
+
+  if (res && res.ok) {
+    // Abre WhatsApp automaticamente
+    if (res.data.wa_link) window.open(res.data.wa_link, '_blank')
+    toast('✅ Notificação enviada ao empregador!', 'sucesso')
+    carregarNotifPendentes()
+
+    // Após enviar, mostra botão de comprovante
+    setTimeout(() => mostrarCardComprovante(id), 500)
+  } else {
+    toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
+  }
+}
+
+async function cancelarNotifPagamento(id) {
+  mostrarLoading('Cancelando...')
+  const res = await chamarGAS({ acao: 'cancelar_notificacao', dados: { id } })
+  esconderLoading()
+  if (res && res.ok) { toast('✅ Notificação cancelada', 'sucesso'); carregarNotifPendentes() }
+  else toast('❌ Erro', 'erro')
+}
+
+function mostrarCardComprovante(id) {
+  const existente = document.getElementById('card-comprovante-' + id)
+  if (existente) return
+
+  const card = document.createElement('div')
+  card.id = 'card-comprovante-' + id
+  card.className = 'card mb-3'
+  card.innerHTML = `
+    <div class="card-titulo"><i class="ti ti-receipt" aria-hidden="true" style="color:var(--verde-text)"></i> Comprovante de pagamento</div>
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">Anexe o comprovante enviado pelo empregador via WhatsApp.</p>
+    <div class="campo-grupo"><label>Data do pagamento</label><input type="date" id="data-pagto-${id}" value="${new Date().toISOString().split('T')[0]}"></div>
+    <div class="campo-grupo" style="margin-top:8px">
+      <label>Comprovante (foto ou PDF)</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surface);border:0.5px dashed var(--border);border-radius:10px;cursor:pointer">
+        <i class="ti ti-upload" style="font-size:16px;color:var(--text-secondary)"></i>
+        <span id="comp-nome-${id}" style="font-size:12px;color:var(--text-secondary)">Toque para selecionar...</span>
+        <input type="file" id="comp-file-${id}" accept="image/*,application/pdf" style="display:none" onchange="previsualizarComprovante('${id}')">
+      </label>
+    </div>
+    <div id="comp-preview-${id}" style="display:none;margin-top:8px;text-align:center">
+      <img id="comp-img-${id}" style="max-width:100%;border-radius:8px;border:0.5px solid var(--border);max-height:200px;object-fit:contain">
+    </div>
+    <div class="campo-grupo" style="margin-top:8px"><label>Observações</label><input type="text" id="comp-obs-${id}" placeholder="opcional"></div>
+    <button onclick="enviarComprovante('${id}')" class="btn-primario w-full mt-2">
+      <i class="ti ti-cloud-upload" aria-hidden="true"></i> Salvar comprovante no Drive
+    </button>`
+
+  // Insere após o card de notificações
+  const cardNotif = document.getElementById('card-notif-pendentes')
+  if (cardNotif && cardNotif.nextSibling) {
+    cardNotif.parentNode.insertBefore(card, cardNotif.nextSibling)
+  } else {
+    document.getElementById('pg-pagamento').prepend(card)
+  }
+}
+
+function previsualizarComprovante(id) {
+  const file  = document.getElementById('comp-file-' + id)?.files[0]
+  if (!file) return
+  document.getElementById('comp-nome-' + id).textContent = file.name
+  if (file.type.startsWith('image/')) {
+    const reader = new FileReader()
+    reader.onload = e => {
+      const preview = document.getElementById('comp-preview-' + id)
+      const img     = document.getElementById('comp-img-' + id)
+      preview.style.display = 'block'
+      img.src = e.target.result
+    }
+    reader.readAsDataURL(file)
+  } else {
+    document.getElementById('comp-preview-' + id).style.display = 'none'
+    toast('📄 PDF selecionado: ' + file.name, 'sucesso')
+  }
+}
+
+async function enviarComprovante(id) {
+  const file  = document.getElementById('comp-file-' + id)?.files[0]
+  const data  = document.getElementById('data-pagto-' + id)?.value
+  const obs   = document.getElementById('comp-obs-' + id)?.value
+
+  if (!file) return toast('❌ Selecione o comprovante', 'erro')
+
+  mostrarLoading('Salvando comprovante no Drive...')
+
+  // Converte arquivo para base64
+  const base64 = await new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result.split(',')[1])
+    reader.readAsDataURL(file)
+  })
+
+  const ext = file.name.split('.').pop().toLowerCase()
+  const res = await chamarGAS({ acao: 'registrar_comprovante', dados: {
+    id, comprovante_base64: base64, extensao: ext,
+    data_pagamento: data, observacoes: obs
+  }})
+  esconderLoading()
+
+  if (res && res.ok) {
+    toast('✅ Comprovante salvo no Drive!', 'sucesso')
+    document.getElementById('card-comprovante-' + id)?.remove()
+    carregarNotifPendentes()
+    carregarHistoricoPagamentos()
+  } else {
+    toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
+  }
+}
+
+async function carregarHistoricoPagamentos() {
+  const res = await chamarGAS({ acao: 'listar_pagamentos', dados: {} })
+  if (!res || !res.ok) return
+
+  const pagos     = res.data.filter(p => p['STATUS'] === 'Pago')
+  const notifados = res.data.filter(p => p['STATUS'] === 'Notificado')
+
+  // Atualiza histórico na aba Pgto se o elemento existir
+  const el = document.getElementById('historico-pagamentos')
+  if (!el) return
+
+  const todos = [...notifados, ...pagos]
+  if (!todos.length) { el.innerHTML = '<p class="lista-vazia">Nenhum pagamento registrado</p>'; return }
+
+  el.innerHTML = todos.map(p => `
+    <div class="lista-item">
+      <div class="av" style="background:${p['STATUS']==='Pago'?'var(--verde-claro)':'var(--amber-bg)'};color:${p['STATUS']==='Pago'?'var(--verde-text)':'var(--amber-text)'}">
+        ${getIniciais(p['NOME_FUNC']||'?')}
+      </div>
+      <div class="li-info">
+        <div class="li-nome">${p['NOME_FUNC']}</div>
+        <div class="li-sub">${p['COMPETENCIA']} · ${p['DATA_ASSINATURA']||''}</div>
+        ${p['COMPROVANTE_LINK'] ? `<a href="${p['COMPROVANTE_LINK']}" target="_blank" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px;margin-top:2px"><i class="ti ti-receipt" style="font-size:10px"></i> Ver comprovante</a>` : ''}
+        ${p['STATUS']==='Notificado' ? `<button onclick="mostrarCardComprovante('${p['ID']}')" style="font-size:10px;color:var(--verde-text);background:none;border:none;cursor:pointer;padding:0;margin-top:2px">+ Anexar comprovante</button>` : ''}
+      </div>
+      <span class="badge ${p['STATUS']==='Pago'?'badge-verde':'badge-amarelo'}">${p['STATUS']}</span>
+    </div>`).join('')
+}
+
+// Chama ao entrar na aba pagamento
+const _iniciarPagamentoOriginal = iniciarPagamento
+function iniciarPagamento() {
+  _iniciarPagamentoOriginal()
+  carregarNotifPendentes()
+}
