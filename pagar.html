@@ -153,7 +153,14 @@ async function carregarDados(token) {
     document.getElementById('info-comp').textContent   = dadosPagto.competencia
 
     if (dadosPagto.valor_liquido) {
-      const v = parseFloat(String(dadosPagto.valor_liquido).replace(/\./g,'').replace(',','.'))
+      let v = String(dadosPagto.valor_liquido).trim()
+      // Formato US (1940.43) — sem vírgula, ponto como decimal
+      if (v.indexOf(',') === -1) {
+        v = parseFloat(v)
+      } else {
+        // Formato BR (1.940,43) — remove ponto de milhar, troca vírgula
+        v = parseFloat(v.replace(/\./g,'').replace(',','.'))
+      }
       document.getElementById('info-valor').textContent = isNaN(v) ? dadosPagto.valor_liquido :
         'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits:2})
     }
