@@ -1370,11 +1370,16 @@ let funcPgtoSelecionado = null
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
 function formatarValor(v) {
-  if (!v) return '0,00'
-  const n = parseFloat(String(v).replace(/\./g,'').replace(',','.'))
+  if (!v && v !== 0) return '0,00'
+  const s = String(v).trim().replace(/R\$\s*/g,'')
+  let n
+  // US: 1940.43 — sem vírgula, ponto como decimal
+  if (s.indexOf(',') === -1) n = parseFloat(s)
+  // BR: 1.940,43 — remove pontos de milhar, troca vírgula
+  else n = parseFloat(s.replace(/\./g,'').replace(',','.'))
   if (isNaN(n)) return String(v)
-  const s = n.toFixed(2).split('.')
-  return s[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + s[1]
+  const parts = n.toFixed(2).split('.')
+  return parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + parts[1]
 }
 
 function normalizarComp(comp) {
