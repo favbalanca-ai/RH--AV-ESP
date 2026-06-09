@@ -1418,9 +1418,16 @@ function selecionarFuncPgto(funcId) {
   const comp = document.getElementById('txt-comissao-anual')
   if (comp) comp.value = func['COMISSAO_ANUAL'] ? 'R$ ' + formatarValor(func['COMISSAO_ANUAL']) : 'Não cadastrado'
 
-  ;['card-hist-pagamentos','card-comissao-func'].forEach(id => {
+  ;['card-hist-pagamentos','card-comissao-func','card-extrato'].forEach(id => {
     const el = document.getElementById(id); if (el) el.style.display = 'block'
   })
+
+  // Datas padrão do extrato — ano corrente
+  const ano = new Date().getFullYear()
+  const ini = document.getElementById('ext-inicio')
+  const fim = document.getElementById('ext-fim')
+  if (ini && !ini.value) ini.value = `${ano}-01-01`
+  if (fim && !fim.value) fim.value = new Date().toISOString().split('T')[0]
 
   carregarResumoPgto()
   carregarHistoricoPagamentos()
@@ -1540,6 +1547,110 @@ async function carregarHistoricoPagamentos() {
       </div>
     </div>`
   }).join('')
+}
+
+async function gerarExtrato() {
+  if (!funcPgtoSelecionado) return toast('❌ Selecione o funcionário', 'erro')
+  const ini  = document.getElementById('ext-inicio')?.value
+  const fim  = document.getElementById('ext-fim')?.value
+  if (!ini || !fim) return toast('❌ Informe o período', 'erro')
+
+  mostrarLoading('Gerando extrato...')
+
+  // Busca salários e adiantamentos em paralelo
+  const [resPag, resAdiant] = await Promise.all([
+    chamarGAS({ acao: 'listar_pagamentos',   dados: { func_id: funcPgtoSelecionado['ID'] } }),
+    chamarGAS({ acao: 'resumo_comissao',     dados: { func_id: funcPgtoSelecionado['ID'], ano: new Date().getFullYear() } }),
+  ])
+  esconderLoading()
+
+  const corpo  = document.getElementById('extrato-corpo')
+  const lista  = document.getElementById('extrato-lista')
+  const totais = document.getElementById('extrato-totais')
+  if (!corpo || !lista || !totais) return
+
+  // Filtra por período
+  const iniDate = new Date(ini)
+  const fimDate = new Date(fim + 'T23:59:59')
+
+  // Salários no período
+  const salarios = (resPag?.data || []).filter(p => {
+    const d = new Date(p['DATA_GERACAO'] || p['DATA_ASSINATURA'] || '2000-01-01')
+    return d >= iniDate && d <= fimDate
+  })
+
+  // Adiantamentos no período
+  const adiantamentos = (resAdiant?.data?.adiantamentos || []).filter(a => {
+    const d = new Date(a['DATA_PAGTO'] || '2000-01-01')
+    return d >= iniDate && d <= fimDate
+  })
+
+  // Monta itens unificados e ordena por data
+  const itens = [
+    ...salarios.map(p => ({
+      tipo:  'salario',
+      data:  p['DATA_GERACAO'] || p['DATA_ASSINATURA'] || '',
+      desc:  'Salário ' + normalizarComp(p['COMPETENCIA'] || p['COMPETÊNCIA'] || ''),
+      valor: p['VALOR_LIQUIDO'] || 0,
+      status: p['STATUS'],
+      link:  p['COMPROVANTE_LINK'] || '',
+    })),
+    ...adiantamentos.map(a => ({
+      tipo:  'adiantamento',
+      data:  a['DATA_PAGTO'] || '',
+      desc:  'Adiantamento · ' + (a['FORMA_PAGTO'] || '') + (a['OBSERVACOES'] ? ' · ' + a['OBSERVACOES'] : ''),
+      valor: a['VALOR'] || 0,
+      status: 'Pago',
+      link:  '',
+    })),
+  ].sort((a, b) => new Date(a.data) - new Date(b.data))
+
+  if (!itens.length) {
+    lista.innerHTML = '<p class="lista-vazia">Nenhum lançamento no período</p>'
+    totais.innerHTML = ''
+    corpo.style.display = 'block'
+    return
+  }
+
+  // Totais
+  const totalSal   = salarios.reduce((s, p) => s + (parseFloat(String(p['VALOR_LIQUIDO']||0).replace(',','.')) || 0), 0)
+  const totalAdiant = adiantamentos.reduce((s, a) => s + (parseFloat(String(a['VALOR']||0).replace(',','.')) || 0), 0)
+  const totalGeral = totalSal + totalAdiant
+
+  // Renderiza itens
+  lista.innerHTML = itens.map(it => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--border)">
+      <div style="width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;
+        background:${it.tipo==='salario'?'var(--verde-claro)':'var(--blue-bg)'}">
+        ${it.tipo==='salario'?'💼':'💰'}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.desc}</div>
+        <div style="font-size:10px;color:var(--text-secondary)">${it.data ? new Date(it.data).toLocaleDateString('pt-BR') : '—'}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:12px;font-weight:600;color:${it.tipo==='salario'?'var(--verde-text)':'var(--blue-text)'}">R$ ${formatarValor(it.valor)}</div>
+        <div style="font-size:9px;color:var(--text-secondary)">${it.status}</div>
+        ${it.link ? `<a href="${it.link}" target="_blank" style="font-size:9px;color:var(--blue-text)">comprovante</a>` : ''}
+      </div>
+    </div>`).join('')
+
+  totais.innerHTML = `
+    <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">Totais do período</div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+      <span style="color:var(--text-secondary)">💼 Salários (${salarios.length})</span>
+      <span style="font-weight:600;color:var(--verde-text)">R$ ${formatarValor(totalSal)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+      <span style="color:var(--text-secondary)">💰 Adiantamentos (${adiantamentos.length})</span>
+      <span style="font-weight:600;color:var(--blue-text)">R$ ${formatarValor(totalAdiant)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding:6px 0 0;border-top:0.5px solid var(--border);margin-top:4px">
+      <span>Total geral</span>
+      <span style="color:var(--verde-text)">R$ ${formatarValor(totalGeral)}</span>
+    </div>`
+
+  corpo.style.display = 'block'
 }
 
 async function carregarNotifPendentes() {
