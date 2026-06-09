@@ -148,21 +148,38 @@ async function carregarDados(token) {
     }
 
     // Preenche dados
+    // Normaliza competência — trata objeto Date serializado, dd/mm/yyyy, etc
+    function normalizarComp(s) {
+      const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+      s = String(s || '').trim()
+      // Objeto Date: "Fri May 01 2026 04:00:00..."
+      const mEng = {'Jan':0,'Feb':1,'Mar':2,'Apr':3,'May':4,'Jun':5,'Jul':6,'Aug':7,'Sep':8,'Oct':9,'Nov':10,'Dec':11}
+      const mMatch = s.match(/([A-Z][a-z]{2})\s+\d{2}\s+(\d{4})/)
+      if (mMatch && mEng[mMatch[1]] !== undefined) return meses[mEng[mMatch[1]]] + '/' + mMatch[2]
+      // dd/mm/yyyy
+      const d1 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+      if (d1) return meses[parseInt(d1[2])-1] + '/' + d1[3]
+      // mm/yyyy
+      const d2 = s.match(/^(\d{2})\/(\d{4})$/)
+      if (d2) return meses[parseInt(d2[1])-1] + '/' + d2[2]
+      return s
+    }
+
+    // Normaliza valor — US (1940.43) ou BR (1.940,43)
+    function normalizarValor(v) {
+      const s = String(v || '').trim()
+      if (!s) return null
+      if (s.indexOf(',') === -1) return parseFloat(s)
+      return parseFloat(s.replace(/\./g,'').replace(',','.'))
+    }
+
     document.getElementById('info-nome').textContent   = dadosPagto.nome_func
     document.getElementById('info-funcao').textContent = dadosPagto.funcao || '—'
-    document.getElementById('info-comp').textContent   = dadosPagto.competencia
+    document.getElementById('info-comp').textContent   = normalizarComp(dadosPagto.competencia)
 
-    if (dadosPagto.valor_liquido) {
-      let v = String(dadosPagto.valor_liquido).trim()
-      // Formato US (1940.43) — sem vírgula, ponto como decimal
-      if (v.indexOf(',') === -1) {
-        v = parseFloat(v)
-      } else {
-        // Formato BR (1.940,43) — remove ponto de milhar, troca vírgula
-        v = parseFloat(v.replace(/\./g,'').replace(',','.'))
-      }
-      document.getElementById('info-valor').textContent = isNaN(v) ? dadosPagto.valor_liquido :
-        'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits:2})
+    const valor = normalizarValor(dadosPagto.valor_liquido)
+    if (valor && !isNaN(valor)) {
+      document.getElementById('info-valor').textContent = 'R$ ' + valor.toLocaleString('pt-BR', {minimumFractionDigits:2})
     }
 
     // Dados bancários
