@@ -376,6 +376,22 @@
         <div id="lista-adiantamentos" class="lista"></div>
       </div>
 
+      <!-- Extrato -->
+      <div class="card mb-3" id="card-extrato" style="display:none">
+        <div class="card-titulo"><i class="ti ti-file-text" aria-hidden="true"></i> Extrato</div>
+        <div class="dois-col" style="margin-bottom:8px">
+          <div class="campo-grupo"><label>De</label><input type="date" id="ext-inicio"></div>
+          <div class="campo-grupo"><label>Até</label><input type="date" id="ext-fim"></div>
+        </div>
+        <button onclick="gerarExtrato()" class="btn-primario w-full" style="margin-bottom:10px">
+          <i class="ti ti-search" aria-hidden="true"></i> Consultar
+        </button>
+        <div id="extrato-corpo" style="display:none">
+          <div id="extrato-lista"></div>
+          <div id="extrato-totais" style="background:var(--surface);border-radius:10px;padding:10px 12px;margin-top:8px"></div>
+        </div>
+      </div>
+
     </div>
 
   </main>
