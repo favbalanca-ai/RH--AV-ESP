@@ -153,8 +153,9 @@ async function carregarDados(token) {
     document.getElementById('info-comp').textContent   = dadosPagto.competencia
 
     if (dadosPagto.valor_liquido) {
-      document.getElementById('info-valor').textContent = 'R$ ' +
-        parseFloat(dadosPagto.valor_liquido).toLocaleString('pt-BR', {minimumFractionDigits:2})
+      const v = parseFloat(String(dadosPagto.valor_liquido).replace(/\./g,'').replace(',','.'))
+      document.getElementById('info-valor').textContent = isNaN(v) ? dadosPagto.valor_liquido :
+        'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits:2})
     }
 
     // Dados bancários
