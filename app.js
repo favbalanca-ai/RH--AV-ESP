@@ -877,7 +877,7 @@ function renderHistoricoFolha(lista) {
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
         ${badge(f['STATUS'])}
-        ${f['STATUS'] === 'Assinado' ? `<button onclick="notificarPagamentoIndividual('${f['ID FUNC.']}','${f['COMPETÊNCIA']}')"
+        ${f['STATUS'] === 'Assinado' ? `<button onclick="notificarPagamentoIndividual('${f['ID FUNC.']}','${normalizarComp(f['COMPETÊNCIA'])}')"
           style="background:#25D366;color:#fff;border:none;border-radius:6px;padding:3px 7px;font-size:10px;cursor:pointer;display:flex;align-items:center;gap:3px">
           <i class="ti ti-brand-whatsapp"></i>
         </button>` : ''}
@@ -886,12 +886,9 @@ function renderHistoricoFolha(lista) {
 }
 
 async function notificarPagamentoIndividual(funcId, competencia) {
-  // Pede valor líquido antes de gerar a mensagem
-  const valorStr = prompt('💰 Valor líquido do salário (R$):\nEx: 3565.07\n\nDeixe em branco se não souber', '')
-  const valorLiquido = valorStr !== null ? valorStr.replace(',', '.') : ''
-
-  mostrarLoading('Gerando mensagem...')
-  const res = await chamarGAS({ acao: 'gerar_msg_pagamento', dados: { func_id: funcId, competencia, valor_liquido: valorLiquido } })
+  mostrarLoading('Gerando notificação...')
+  // Busca valor líquido automaticamente — sem prompt manual
+  const res = await chamarGAS({ acao: 'gerar_msg_pagamento', dados: { func_id: funcId, competencia } })
   esconderLoading()
   if (!res || !res.ok || !res.data.length) return toast('❌ Erro ao gerar mensagem', 'erro')
   const m = res.data[0]
@@ -910,7 +907,7 @@ async function notificarPagamentoLote() {
   const assinados = resFolhas.data.filter(f => f['COMPETÊNCIA'] === competencia && f['STATUS'] === 'Assinado')
   const funcIds   = assinados.map(f => f['ID FUNC.'])
 
-  const res = await chamarGAS({ acao: 'gerar_msg_pagamento', dados: { func_ids: funcIds, competencia } })
+  const res = await chamarGAS({ acao: 'gerar_msg_pagamento', dados: { func_ids: funcIds, competencia: normalizarComp(competencia) } })
   esconderLoading()
   if (!res || !res.ok || !res.data.length) return toast('❌ Erro ao gerar mensagens', 'erro')
   // Para lote, mostra modal onde ADM pode ver e editar valor antes de enviar
@@ -1611,4 +1608,16 @@ async function gerarRelatorio() {
 
 function formatarValor(v) {
   return parseFloat(v||0).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 })
+}
+
+function normalizarComp(comp) {
+  const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+  const s = String(comp || '').trim()
+  // Se for dd/mm/yyyy → Mês/yyyy
+  const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (m) return meses[parseInt(m[2])-1] + '/' + m[3]
+  // Se for mm/yyyy → Mês/yyyy
+  const m2 = s.match(/^(\d{2})\/(\d{4})$/)
+  if (m2) return meses[parseInt(m2[1])-1] + '/' + m2[2]
+  return s
 }
