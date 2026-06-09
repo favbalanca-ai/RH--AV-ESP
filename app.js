@@ -1363,34 +1363,44 @@ function mostrarLoading(msg) {
 function esconderLoading() { document.getElementById('loading').style.display = 'none' }
 
 // ═══════════════════════════════════════════════════════════════════
-// MÓDULO: CONTROLE DE PAGAMENTO — Simplificado
+// MÓDULO: CONTROLE DE PAGAMENTO
 // ═══════════════════════════════════════════════════════════════════
 
 let funcPgtoSelecionado = null
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
+function formatarValor(v) {
+  if (!v) return '0,00'
+  const n = parseFloat(String(v).replace(/\./g,'').replace(',','.'))
+  if (isNaN(n)) return String(v)
+  const s = n.toFixed(2).split('.')
+  return s[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + s[1]
+}
+
+function normalizarComp(comp) {
+  const s = String(comp||'').trim()
+  const m = s.match(/([A-Z][a-z]{2})\s+\d{2}\s+(\d{4})/)
+  const eng = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11}
+  if (m && eng[m[1]] !== undefined) return MESES[eng[m[1]]] + '/' + m[2]
+  const d1 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (d1) return MESES[parseInt(d1[2])-1] + '/' + d1[3]
+  const d2 = s.match(/^(\d{2})\/(\d{4})$/)
+  if (d2) return MESES[parseInt(d2[1])-1] + '/' + d2[2]
+  return s
+}
+
 function iniciarPagamento() {
   carregarNotifPendentes()
-  // Popula select funcionário
   const sel = document.getElementById('sel-func-pgto')
   if (sel) {
     sel.innerHTML = '<option value="">Selecione...</option>'
     funcionarios.forEach(f => { sel.innerHTML += `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>` })
   }
-  // Popula ano
   const selAno = document.getElementById('sel-ano-pgto')
-  if (selAno && selAno.options.length === 0) {
+  if (selAno && !selAno.options.length) {
     const ano = new Date().getFullYear()
-    for (let a = ano; a >= ano - 3; a--) selAno.innerHTML += `<option value="${a}">${a}</option>`
+    for (let a = ano; a >= ano-3; a--) selAno.innerHTML += `<option value="${a}">${a}</option>`
   }
-  // Popula competências para liquidar
-  const selComp = document.getElementById('sel-comp-liquidar')
-  if (selComp && selComp.options.length === 0) {
-    const ano = new Date().getFullYear(), mes = new Date().getMonth()
-    for (let m = mes; m >= 0; m--) selComp.innerHTML += `<option value="${MESES[m]}/${ano}">${MESES[m]}/${ano}</option>`
-    for (let m = 11; m > mes; m--) selComp.innerHTML += `<option value="${MESES[m]}/${ano-1}">${MESES[m]}/${ano-1}</option>`
-  }
-  // Data adiantamento padrão
   const inpData = document.getElementById('inp-data-adiant')
   if (inpData && !inpData.value) inpData.value = new Date().toISOString().split('T')[0]
 }
@@ -1405,37 +1415,12 @@ function selecionarFuncPgto(funcId) {
   document.getElementById('pgto-func-nome').style.color   = 'var(--text-primary)'
   document.getElementById('pgto-func-sub').textContent    = (func['FUNCAO']||'') + ' · ' + (func['UNIDADE']||'')
 
-  // Comissão do cadastro
   const comp = document.getElementById('txt-comissao-anual')
   if (comp) comp.value = func['COMISSAO_ANUAL'] ? 'R$ ' + formatarValor(func['COMISSAO_ANUAL']) : 'Não cadastrado'
 
-  // Busca valor líquido identificado pela IA nas páginas fracionadas
-  const pagFunc = paginasFracionadas.find(p => String(p.funcId) === String(funcId))
-  if (pagFunc && pagFunc.valorLiquido) {
-    const inpValor = document.getElementById('inp-valor-liquidar')
-    const hintIA   = document.getElementById('hint-valor-ia')
-    const selComp  = document.getElementById('sel-comp-liquidar')
-    if (inpValor) inpValor.value = pagFunc.valorLiquido
-    if (hintIA)   hintIA.style.display = 'block'
-    if (selComp && pagFunc.competencia) {
-      for (let opt of selComp.options) {
-        if (opt.value === pagFunc.competencia) { selComp.value = pagFunc.competencia; break }
-      }
-    }
-  }
-
-  // Mostra cards
-  ;['card-liquidar','card-comissao-func','card-hist-pagamentos','card-relatorio'].forEach(id => {
-    const el = document.getElementById(id)
-    if (el) el.style.display = 'block'
+  ;['card-hist-pagamentos','card-comissao-func'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.display = 'block'
   })
-
-  // Datas relatório
-  const hoje = new Date(), anoAtual = hoje.getFullYear()
-  const ini = document.getElementById('inp-relat-inicio')
-  const fim = document.getElementById('inp-relat-fim')
-  if (ini && !ini.value) ini.value = anoAtual + '-01-01'
-  if (fim && !fim.value) fim.value = hoje.toISOString().split('T')[0]
 
   carregarResumoPgto()
   carregarHistoricoPagamentos()
@@ -1448,23 +1433,33 @@ async function carregarResumoPgto() {
 
   const res = await chamarGAS({ acao: 'resumo_comissao', dados: { func_id: funcPgtoSelecionado['ID'], ano } })
   if (!res || !res.ok) return
-
-  const d = res.data
-  const pct = d.percentual || 0
+  const d   = res.data
+  const pct = Math.min(d.percentual || 0, 100)
   const cor = pct >= 100 ? 'var(--verde)' : pct >= 50 ? 'var(--amber-text)' : 'var(--blue-text)'
 
   document.getElementById('comissao-resumo-body').innerHTML = `
     <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--text-secondary)">Total anual</span><span style="font-weight:600">R$ ${formatarValor(d.valor_anual)}</span></div>
-      <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--text-secondary)">Total pago</span><span style="font-weight:600;color:var(--verde-text)">R$ ${formatarValor(d.total_pago)}</span></div>
-      <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--text-secondary)">Saldo</span><span style="font-weight:700;color:${d.saldo > 0 ? 'var(--amber-text)':'var(--verde-text)'}">R$ ${formatarValor(d.saldo)}</span></div>
-      <div style="background:var(--border);border-radius:4px;height:7px;margin-top:3px;overflow:hidden"><div style="height:100%;width:${Math.min(pct,100)}%;background:${cor};border-radius:4px"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px">
+        <span style="color:var(--text-secondary)">Total anual</span>
+        <span style="font-weight:600">R$ ${formatarValor(d.valor_anual)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px">
+        <span style="color:var(--text-secondary)">Total pago</span>
+        <span style="font-weight:600;color:var(--verde-text)">R$ ${formatarValor(d.total_pago)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px">
+        <span style="color:var(--text-secondary)">Saldo</span>
+        <span style="font-weight:700;color:${d.saldo>0?'var(--amber-text)':'var(--verde-text)'}">R$ ${formatarValor(d.saldo)}</span>
+      </div>
+      <div style="background:var(--border);border-radius:4px;height:7px;margin-top:3px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${cor};border-radius:4px"></div>
+      </div>
       <div style="font-size:10px;color:var(--text-secondary);text-align:right">${pct}% pago</div>
     </div>`
 
   renderAdiantamentos(d.adiantamentos || [])
-  const cardHist = document.getElementById('card-hist-adiant')
-  if (cardHist) cardHist.style.display = d.adiantamentos?.length ? 'block' : 'none'
+  const cardAdiant = document.getElementById('card-hist-adiant')
+  if (cardAdiant) cardAdiant.style.display = d.adiantamentos?.length ? 'block' : 'none'
 }
 
 function renderAdiantamentos(lista) {
@@ -1475,7 +1470,7 @@ function renderAdiantamentos(lista) {
     <div class="lista-item">
       <div class="lista-item-info">
         <div class="lista-item-nome">R$ ${formatarValor(a['VALOR'])}</div>
-        <div class="lista-item-sub">${a['DATA_PAGTO']} · ${a['FORMA_PAGTO']}${a['OBSERVACOES'] ? ' · ' + a['OBSERVACOES'] : ''}</div>
+        <div class="lista-item-sub">${a['DATA_PAGTO']} · ${a['FORMA_PAGTO']}${a['OBSERVACOES']?' · '+a['OBSERVACOES']:''}</div>
       </div>
       <span class="badge badge-verde">Pago</span>
     </div>`).join('')
@@ -1492,8 +1487,9 @@ async function registrarAdiantamento() {
 
   mostrarLoading('Registrando...')
   const res = await chamarGAS({ acao: 'registrar_adiantamento', dados: {
-    func_id: funcPgtoSelecionado['ID'], ano, data_pagto: data,
-    valor: parseFloat(valor), forma_pagto: forma, observacoes: obs
+    func_id: funcPgtoSelecionado['ID'], ano,
+    data_pagto: data, valor: parseFloat(valor),
+    forma_pagto: forma, observacoes: obs
   }})
   esconderLoading()
   if (res && res.ok) {
@@ -1504,138 +1500,69 @@ async function registrarAdiantamento() {
   } else toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
 }
 
-// ─── Liquidar salário ─────────────────────────────────────────────
-async function liquidarSalario() {
-  if (!funcPgtoSelecionado) return toast('❌ Selecione o funcionário', 'erro')
-  const comp  = document.getElementById('sel-comp-liquidar')?.value
-  const valor = document.getElementById('inp-valor-liquidar')?.value
-  if (!comp)  return toast('❌ Selecione a competência', 'erro')
-  if (!valor) return toast('❌ Informe o valor líquido', 'erro')
-
-  mostrarLoading('Gerando link de confirmação...')
-  const res = await chamarGAS({ acao: 'liquidar_salario', dados: {
-    func_id:       funcPgtoSelecionado['ID'],
-    competencia:   comp,
-    valor_liquido: parseFloat(valor),
-  }})
-  esconderLoading()
-
-  if (res && res.ok) {
-    const d = res.data
-    // Abre WhatsApp automaticamente
-    if (d.wa_link) window.open(d.wa_link, '_blank')
-
-    const el = document.getElementById('liquidar-resultado')
-    el.style.display = 'block'
-    el.innerHTML = `
-      <div style="background:var(--verde-claro);border-radius:10px;padding:10px 12px">
-        <div style="font-size:12px;font-weight:600;color:var(--verde-text);margin-bottom:6px">✅ Link gerado e WhatsApp aberto!</div>
-        <div style="display:flex;gap:6px;align-items:center">
-          <input value="${d.link}" readonly style="flex:1;font-size:10px;border:0.5px solid var(--border);border-radius:6px;padding:5px 8px;background:#fff" id="inp-link-pgto">
-          <button onclick="navigator.clipboard.writeText(document.getElementById('inp-link-pgto').value);toast('✅ Copiado!','sucesso')"
-            style="background:var(--verde);color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer">Copiar</button>
-          ${d.wa_link ? `<a href="${d.wa_link}" target="_blank" style="background:#22C55E;color:#fff;border-radius:6px;padding:5px 10px;font-size:13px;text-decoration:none;display:flex;align-items:center"><i class="ti ti-brand-whatsapp"></i></a>` : ''}
-        </div>
-      </div>`
-    toast('✅ Link enviado!', 'sucesso')
-    carregarHistoricoPagamentos()
-  } else toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
+async function carregarHistoricoPagamentos() {
+  if (!funcPgtoSelecionado) return
+  const res  = await chamarGAS({ acao: 'listar_pagamentos', dados: { func_id: funcPgtoSelecionado['ID'] } })
+  const el   = document.getElementById('historico-pagamentos')
+  const card = document.getElementById('card-hist-pagamentos')
+  if (!el) return
+  if (!res || !res.ok || !res.data?.length) {
+    el.innerHTML = '<p class="lista-vazia">Nenhum salário registrado</p>'
+    return
+  }
+  if (card) card.style.display = 'block'
+  el.innerHTML = res.data.map(p => {
+    const pago     = p['STATUS'] === 'Pago'
+    const compNorm = normalizarComp(p['COMPETENCIA'] || p['COMPETÊNCIA'] || '')
+    const valor    = p['VALOR_LIQUIDO'] ? 'R$ ' + formatarValor(p['VALOR_LIQUIDO']) : ''
+    return `
+    <div class="lista-item">
+      <div class="av" style="background:${pago?'var(--verde-claro)':'var(--amber-bg)'};color:${pago?'var(--verde-text)':'var(--amber-text)'}">
+        ${getIniciais(p['NOME_FUNC']||'?')}
+      </div>
+      <div class="lista-item-info">
+        <div class="lista-item-nome">${compNorm}${valor?' · '+valor:''}</div>
+        <div class="lista-item-sub">${p['DATA_GERACAO']||p['DATA_ASSINATURA']||''}</div>
+        ${p['COMPROVANTE_LINK']
+          ? `<a href="${p['COMPROVANTE_LINK']}" target="_blank" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px;margin-top:2px">
+               <i class="ti ti-receipt" style="font-size:10px"></i> Ver comprovante
+             </a>`
+          : ''}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        <span class="badge ${pago?'badge-verde':'badge-amarelo'}">${p['STATUS']||'—'}</span>
+        ${!pago && p['WA_LINK_EMPREGADOR']
+          ? `<a href="${p['WA_LINK_EMPREGADOR']}" target="_blank"
+               style="background:#22C55E;color:#fff;border-radius:6px;padding:3px 7px;font-size:10px;text-decoration:none;display:flex;align-items:center;gap:3px">
+               <i class="ti ti-brand-whatsapp" style="font-size:10px"></i> Reenviar
+             </a>`
+          : ''}
+      </div>
+    </div>`
+  }).join('')
 }
 
-// ─── Notificações pendentes ───────────────────────────────────────
 async function carregarNotifPendentes() {
   const res  = await chamarGAS({ acao: 'listar_pagamentos', dados: { status: 'Aguardando Pagamento' } })
   const card = document.getElementById('card-notif-pendentes')
   const el   = document.getElementById('lista-notif-pendentes')
   if (!card || !el) return
-  if (!res || !res.ok || !res.data.length) { card.style.display = 'none'; return }
+  if (!res || !res.ok || !res.data?.length) { card.style.display = 'none'; return }
   card.style.display = 'block'
   el.innerHTML = res.data.map(p => `
     <div style="background:#FFFBF5;border:0.5px solid rgba(133,79,11,0.2);border-radius:10px;padding:10px;margin-bottom:6px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <div>
           <div style="font-size:13px;font-weight:600">${p['NOME_FUNC']}</div>
-          <div style="font-size:10px;color:var(--text-secondary)">${p['COMPETENCIA']} · ${p['VALOR_LIQUIDO'] ? 'R$ '+formatarValor(p['VALOR_LIQUIDO']) : 'valor pendente'}</div>
+          <div style="font-size:10px;color:var(--text-secondary)">${normalizarComp(p['COMPETENCIA']||'')}${p['VALOR_LIQUIDO']?' · R$ '+formatarValor(p['VALOR_LIQUIDO']):''}</div>
         </div>
         <span class="badge ba">Aguardando</span>
       </div>
-      ${p['WA_LINK_EMPREGADOR'] ? `<a href="${p['WA_LINK_EMPREGADOR']}" target="_blank" style="background:#22C55E;color:#fff;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px;margin-top:4px"><i class="ti ti-brand-whatsapp"></i> Reenviar</a>` : ''}
+      ${p['WA_LINK_EMPREGADOR']
+        ? `<a href="${p['WA_LINK_EMPREGADOR']}" target="_blank"
+             style="background:#22C55E;color:#fff;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px;margin-top:4px">
+             <i class="ti ti-brand-whatsapp"></i> Reenviar
+           </a>`
+        : ''}
     </div>`).join('')
-}
-
-// ─── Histórico de pagamentos ──────────────────────────────────────
-async function carregarHistoricoPagamentos() {
-  const res = await chamarGAS({ acao: 'listar_pagamentos', dados: funcPgtoSelecionado ? { func_id: funcPgtoSelecionado['ID'] } : {} })
-  const el  = document.getElementById('historico-pagamentos')
-  const card = document.getElementById('card-hist-pagamentos')
-  if (!el) return
-  if (!res || !res.ok || !res.data.length) {
-    if (card) card.style.display = 'none'; return
-  }
-  if (card) card.style.display = 'block'
-  el.innerHTML = res.data.map(p => `
-    <div class="lista-item">
-      <div class="av" style="background:${p['STATUS']==='Pago'?'var(--verde-claro)':'var(--amber-bg)'};color:${p['STATUS']==='Pago'?'var(--verde-text)':'var(--amber-text)'}">
-        ${getIniciais(p['NOME_FUNC']||'?')}
-      </div>
-      <div class="lista-item-info">
-        <div class="lista-item-nome">${p['NOME_FUNC']}</div>
-        <div class="lista-item-sub">${p['COMPETENCIA']}${p['VALOR_LIQUIDO']?' · R$ '+formatarValor(p['VALOR_LIQUIDO']):''}</div>
-        ${p['COMPROVANTE_LINK'] ? `<a href="${p['COMPROVANTE_LINK']}" target="_blank" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px;margin-top:2px"><i class="ti ti-receipt" style="font-size:10px"></i> Ver comprovante</a>` : ''}
-      </div>
-      <span class="badge ${p['STATUS']==='Pago'?'badge-verde':'badge-amarelo'}">${p['STATUS']||'—'}</span>
-    </div>`).join('')
-}
-
-async function gerarRelatorio() {
-  if (!funcPgtoSelecionado) return toast('❌ Selecione o funcionário', 'erro')
-  const inicio = document.getElementById('inp-relat-inicio')?.value
-  const fim    = document.getElementById('inp-relat-fim')?.value
-  if (!inicio || !fim) return toast('❌ Informe o período', 'erro')
-  if (inicio > fim)    return toast('❌ Data início deve ser antes da data fim', 'erro')
-
-  const btn = document.querySelector('[onclick="gerarRelatorio()"]')
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Gerando...' }
-  mostrarLoading('Gerando relatório PDF...')
-
-  const res = await chamarGAS({ acao: 'gerar_relatorio_pagamentos',
-    dados: { func_id: funcPgtoSelecionado['ID'], data_inicio: inicio, data_fim: fim } })
-  esconderLoading()
-  if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-file-analytics"></i> Gerar relatório PDF' }
-
-  if (res && res.ok) {
-    const d     = res.data
-    const bytes = Uint8Array.from(atob(d.pdf_base64), c => c.charCodeAt(0))
-    const url   = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
-    window.open(url, '_blank')
-    setTimeout(() => URL.revokeObjectURL(url), 60000)
-
-    const el = document.getElementById('relatorio-resultado')
-    el.style.display = 'block'
-    el.innerHTML = `
-      <div style="background:var(--verde-claro);border-radius:var(--radius-md);padding:10px 12px;font-size:11px">
-        <div style="font-weight:600;color:var(--verde-text);margin-bottom:4px">✅ ${d.num_folhas} holerite(s) + ${d.num_adiantamentos} adiantamento(s)</div>
-        <div style="display:flex;justify-content:space-between"><span style="color:var(--text-secondary)">Total salários</span><span style="font-weight:600">R$ ${formatarValor(d.total_salarios)}</span></div>
-        <div style="display:flex;justify-content:space-between"><span style="color:var(--text-secondary)">Total adiantamentos</span><span style="font-weight:600">R$ ${formatarValor(d.total_adiantamentos)}</span></div>
-        <div style="display:flex;justify-content:space-between;border-top:0.5px solid rgba(26,92,42,0.2);margin-top:4px;padding-top:4px"><span style="font-weight:700;color:var(--verde-text)">Total geral</span><span style="font-weight:700;color:var(--verde-text)">R$ ${formatarValor(d.total_geral)}</span></div>
-        ${d.saldo_comissao > 0 ? `<div style="display:flex;justify-content:space-between;margin-top:2px"><span style="color:var(--amber-text)">Saldo comissão</span><span style="font-weight:600;color:var(--amber-text)">R$ ${formatarValor(d.saldo_comissao)}</span></div>` : ''}
-      </div>`
-    toast('✅ PDF aberto', 'sucesso')
-  } else toast('❌ ' + ((res&&res.erro)||'Erro ao gerar relatório'), 'erro')
-}
-
-function formatarValor(v) {
-  return parseFloat(v||0).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 })
-}
-
-function normalizarComp(comp) {
-  const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
-  const s = String(comp || '').trim()
-  // Se for dd/mm/yyyy → Mês/yyyy
-  const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
-  if (m) return meses[parseInt(m[2])-1] + '/' + m[3]
-  // Se for mm/yyyy → Mês/yyyy
-  const m2 = s.match(/^(\d{2})\/(\d{4})$/)
-  if (m2) return meses[parseInt(m2[1])-1] + '/' + m2[2]
-  return s
 }
