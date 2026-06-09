@@ -914,6 +914,24 @@ async function notificarPagamentoLote() {
   mostrarModalNotificacao(res.data, true)
 }
 
+async function enviarNotificacaoComLink(funcId, competencia, valorLiquido) {
+  mostrarLoading('Gerando link...')
+  const res = await chamarGAS({ acao: 'liquidar_salario', dados: {
+    func_id:       funcId,
+    competencia:   normalizarComp(competencia),
+    valor_liquido: valorLiquido ? parseFloat(valorLiquido) : null,
+  }})
+  esconderLoading()
+  if (res && res.ok && res.data.wa_link) {
+    window.open(res.data.wa_link, '_blank')
+    toast('✅ WhatsApp aberto com link de confirmação!', 'sucesso')
+    document.getElementById('modal-notif-pgto')?.remove()
+    carregarNotifPendentes()
+  } else {
+    toast('❌ ' + ((res&&res.erro)||'Erro ao gerar link'), 'erro')
+  }
+}
+
 function mostrarModalNotificacao(mensagens, editavel) {
   const existente = document.getElementById('modal-notif-pgto')
   if (existente) existente.remove()
@@ -927,14 +945,14 @@ function mostrarModalNotificacao(mensagens, editavel) {
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
         <div style="flex:1;margin-right:8px">
           <div style="font-size:13px;font-weight:600">${m.nome.split(' ')[0]}</div>
-          ${m.valor ? `<div style="font-size:11px;color:var(--verde-text);font-weight:600">R$ ${parseFloat(m.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>` : '<div style="font-size:10px;color:var(--amber-text)">Valor não informado</div>'}
+          ${m.valor_liquido
+            ? `<div style="font-size:11px;color:var(--verde-text);font-weight:600">R$ ${parseFloat(m.valor_liquido).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>`
+            : '<div style="font-size:10px;color:var(--amber-text)">Valor não informado</div>'}
         </div>
-        ${m.wa_link
-          ? `<a href="${m.wa_link}" target="_blank" style="background:#25D366;color:#fff;border-radius:8px;padding:8px 14px;font-size:12px;text-decoration:none;font-weight:600;display:flex;align-items:center;gap:5px">
-              <i class="ti ti-brand-whatsapp"></i> Enviar
-             </a>`
-          : `<span style="font-size:10px;color:var(--red-text)">⚠️ Sem WhatsApp</span>`
-        }
+        <button onclick="enviarNotificacaoComLink('${m.func_id}','${m.competencia||''}','${m.valor_liquido||''}')"
+          style="background:#25D366;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px">
+          <i class="ti ti-brand-whatsapp"></i> Enviar
+        </button>
       </div>
       <div style="font-size:10px;color:var(--text-secondary);background:#fff;border-radius:6px;padding:6px 8px;white-space:pre-wrap">${m.mensagem.replace(/\*/g,'')}</div>
     </div>`).join('')
