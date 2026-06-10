@@ -820,11 +820,15 @@ async function carregarExames() {
   todosExames = res.data; filtrarExames()
 }
 
-function filtrarExames() {
-  const filtro = document.getElementById('filtro-status-exame').value
-  const lista  = filtro ? todosExames.filter(e => (e['STATUS EXAME']||'') === filtro) : todosExames
+function filtrarExames(busca) {
+  const filtroStatus = document.getElementById('filtro-status-exame')?.value || ''
+  const q = typeof busca === 'string' ? busca.toLowerCase() : (document.getElementById('busca-exame')?.value || '').toLowerCase()
+  let lista = todosExames
+  if (filtroStatus) lista = lista.filter(e => (e['STATUS EXAME']||'').includes(filtroStatus.replace(/[✅⚠️❌⏳]\s*/,'')))
+  if (q) lista = lista.filter(e => (e['FUNCIONÁRIO']||'').toLowerCase().includes(q))
   const el = document.getElementById('lista-exames')
-  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum exame</p>'; return }
+  if (!el) return
+  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum exame encontrado</p>'; return }
   el.innerHTML = lista.map(e => {
     const status = e['STATUS EXAME'] || '⏳ PENDENTE'
     const bc = status.includes('VENCIDO') ? 'var(--red-text)' : status.includes('A VENCER') ? 'var(--amber-text)' : 'var(--border)'
