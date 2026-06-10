@@ -70,14 +70,14 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('input-pdf-frac').addEventListener('change', async e => {
     const file = e.target.files[0]; if (!file) return
     mostrarPdfSelecionado(file.name)
-    const preview = document.getElementById('frac-preview')
-    preview.style.display = 'block'; preview.textContent = '⏳ Lendo PDF...'
+    const preview = document.getElementById('frac-preview') || document.getElementById('pdf-selecionado')
+    if (preview) { preview.style.display = 'block'; preview.textContent = '⏳ Lendo PDF...' }
     try {
       const PDFLib = await carregarPdfLib()
       const pdfDoc = await PDFLib.PDFDocument.load(await file.arrayBuffer())
       const total  = pdfDoc.getPageCount()
-      preview.innerHTML = '<i class="ti ti-file-check" style="vertical-align:-2px"></i> ' + total + ' página(s) detectadas — 1 funcionário por página'
-    } catch(err) { preview.textContent = '❌ Erro: ' + err.message }
+      if (preview) preview.innerHTML = '<i class="ti ti-file-check" style="vertical-align:-2px"></i> ' + total + ' página(s) — 1 funcionário por página'
+    } catch(err) { if (preview) preview.textContent = '❌ Erro: ' + err.message }
   })
 })
 
@@ -1281,9 +1281,19 @@ async function pickerCallback(data) {
 
 function mostrarPdfSelecionado(nome) {
   const el = document.getElementById('pdf-selecionado')
+  if (el) { el.style.display = 'block'; el.textContent = '📄 ' + nome }
+  // Retrocompat: pdf-nome
   const nomeEl = document.getElementById('pdf-nome')
-  if (el) el.style.display = 'flex'
   if (nomeEl) nomeEl.textContent = nome
+}
+
+function atualizarCompDisplay() {
+  const sel   = document.getElementById('sel-comp-frac')
+  const label = document.getElementById('comp-display-label')
+  if (sel && label) {
+    label.textContent = sel.value || 'Selecione a competência...'
+    label.style.color = sel.value ? 'var(--text-primary)' : 'var(--text-secondary)'
+  }
 }
 
 function preencherMesesFracionar() {
