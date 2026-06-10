@@ -340,6 +340,8 @@ html, body {
 .badge-vermelho{ background: var(--red-bg);       color: var(--red-text); }
 .badge-azul    { background: var(--blue-bg);      color: var(--blue-text); }
 .badge-roxo    { background: var(--purple-bg);    color: var(--purple-text); }
+/* FIX #2: badge-cinza para status neutros (pronto, Não, ⏳ PENDENTE, —) */
+.badge-cinza   { background: var(--surface);      color: var(--text-secondary); border: 0.5px solid var(--border); }
 .ba  { background: var(--amber-bg);  color: var(--amber-text); }
 .bg  { background: var(--verde-claro); color: var(--verde-text); }
 .br  { background: var(--red-bg);    color: var(--red-text); }
