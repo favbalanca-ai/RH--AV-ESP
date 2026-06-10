@@ -1316,6 +1316,7 @@ function atualizarBtnTodos() {
 
 // ─── SELECTS OCULTOS ──────────────────────────────────────────────
 function preencherSelectsOcultos() {
+  popularSelectPgto()
   const selFunc = document.getElementById('sel-func-epi-hidden')
   if (selFunc) {
     selFunc.innerHTML = '<option value="">Selecione...</option>'
@@ -1401,11 +1402,8 @@ async function iniciarPagamento() {
     const res = await chamarGAS({ acao: 'listar_funcionarios' })
     if (res && res.ok) { funcionarios = res.data; preencherSelectsOcultos() }
   }
-  const sel = document.getElementById('sel-func-pgto')
-  if (sel) {
-    sel.innerHTML = '<option value="">Selecione...</option>'
-    funcionarios.forEach(f => { sel.innerHTML += `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>` })
-  }
+  // Popula select APÓS garantir que funcionarios está preenchido
+  popularSelectPgto()
   const selAno = document.getElementById('sel-ano-pgto')
   if (selAno && !selAno.options.length) {
     const ano = new Date().getFullYear()
@@ -1413,6 +1411,15 @@ async function iniciarPagamento() {
   }
   const inpData = document.getElementById('inp-data-adiant')
   if (inpData && !inpData.value) inpData.value = new Date().toISOString().split('T')[0]
+}
+
+function popularSelectPgto() {
+  const sel = document.getElementById('sel-func-pgto')
+  if (!sel) return
+  sel.innerHTML = '<option value="">Selecione...</option>'
+  funcionarios.forEach(f => {
+    sel.innerHTML += `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>`
+  })
 }
 
 function selecionarFuncPgto(funcId) {
