@@ -635,6 +635,18 @@ function filtrarExames(busca) {
 
 // ─── EPI ──────────────────────────────────────────────────────────
 async function carregarEpi() {
+  // Corrige o select oculto para ficar sobreposto (fix para index.html antigo)
+  const selFuncEpi = document.getElementById('sel-func-epi-hidden')
+  const selDisplay = document.getElementById('sel-func-display')
+  if (selFuncEpi && selDisplay) {
+    selDisplay.style.position = 'relative'
+    selFuncEpi.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px;display:block'
+    selDisplay.parentElement.style.position = 'relative'
+    // Move o select para dentro do wrapper se necessário
+    if (selFuncEpi.parentElement !== selDisplay.parentElement) {
+      selDisplay.parentElement.appendChild(selFuncEpi)
+    }
+  }
   mostrarLoading('Carregando EPI...')
   const [resEst, resEnt] = await Promise.all([
     chamarGAS({ acao: 'listar_epi_estoque' }),
