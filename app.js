@@ -27,7 +27,15 @@ let funcionarios = [], estoque = [], itensEpiSel = []
 let funcEpiSelecionado = null
 let paginaAtual = 'inicio', todosExames = []
 let paginasFracionadas = []
+// FIX #3: tipoDocAtual agora é atualizado pelos radio buttons via setTipoDoc()
 let tipoDocAtual = 'Folha'
+
+// FIX #3: função chamada pelos radio buttons no index.html
+function setTipoDoc(valor) {
+  tipoDocAtual = valor
+  const label = document.getElementById('tipo-doc-label')
+  if (label) label.textContent = valor === 'Ponto' ? 'Folha de Ponto selecionada' : 'Folha de Pagamento selecionada'
+}
 
 async function carregarPdfLib() {
   if (window.PDFLib) return window.PDFLib
@@ -69,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('input-pdf-frac').addEventListener('change', async e => {
     const file = e.target.files[0]; if (!file) return
+    // FIX #1: passa file.name (string) em vez do elemento
     mostrarPdfSelecionado(file.name)
     const preview = document.getElementById('frac-preview') || document.getElementById('pdf-selecionado')
     if (preview) { preview.style.display = 'block'; preview.textContent = '⏳ Lendo PDF...' }
@@ -120,38 +129,6 @@ async function sincronizarManual() {
 // ── TEMA ────────────────────────────────────────────────────────
 aplicarTemaInicial()
 
-// ── BUSCA GLOBAL ─────────────────────────────────────────────────
-
-// ── FICHA FUNCIONÁRIO ────────────────────────────────────────────
-
-// ── TIMELINE DE PAGAMENTO ────────────────────────────────────────
-function renderTimelinePagamento(status) {
-  const steps = [
-    { label: 'Enviado',    done: true },
-    { label: 'Assinado',   done: ['Assinado','Notificado','Pago'].includes(status) },
-    { label: 'Notificado', done: ['Notificado','Pago'].includes(status) },
-    { label: 'Pago',       done: status === 'Pago' },
-  ]
-  const ativo = steps.findIndex(s => !s.done)
-  return `
-    <div class="timeline">
-      ${steps.map((s, i) => `
-        ${i > 0 ? `<div class="tl-line ${steps[i-1].done?'done':''}"></div>` : ''}
-        <div class="tl-step">
-          <div class="tl-dot ${s.done?'done':i===ativo?'active':''}">
-            ${s.done ? '<i class="ti ti-check" style="font-size:10px"></i>' : i===ativo ? '<i class="ti ti-clock" style="font-size:10px"></i>' : (i+1)}
-          </div>
-          <span class="tl-label ${s.done?'done':i===ativo?'active':''}">${s.label}</span>
-        </div>`).join('')}
-    </div>`
-}
-
-// ── LOG DE AUDITORIA ─────────────────────────────────────────────
-let logCache = []
-
-// ── PENDÊNCIAS DO DIA ────────────────────────────────────────────
-
-
 // ── TEMA ────────────────────────────────────────────────────────
 function toggleTema() {
   const escuro = document.documentElement.getAttribute('data-tema') === 'escuro'
@@ -183,14 +160,24 @@ function fecharBusca() {
   const i = document.getElementById('inp-busca-global')
   if (i) i.value = ''
 }
+
+// FIX #8: busca global expandida para funcionários, folhas e EPIs
 function buscaGlobal(q) {
   const el = document.getElementById('busca-resultados')
   if (!q || q.length < 2) { el.style.display = 'none'; return }
   const ql = q.toLowerCase()
   const resultados = []
-  funcionarios.filter(f => (f['NOME_COMPLETO']||'').toLowerCase().includes(ql)).slice(0,5).forEach(f => {
+
+  // Funcionários
+  funcionarios.filter(f => (f['NOME_COMPLETO']||'').toLowerCase().includes(ql)).slice(0,4).forEach(f => {
     resultados.push({ tipo:'Funcionário', label:f['NOME_COMPLETO'], sub:(f['FUNCAO']||'')+'·'+(f['UNIDADE']||''), bg:'var(--verde-claro)', cor:'var(--verde-text)', action:()=>abrirFicha(f['ID']) })
   })
+
+  // EPIs em estoque
+  estoque.filter(e => (e['DESCRIÇÃO DO EPI']||'').toLowerCase().includes(ql)).slice(0,3).forEach(e => {
+    resultados.push({ tipo:'EPI', label:e['DESCRIÇÃO DO EPI'], sub:'CA '+( e['Nº CA']||'—')+' · Estoque: '+(e['ESTOQUE ATUAL']||0), bg:'var(--coral-bg)', cor:'var(--coral-text)', action:()=>irPara('epi') })
+  })
+
   if (!resultados.length) { el.innerHTML='<div style="padding:14px;text-align:center;font-size:12px;color:var(--text-hint)">Sem resultados</div>'; el.style.display='block'; return }
   window._buscaActions = resultados.map(r => () => { fecharBusca(); r.action() })
   el.innerHTML = resultados.map((r,i) => `
@@ -282,6 +269,7 @@ async function renderFichaPagamentos() {
 }
 
 // ── TIMELINE ─────────────────────────────────────────────────────
+// FIX #4: removida a função duplicada renderTimelinePagamento — usar apenas renderTimeline
 function renderTimeline(status) {
   const steps = ['Enviado','Assinado','Notificado','Pago']
   const idx = steps.indexOf(status)
@@ -296,6 +284,7 @@ function renderTimeline(status) {
 }
 
 // ── PENDÊNCIAS DO DIA ────────────────────────────────────────────
+// FIX #6: renderPendencias agora recebe dados reais do carregarDashboard, não lê do DOM
 function renderPendencias(dados) {
   const card  = document.getElementById('card-pendencias')
   const lista = document.getElementById('lista-pendencias')
@@ -318,6 +307,8 @@ function renderPendencias(dados) {
 }
 
 // ── LOG DE AUDITORIA ─────────────────────────────────────────────
+let logCache = []
+
 async function carregarLog() {
   mostrarLoading('Carregando log...')
   const res = await chamarGAS({ acao: 'listar_log' })
@@ -389,19 +380,31 @@ async function carregarDashboard() {
     chamarGAS({ acao: 'listar_epi_entregas' }),
     chamarGAS({ acao: 'listar_folhas' }),
   ])
-  renderPendencias({ examesVencidos: parseInt(document.getElementById('num-vencidos')?.textContent)||0, examesAVencer: parseInt(document.getElementById('num-avencer')?.textContent)||0 })
+
   document.getElementById('num-funcs').textContent = funcionarios.length
+
+  // FIX #6: calcula contadores reais antes de chamar renderPendencias
+  let examesVencidos = 0, examesAVencer = 0, epiRepor = 0, folhasPendentes = 0
+
   if (resEx && resEx.ok) {
     todosExames = resEx.data
-    document.getElementById('num-vencidos').textContent = resEx.data.filter(e => (e['STATUS EXAME']||'').includes('VENCIDO')).length
-    document.getElementById('num-avencer').textContent  = resEx.data.filter(e => (e['STATUS EXAME']||'').includes('A VENCER')).length
+    examesVencidos = resEx.data.filter(e => (e['STATUS EXAME']||'').includes('VENCIDO')).length
+    examesAVencer  = resEx.data.filter(e => (e['STATUS EXAME']||'').includes('A VENCER')).length
+    document.getElementById('num-vencidos').textContent = examesVencidos
+    document.getElementById('num-avencer').textContent  = examesAVencer
   }
   if (resEst && resEst.ok) {
     estoque = resEst.data
-    document.getElementById('num-epi').textContent = resEst.data.filter(e => { const s = e['SITUAÇÃO']||''; return s.includes('REPOR') || s.includes('SEM') }).length
+    epiRepor = resEst.data.filter(e => { const s = e['SITUAÇÃO']||''; return s.includes('REPOR') || s.includes('SEM') }).length
+    document.getElementById('num-epi').textContent = epiRepor
   }
+
   const pendentesEpi   = (resEpi   && resEpi.ok)   ? resEpi.data.filter(e   => e['ASSINADO?'] === 'Pendente' && e['ZAPSIGN_DOC']) : []
   const pendentesFolha = (resFolha && resFolha.ok) ? resFolha.data.filter(f => f['STATUS']    === 'Pendente' && f['ZAPSIGN_DOC']) : []
+  folhasPendentes = pendentesFolha.length
+
+  // Agora passa dados reais para renderPendencias
+  renderPendencias({ examesVencidos, examesAVencer, epiRepor, folhasPendentes, pagtosPendentes: 0 })
   renderLembretes(pendentesEpi, pendentesFolha)
 }
 
@@ -470,11 +473,9 @@ function abrirEpiRapido(funcId) {
   if (!func) return
   irPara('epi')
   setTimeout(() => {
-    // Pré-seleciona o funcionário
     selecionarFuncEpi(funcId)
     const sel = document.getElementById('sel-func-epi-hidden')
     if (sel) sel.value = funcId
-    // Sugerir EPIs do perfil em estoque
     const perfil    = func['PERFIL_SST'] || ''
     const sugeridos = EPI_SUGERIDOS_PERFIL[perfil] || []
     if (sugeridos.length && estoque.length) {
@@ -521,15 +522,12 @@ function editarFuncionario(funcId) {
   const func = funcionarios.find(f => String(f['ID']) === String(funcId))
   if (!func) return toast('❌ Funcionário não encontrado', 'erro')
 
-  // Vai para a aba de cadastro
   irPara('novo-func')
 
-  // Aguarda DOM renderizar e preenche os campos
   setTimeout(() => {
     const form = document.querySelector('#pg-novo-func form')
     if (!form) return
 
-    // Campos de texto/select
     const map = {
       'nome_completo':        func['NOME_COMPLETO'],
       'nome_curto':           func['NOME_CURTO'],
@@ -558,14 +556,12 @@ function editarFuncionario(funcId) {
       if (el && val) el.value = val
     })
 
-    // Atualiza título e botão
     const titulo = document.getElementById('titulo-pagina')
     if (titulo) titulo.textContent = '✏️ Editar Funcionário'
 
     const btn = document.getElementById('btn-salvar-func')
     if (btn) btn.innerHTML = '<i class="ti ti-device-floppy"></i> Salvar alterações'
 
-    // Armazena o ID para o salvar saber que é edição
     form.dataset.editandoId = funcId
 
     toast('✏️ Editando ' + func['NOME_COMPLETO'].split(' ')[0], 'sucesso')
@@ -635,14 +631,12 @@ function filtrarExames(busca) {
 
 // ─── EPI ──────────────────────────────────────────────────────────
 async function carregarEpi() {
-  // Corrige o select oculto para ficar sobreposto (fix para index.html antigo)
   const selFuncEpi = document.getElementById('sel-func-epi-hidden')
   const selDisplay = document.getElementById('sel-func-display')
   if (selFuncEpi && selDisplay) {
     selDisplay.style.position = 'relative'
     selFuncEpi.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px;display:block'
     selDisplay.parentElement.style.position = 'relative'
-    // Move o select para dentro do wrapper se necessário
     if (selFuncEpi.parentElement !== selDisplay.parentElement) {
       selDisplay.parentElement.appendChild(selFuncEpi)
     }
@@ -685,9 +679,6 @@ function renderEstoqueModal(lista) {
   }).join('')
 }
 
-// renderEstoque legada removida (usar renderEstoqueModal)
-
-
 function situacaoEpi(e) {
   const est = parseInt(e['ESTOQUE ATUAL'])||0, min = parseInt(e['ESTOQUE MÍNIMO'])||0
   if (est === 0) return '⛔ SEM ESTOQUE'
@@ -695,11 +686,9 @@ function situacaoEpi(e) {
   return '✅ OK'
 }
 
-// Seletor de funcionário para EPI
 function abrirSeletorFunc() {
   const sel = document.getElementById('sel-func-epi-hidden')
   if (!sel) return
-  // Garante que o select está populado
   if (sel.options.length <= 1) preencherSelectsOcultos()
   sel.click()
 }
@@ -714,7 +703,6 @@ function selecionarFuncEpi(funcId) {
   const subEl = document.getElementById('sel-func-sub')
   if (subEl) subEl.textContent = (func['FUNCAO']||'') + ' · ' + (func['UNIDADE']||'')
 
-  // Sugerir EPIs do perfil
   const perfil    = func['PERFIL_SST'] || ''
   const sugeridos = EPI_SUGERIDOS_PERFIL[perfil] || []
   if (sugeridos.length && estoque.length && itensEpiSel.length === 0) {
@@ -729,9 +717,7 @@ function selecionarFuncEpi(funcId) {
   atualizarBtnEpi()
 }
 
-// Seletor de EPI
 function abrirSeletorEpi() {
-  // Mostra dropdown de busca
   const wrap = document.getElementById('epi-busca-wrap')
   if (!wrap) return
   wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none'
@@ -801,7 +787,6 @@ function atualizarBtnEpi() {
 
 async function enviarEpi(metodo) {
   if (!funcEpiSelecionado || !itensEpiSel.length) return toast('❌ Selecione funcionário e EPIs', 'erro')
-  // Se não passou metodo, mostra modal de escolha
   if (!metodo) { mostrarModalEnvio('epi'); return }
 
   const btn = document.getElementById('btn-enviar-epi')
@@ -809,17 +794,15 @@ async function enviarEpi(metodo) {
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Enviando...'
   mostrarLoading('Gerando recibo PDF...')
 
-  // Sempre gera o recibo EPI no GAS
   const res = await chamarGAS({ acao: 'entregar_epi', dados: {
     func_id: funcEpiSelecionado['ID'], itens: itensEpiSel, motivo,
-    metodo_assinatura: metodo  // 'zapsign' | 'proprio'
+    metodo_assinatura: metodo
   }})
   esconderLoading()
   btn.disabled = false; btn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> <span id="btn-epi-label">Gerar recibo e enviar</span>'
 
   if (res && res.ok) {
     if (metodo === 'proprio' && res.data.pdf_base64) {
-      // Gera link de assinatura própria
       mostrarLoading('Gerando link de assinatura...')
       const func = funcEpiSelecionado
       const res2 = await chamarGAS({ acao: 'gerar_link_assinatura', dados: {
@@ -890,8 +873,6 @@ function renderEntregas(lista) {
 // ASSINATURA PRÓPRIA
 // ═══════════════════════════════════════════════════════════════════
 function mostrarModalEnvio(tipo, dadosEnvio) {
-  // tipo: 'epi' | 'folha'
-  // Cria modal de escolha
   const existente = document.getElementById('modal-envio')
   if (existente) existente.remove()
 
@@ -997,7 +978,6 @@ let oauthToken      = null
 function abrirDrivePicker() {
   gapi.load('picker', () => {
     pickerApiLoaded = true
-    // Autentica com Google
     const tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: DRIVE_CLIENT_ID,
       scope:     'https://www.googleapis.com/auth/drive.readonly',
@@ -1037,49 +1017,39 @@ async function pickerCallback(data) {
   if (data.action !== google.picker.Action.PICKED) return
   const file = data.docs[0]
   const nome = file.name
-  console.log('Drive picker: arquivo selecionado', file.id, nome)
 
   mostrarLoading('Carregando PDF do Drive...')
 
   try {
-    console.log('Baixando arquivo via Drive API...')
     const res = await fetch(
       'https://www.googleapis.com/drive/v3/files/' + file.id + '?alt=media',
       { headers: { Authorization: 'Bearer ' + oauthToken } }
     )
-    console.log('Status HTTP:', res.status, res.statusText)
     if (!res.ok) {
       const errText = await res.text()
-      console.log('Erro Drive API:', errText)
       throw new Error('Erro HTTP ' + res.status + ': ' + errText.substring(0, 100))
     }
     const buffer = await res.arrayBuffer()
     const blob   = new Blob([buffer], { type: 'application/pdf' })
-    // Converte para base64 sem usar spread (evita stack overflow em PDFs grandes)
     const base64 = await new Promise((resolve) => {
       const reader = new FileReader()
       reader.onload = () => resolve(reader.result.split(',')[1])
       reader.readAsDataURL(blob)
     })
 
-    // Simula o mesmo comportamento do input file
     esconderLoading()
     mostrarPdfSelecionado(nome)
 
-    // Armazena como File object para o processamento normal
     const fileObj = new File([blob], nome, { type: 'application/pdf' })
-    // Injeta no input file
     const dt = new DataTransfer()
     dt.items.add(fileObj)
     const inputFrac = document.getElementById('input-pdf-frac')
     if (inputFrac) {
       inputFrac.files = dt.files
-      // Dispara o evento change para contar páginas normalmente
       inputFrac.dispatchEvent(new Event('change'))
     }
 
     toast('✅ PDF carregado: ' + nome, 'sucesso')
-    // Avisa se competência não foi selecionada
     const comp = document.getElementById('sel-comp-frac')?.value
     if (!comp) toast('⚠️ Selecione a competência e clique em Separar PDF', 'aviso')
   } catch(e) {
@@ -1088,10 +1058,10 @@ async function pickerCallback(data) {
   }
 }
 
+// FIX #1: função recebe nome (string), não o elemento input
 function mostrarPdfSelecionado(nome) {
   const el = document.getElementById('pdf-selecionado')
   if (el) { el.style.display = 'block'; el.textContent = '📄 ' + nome }
-  // Retrocompat: pdf-nome
   const nomeEl = document.getElementById('pdf-nome')
   if (nomeEl) nomeEl.textContent = nome
 }
@@ -1120,28 +1090,20 @@ async function carregarEntregasFolha() {
   if (res && res.ok) renderHistoricoFolha(res.data.slice(0,20))
 }
 
+// FIX #5: renderHistoricoFolha não gera mais sel-comp-notif interno pois ele já existe fixo no index.html
 function renderHistoricoFolha(lista) {
   const el = document.getElementById('historico-folha'); if (!el) return
   if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum envio</p>'; return }
 
-  // Agrupa assinados por competência para botão de lote
+  // Atualiza o select de competência fixo no HTML (sem criar um segundo)
   const assinados = lista.filter(f => f['STATUS'] === 'Assinado')
   const competencias = [...new Set(assinados.map(f => f['COMPETÊNCIA']))]
-
-  let header = ''
-  if (assinados.length > 0) {
-    const optsComp = competencias.map(c => `<option value="${c}">${c}</option>`).join('')
-    header = `<div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
-      <select id="sel-comp-notif" style="flex:1;border:0.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px;font-family:inherit">
-        ${optsComp}
-      </select>
-      <button onclick="notificarPagamentoLote()" style="background:#25D366;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px">
-        <i class="ti ti-brand-whatsapp"></i> Notificar todos
-      </button>
-    </div>`
+  const selComp = document.getElementById('sel-comp-notif')
+  if (selComp && competencias.length) {
+    selComp.innerHTML = competencias.map(c => `<option value="${c}">${c}</option>`).join('')
   }
 
-  el.innerHTML = header + lista.map(f => `
+  el.innerHTML = lista.map(f => `
     <div class="lista-item">
       <div class="avatar" style="background:var(--purple-bg);color:var(--purple-text)">${getIniciais(f['FUNCIONÁRIO']||'?')}</div>
       <div class="lista-item-info">
@@ -1161,7 +1123,6 @@ function renderHistoricoFolha(lista) {
 
 async function notificarPagamentoIndividual(funcId, competencia) {
   mostrarLoading('Gerando notificação...')
-  // Busca valor líquido automaticamente — sem prompt manual
   const res = await chamarGAS({ acao: 'gerar_msg_pagamento', dados: { func_id: funcId, competencia } })
   esconderLoading()
   if (!res || !res.ok || !res.data.length) return toast('❌ Erro ao gerar mensagem', 'erro')
@@ -1184,7 +1145,6 @@ async function notificarPagamentoLote() {
   const res = await chamarGAS({ acao: 'gerar_msg_pagamento', dados: { func_ids: funcIds, competencia: normalizarComp(competencia) } })
   esconderLoading()
   if (!res || !res.ok || !res.data.length) return toast('❌ Erro ao gerar mensagens', 'erro')
-  // Para lote, mostra modal onde ADM pode ver e editar valor antes de enviar
   mostrarModalNotificacao(res.data, true)
 }
 
@@ -1305,7 +1265,7 @@ function renderPaginasFracionadas() {
     </div>`).join('')
 }
 
-// ── Mapeamento salvo: competencia -> {pagina: funcId} ──────────
+// ── Mapeamento salvo ──────────────────────────────────────────────
 function salvarMapeamento(competencia) {
   const mapa = {}
   paginasFracionadas.forEach(p => { if (p.funcId) mapa[p.pagina] = p.funcId })
@@ -1324,7 +1284,6 @@ async function identificarFuncionariosAutomatico() {
   const mapaAnterior = carregarMapeamentoSalvo(competencia)
   let identificados = 0
 
-  // Dispara todas as identificações com IA em paralelo
   const promessas = paginasFracionadas.map((p, i) =>
     chamarGAS({ acao: 'identificar_com_ia', dados: { pdf_base64: p.pdfBase64 } })
       .catch(() => null)
@@ -1340,7 +1299,6 @@ async function identificarFuncionariosAutomatico() {
       tipoIA = d.tipo_documento || ''
       compIA = d.competencia    || ''
 
-      // Atualiza tipo e competência detectados pela IA
       if (tipoIA) paginasFracionadas[i].tipoDoc     = tipoIA
       if (compIA) paginasFracionadas[i].competencia  = compIA
       if (d.valor_liquido) {
@@ -1351,7 +1309,6 @@ async function identificarFuncionariosAutomatico() {
         func = funcionarios.find(f => String(f['ID']) === String(d.func_id))
         if (func) {
           func._metodo = 'ia'
-          // Salva funcId já na página para selecionarFuncPgto encontrar
           paginasFracionadas[i].funcId    = String(func['ID'])
           paginasFracionadas[i].nome      = func['NOME_COMPLETO']
           paginasFracionadas[i].telefone  = func['TELEFONE'] || ''
@@ -1359,7 +1316,6 @@ async function identificarFuncionariosAutomatico() {
       }
     }
 
-    // Fallback: mapeamento salvo
     if (!func && mapaAnterior && mapaAnterior[paginasFracionadas[i].pagina]) {
       const savedId = mapaAnterior[paginasFracionadas[i].pagina]
       func = funcionarios.find(f => String(f['ID']) === String(savedId))
@@ -1469,12 +1425,10 @@ async function enviarPaginaZapSign(idx) {
   if (res && res.ok) {
     paginasFracionadas[idx].status  = 'enviado'
     paginasFracionadas[idx].signUrl = res.data.sign_url || ''
-    // Atualiza card para estado enviado
     const card = document.getElementById('fpc-' + idx)
     if (card) card.className = 'frac-page-card enviado'
     const numEl = document.getElementById('fpc-num-' + idx)
     if (numEl) { numEl.className = 'fpc-num enviado'; numEl.innerHTML = `<i class="ti ti-circle-check" style="font-size:11px;vertical-align:-1px"></i> Pág. ${p.pagina} — Enviado` }
-    // Substitui botão enviar por "enviado" + links
     const actionEl = document.getElementById('fpc-action-' + idx)
     if (actionEl) {
       let links = `<span class="btn-enviado-frac"><i class="ti ti-check"></i></span>`
@@ -1502,9 +1456,8 @@ async function enviarTodasPendentes(metodo) {
   if (!pendentes.length) return toast('⚠️ Nenhum pronto para enviar', 'erro')
 
   if (metodo === 'proprio') {
-    // Gera todos os links primeiro, depois abre WhatsApp em sequência
     mostrarLoading('Gerando links de assinatura para ' + pendentes.length + ' funcionários...')
-    const links = []  // { nome, telefone, link, wa_link }
+    const links = []
 
     for (let i = 0; i < paginasFracionadas.length; i++) {
       const p = paginasFracionadas[i]
@@ -1524,7 +1477,6 @@ async function enviarTodasPendentes(metodo) {
     esconderLoading()
     atualizarBtnTodos()
 
-    // Abre WhatsApp para cada funcionário em sequência com delay
     if (links.length) {
       toast('✅ ' + links.length + ' links gerados! Abrindo WhatsApp...', 'sucesso')
       await abrirWhatsAppSequencial(links)
@@ -1541,7 +1493,6 @@ async function enviarTodasPendentes(metodo) {
 }
 
 async function abrirWhatsAppSequencial(links) {
-  // Mostra modal com todos os links e botão WhatsApp por funcionário
   const existente = document.getElementById('modal-wa-lote')
   if (existente) existente.remove()
 
@@ -1613,6 +1564,7 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary)
 }
 
+// FIX #2: badge-cinza adicionado ao mapa
 function badge(status) {
   const map = {
     '✅ VIGENTE':'badge-verde','⚠️ A VENCER':'badge-amarelo','⛔ VENCIDO':'badge-vermelho',
@@ -1621,6 +1573,7 @@ function badge(status) {
     'Assinado':'badge-verde','Salvo':'badge-azul','pronto':'badge-cinza',
     'enviado':'badge-verde','✅ OK':'badge-verde','⚠️ REPOR':'badge-amarelo',
     '⛔ SEM ESTOQUE':'badge-vermelho','⛔ Recusado':'badge-vermelho',
+    '—':'badge-cinza',
   }
   return `<span class="badge ${map[status]||'badge-cinza'}">${status||'—'}</span>`
 }
@@ -1649,9 +1602,7 @@ function formatarValor(v) {
   if (!v && v !== 0) return '0,00'
   const s = String(v).trim().replace(/R\$\s*/g,'')
   let n
-  // US: 1940.43 — sem vírgula, ponto como decimal
   if (s.indexOf(',') === -1) n = parseFloat(s)
-  // BR: 1.940,43 — remove pontos de milhar, troca vírgula
   else n = parseFloat(s.replace(/\./g,'').replace(',','.'))
   if (isNaN(n)) return String(v)
   const parts = n.toFixed(2).split('.')
@@ -1672,12 +1623,10 @@ function normalizarComp(comp) {
 
 async function iniciarPagamento() {
   carregarNotifPendentes()
-  // Garante que funcionários estão carregados
   if (!funcionarios.length) {
     const res = await chamarGAS({ acao: 'listar_funcionarios' })
     if (res && res.ok) { funcionarios = res.data; preencherSelectsOcultos() }
   }
-  // Popula select APÓS garantir que funcionarios está preenchido
   popularSelectPgto()
   const selAno = document.getElementById('sel-ano-pgto')
   if (selAno && !selAno.options.length) {
@@ -1714,7 +1663,6 @@ function selecionarFuncPgto(funcId) {
     const el = document.getElementById(id); if (el) el.style.display = 'block'
   })
 
-  // Datas padrão do extrato — ano corrente
   const ano = new Date().getFullYear()
   const ini = document.getElementById('ext-inicio')
   const fim = document.getElementById('ext-fim')
@@ -1723,7 +1671,7 @@ function selecionarFuncPgto(funcId) {
 
   carregarResumoPgto()
   carregarHistoricoPagamentos()
-  gerarExtrato() // carrega automaticamente
+  gerarExtrato()
 }
 
 async function carregarResumoPgto() {
@@ -1842,22 +1790,21 @@ async function carregarHistoricoPagamentos() {
   }).join('')
 }
 
+// FIX #7: gerarExtrato agora também reage à troca de ano via sel-ano-pgto
 async function gerarExtrato() {
   if (!funcPgtoSelecionado) return
   const ini  = document.getElementById('ext-inicio')?.value
   const fim  = document.getElementById('ext-fim')?.value
   if (!ini || !fim) return
 
-  // Atualiza label do ano
   const anoLabel = document.getElementById('ext-ano-label')
   if (anoLabel) anoLabel.textContent = new Date(ini).getFullYear()
 
   mostrarLoading('Gerando extrato...')
 
-  // Busca salários e adiantamentos em paralelo
   const [resPag, resAdiant] = await Promise.all([
     chamarGAS({ acao: 'listar_pagamentos',   dados: { func_id: funcPgtoSelecionado['ID'] } }),
-    chamarGAS({ acao: 'resumo_comissao',     dados: { func_id: funcPgtoSelecionado['ID'], ano: new Date().getFullYear() } }),
+    chamarGAS({ acao: 'resumo_comissao',     dados: { func_id: funcPgtoSelecionado['ID'], ano: new Date(ini).getFullYear() } }),
   ])
   esconderLoading()
 
@@ -1866,23 +1813,19 @@ async function gerarExtrato() {
   const totais = document.getElementById('extrato-totais')
   if (!corpo || !lista || !totais) return
 
-  // Filtra por período
   const iniDate = new Date(ini)
   const fimDate = new Date(fim + 'T23:59:59')
 
-  // Salários no período
   const salarios = (resPag?.data || []).filter(p => {
     const d = new Date(p['DATA_GERACAO'] || p['DATA_ASSINATURA'] || '2000-01-01')
     return d >= iniDate && d <= fimDate
   })
 
-  // Adiantamentos no período
   const adiantamentos = (resAdiant?.data?.adiantamentos || []).filter(a => {
     const d = new Date(a['DATA_PAGTO'] || '2000-01-01')
     return d >= iniDate && d <= fimDate
   })
 
-  // Monta itens unificados e ordena por data
   const itens = [
     ...salarios.map(p => ({
       tipo:  'salario',
@@ -1908,12 +1851,10 @@ async function gerarExtrato() {
     return
   }
 
-  // Totais
   const totalSal   = salarios.reduce((s, p) => s + (parseFloat(String(p['VALOR_LIQUIDO']||0).replace(',','.')) || 0), 0)
   const totalAdiant = adiantamentos.reduce((s, a) => s + (parseFloat(String(a['VALOR']||0).replace(',','.')) || 0), 0)
   const totalGeral = totalSal + totalAdiant
 
-  // Renderiza itens
   lista.innerHTML = itens.map(it => `
     <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--border)">
       <div style="width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;
