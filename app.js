@@ -1718,11 +1718,12 @@ function selecionarFuncPgto(funcId) {
   const ano = new Date().getFullYear()
   const ini = document.getElementById('ext-inicio')
   const fim = document.getElementById('ext-fim')
-  if (ini && !ini.value) ini.value = `${ano}-01-01`
-  if (fim && !fim.value) fim.value = new Date().toISOString().split('T')[0]
+  if (ini) ini.value = `${ano}-01-01`
+  if (fim) fim.value = new Date().toISOString().split('T')[0]
 
   carregarResumoPgto()
   carregarHistoricoPagamentos()
+  gerarExtrato() // carrega automaticamente
 }
 
 async function carregarResumoPgto() {
@@ -1842,10 +1843,14 @@ async function carregarHistoricoPagamentos() {
 }
 
 async function gerarExtrato() {
-  if (!funcPgtoSelecionado) return toast('❌ Selecione o funcionário', 'erro')
+  if (!funcPgtoSelecionado) return
   const ini  = document.getElementById('ext-inicio')?.value
   const fim  = document.getElementById('ext-fim')?.value
-  if (!ini || !fim) return toast('❌ Informe o período', 'erro')
+  if (!ini || !fim) return
+
+  // Atualiza label do ano
+  const anoLabel = document.getElementById('ext-ano-label')
+  if (anoLabel) anoLabel.textContent = new Date(ini).getFullYear()
 
   mostrarLoading('Gerando extrato...')
 
@@ -1900,7 +1905,6 @@ async function gerarExtrato() {
   if (!itens.length) {
     lista.innerHTML = '<p class="lista-vazia">Nenhum lançamento no período</p>'
     totais.innerHTML = ''
-    corpo.style.display = 'block'
     return
   }
 
@@ -1942,7 +1946,7 @@ async function gerarExtrato() {
       <span style="color:var(--verde-text)">R$ ${formatarValor(totalGeral)}</span>
     </div>`
 
-  corpo.style.display = 'block'
+  corpo.style.display = ''
 }
 
 async function carregarNotifPendentes() {
