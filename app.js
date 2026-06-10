@@ -684,7 +684,13 @@ function situacaoEpi(e) {
 }
 
 // Seletor de funcionário para EPI
-function abrirSeletorFunc() { document.getElementById('sel-func-epi-hidden').click() }
+function abrirSeletorFunc() {
+  const sel = document.getElementById('sel-func-epi-hidden')
+  if (!sel) return
+  // Garante que o select está populado
+  if (sel.options.length <= 1) preencherSelectsOcultos()
+  sel.click()
+}
 function selecionarFuncEpi(funcId) {
   const func = funcionarios.find(f => String(f['ID']) === String(funcId))
   if (!func) return
@@ -1060,7 +1066,10 @@ async function pickerCallback(data) {
       inputFrac.dispatchEvent(new Event('change'))
     }
 
-    toast('✅ PDF do Drive carregado: ' + nome, 'sucesso')
+    toast('✅ PDF carregado: ' + nome, 'sucesso')
+    // Avisa se competência não foi selecionada
+    const comp = document.getElementById('sel-comp-frac')?.value
+    if (!comp) toast('⚠️ Selecione a competência e clique em Separar PDF', 'aviso')
   } catch(e) {
     esconderLoading()
     toast('❌ Erro ao carregar PDF: ' + e.message, 'erro')
@@ -1229,7 +1238,8 @@ function mostrarModalNotificacao(mensagens, editavel) {
 async function processarFracionamento() {
   const file        = document.getElementById('input-pdf-frac').files[0]
   const competencia = document.getElementById('sel-comp-frac').value
-  if (!file || !competencia) return toast('❌ Selecione o PDF e a competência', 'erro')
+  if (!file) return toast('❌ Selecione o PDF', 'erro')
+  if (!competencia) return toast('❌ Selecione a competência antes de separar', 'erro')
   const btn = document.getElementById('btn-fracionar')
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Separando...'
   mostrarLoading('Carregando pdf-lib...')
