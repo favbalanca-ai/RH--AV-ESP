@@ -813,11 +813,14 @@ async function salvarFuncionario(e) {
 
 // ─── EXAMES ───────────────────────────────────────────────────────
 async function carregarExames() {
-  mostrarLoading('Carregando exames...')
-  const res = await chamarGAS({ acao: 'listar_exames' })
-  esconderLoading()
-  if (!res || !res.ok) return
-  todosExames = res.data; filtrarExames()
+  if (!todosExames.length) {
+    mostrarLoading('Carregando exames...')
+    const res = await chamarGAS({ acao: 'listar_exames' })
+    esconderLoading()
+    if (!res || !res.ok) return
+    todosExames = res.data
+  }
+  filtrarExames()
 }
 
 function filtrarExames(busca) {
