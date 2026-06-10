@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -55,7 +54,7 @@
     <div class="busca-global-wrap">
       <div class="busca-global">
         <i class="ti ti-search" aria-hidden="true"></i>
-        <input type="text" id="inp-busca-global" placeholder="Buscar funcionário, folha, EPI..." oninput="buscaGlobal(this.value)" autocomplete="off">
+        <input type="text" id="inp-busca-global" placeholder="Buscar funcionário, EPI..." oninput="buscaGlobal(this.value)" autocomplete="off">
         <button onclick="fecharBusca()" style="background:none;border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:16px;padding:0;font-family:inherit"><i class="ti ti-x"></i></button>
       </div>
     </div>
@@ -287,14 +286,15 @@
 
     <!-- FOLHA DE PAGAMENTO -->
     <div id="pg-fracionar" class="pagina">
+      <!-- FIX #3: radio buttons agora chamam setTipoDoc() para atualizar tipoDocAtual -->
       <div class="card mb-3">
         <div class="card-titulo"><i class="ti ti-file-invoice" aria-hidden="true"></i> Tipo de documento *</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:8px 12px;border:0.5px solid var(--border);border-radius:var(--radius-sm);flex:1;background:var(--surface)">
-            <input type="radio" name="tipo-doc" value="Folha" checked style="accent-color:var(--verde)"> <span>Folha de Pagamento</span>
+            <input type="radio" name="tipo-doc" value="Folha" checked onchange="setTipoDoc(this.value)" style="accent-color:var(--verde)"> <span>Folha de Pagamento</span>
           </label>
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:8px 12px;border:0.5px solid var(--border);border-radius:var(--radius-sm);flex:1;background:var(--surface)">
-            <input type="radio" name="tipo-doc" value="Ponto" style="accent-color:var(--verde)"> <span>Folha de Ponto</span>
+            <input type="radio" name="tipo-doc" value="Ponto" onchange="setTipoDoc(this.value)" style="accent-color:var(--verde)"> <span>Folha de Ponto</span>
           </label>
         </div>
         <div id="tipo-doc-label" style="font-size:11px;color:var(--verde-text);font-weight:600;margin-top:6px"></div>
@@ -317,7 +317,8 @@
           </button>
           <span style="font-size:11px;color:var(--text-hint)">ou</span>
           <label style="flex:1">
-            <input type="file" id="input-pdf-frac" accept="application/pdf" style="display:none" onchange="mostrarPdfSelecionado(this)">
+            <!-- FIX #1: onchange passa file.name via JS no addEventListener — label só abre o picker -->
+            <input type="file" id="input-pdf-frac" accept="application/pdf" style="display:none">
             <div class="btn-primario" style="font-size:12px;background:var(--surface);color:var(--text-primary);border:0.5px solid var(--border)">
               <i class="ti ti-upload" aria-hidden="true"></i> Upload
             </div>
@@ -354,8 +355,11 @@
       </div>
       <div class="card mt-3">
         <div class="card-titulo"><i class="ti ti-history" aria-hidden="true"></i> Histórico de envios</div>
+        <!-- FIX #5: sel-comp-notif fixo aqui — renderHistoricoFolha() só popula as options, não recria o select -->
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <select id="sel-comp-notif" style="flex:1;border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:7px 10px;font-size:12px;font-family:inherit;background:var(--card-bg);color:var(--text-primary);outline:none"></select>
+          <select id="sel-comp-notif" style="flex:1;border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:7px 10px;font-size:12px;font-family:inherit;background:var(--card-bg);color:var(--text-primary);outline:none">
+            <option value="">Selecione competência...</option>
+          </select>
           <button onclick="notificarPagamentoLote()" class="btn-primario" style="font-size:11px;padding:8px 12px;background:#25D366">
             <i class="ti ti-send" aria-hidden="true"></i> Notificar
           </button>
@@ -384,7 +388,8 @@
           <select id="sel-func-pgto" onchange="selecionarFuncPgto(this.value)" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px"></select>
         </div>
         <div class="dois-col">
-          <div class="campo-grupo"><label>Ano</label><select id="sel-ano-pgto" onchange="carregarResumoPgto()"></select></div>
+          <!-- FIX #7: troca de ano agora também atualiza extrato via gerarExtrato() -->
+          <div class="campo-grupo"><label>Ano</label><select id="sel-ano-pgto" onchange="carregarResumoPgto(); gerarExtrato()"></select></div>
           <div class="campo-grupo"><label>Comissão anual 🔒</label><input type="text" id="txt-comissao-anual" readonly style="background:var(--surface);color:var(--text-secondary)"></div>
         </div>
       </div>
@@ -453,6 +458,6 @@
   </nav>
 </div>
 
-<script src="app.js?v=1781055441"></script>
+<script src="app.js?v=1781055442"></script>
 </body>
 </html>
