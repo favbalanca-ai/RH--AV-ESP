@@ -83,6 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function entrarNoApp() {
   document.getElementById('tela-login').style.display = 'none'
+  aplicarTemaInicial()
   document.getElementById('tela-app').style.display   = 'flex'
   preencherMesesFracionar()
   preencherSelectsOcultos()
@@ -116,10 +117,455 @@ async function sincronizarManual() {
   } else { toast('❌ Erro na sincronização', 'erro') }
 }
 
+// ── TEMA ────────────────────────────────────────────────────────
+function toggleTema() {
+  const html = document.documentElement
+  const escuro = html.getAttribute('data-tema') === 'escuro'
+  html.setAttribute('data-tema', escuro ? 'claro' : 'escuro')
+  const btn = document.getElementById('btn-tema')
+  if (btn) btn.innerHTML = escuro ? '<i class="ti ti-moon"></i>' : '<i class="ti ti-sun"></i>'
+  localStorage.setItem('sst-tema', escuro ? 'claro' : 'escuro')
+}
+function aplicarTemaInicial() {
+  const tema = localStorage.getItem('sst-tema') || 'claro'
+  document.documentElement.setAttribute('data-tema', tema)
+  const btn = document.getElementById('btn-tema')
+  if (btn) btn.innerHTML = tema === 'escuro' ? '<i class="ti ti-sun"></i>' : '<i class="ti ti-moon"></i>'
+}
+aplicarTemaInicial()
+
+// ── BUSCA GLOBAL ─────────────────────────────────────────────────
+function toggleBusca() {
+  const c = document.getElementById('busca-global-container')
+  const visivel = c.style.display !== 'none'
+  c.style.display = visivel ? 'none' : 'block'
+  if (!visivel) { document.getElementById('inp-busca-global').focus() }
+  else { document.getElementById('busca-resultados').style.display = 'none' }
+}
+function fecharBusca() {
+  document.getElementById('busca-global-container').style.display = 'none'
+  document.getElementById('busca-resultados').style.display = 'none'
+  document.getElementById('inp-busca-global').value = ''
+}
+function buscaGlobal(q) {
+  const el = document.getElementById('busca-resultados')
+  if (!q || q.length < 2) { el.style.display = 'none'; return }
+  const ql = q.toLowerCase()
+  const resultados = []
+  // Funcionários
+  funcionarios.filter(f => f['NOME_COMPLETO'].toLowerCase().includes(ql)).slice(0,4).forEach(f => {
+    resultados.push({ tipo: 'Funcionário', label: f['NOME_COMPLETO'], sub: (f['FUNCAO']||'') + ' · ' + (f['UNIDADE']||''), cor: 'var(--verde)', bg: 'var(--verde-claro)', action: () => abrirFicha(f['ID']) })
+  })
+  if (!resultados.length) { el.innerHTML = '<div style="padding:14px;text-align:center;font-size:12px;color:var(--text-hint)">Nenhum resultado</div>'; el.style.display = 'block'; return }
+  el.innerHTML = resultados.map((r,i) => `
+    <div class="busca-item" onclick="window._buscaActions[${i}]()">
+      <span class="busca-item-tipo" style="background:${r.bg};color:${r.cor}">${r.tipo}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.label}</div>
+        <div style="font-size:11px;color:var(--text-secondary)">${r.sub}</div>
+      </div>
+      <i class="ti ti-arrow-right" style="color:var(--text-hint);font-size:14px"></i>
+    </div>`).join('')
+  window._buscaActions = resultados.map(r => () => { fecharBusca(); r.action() })
+  el.style.display = 'block'
+}
+
+// ── FICHA FUNCIONÁRIO ────────────────────────────────────────────
+function abrirFicha(funcId) {
+  const func = funcionarios.find(f => String(f['ID']) === String(funcId))
+  if (!func) return
+  fichaFuncId = funcId
+  document.getElementById('ficha-av').textContent   = getIniciais(func['NOME_COMPLETO'])
+  document.getElementById('ficha-nome').textContent = func['NOME_COMPLETO']
+  document.getElementById('ficha-sub').textContent  = (func['FUNCAO']||'—') + ' · ' + (func['UNIDADE']||'—')
+  irPara('ficha-func')
+  renderFichaGeral(func)
+}
+function abrirFichaTab(tab, btn) {
+  document.querySelectorAll('.ficha-tab').forEach(t => t.classList.remove('ativo'))
+  document.querySelectorAll('.ficha-painel').forEach(p => p.classList.remove('ativo'))
+  btn.classList.add('ativo')
+  const painel = document.getElementById('ficha-painel-' + tab)
+  if (painel) painel.classList.add('ativo')
+  if (tab === 'exames')    renderFichaExames()
+  if (tab === 'epi')       renderFichaEpi()
+  if (tab === 'folhas')    renderFichaFolhas()
+  if (tab === 'pagamentos')renderFichaPagamentos()
+}
+function renderFichaGeral(func) {
+  const el = document.getElementById('ficha-painel-geral')
+  if (!el) return
+  const campos = [
+    ['CPF', func['CPF']], ['RG', func['RG']], ['Nascimento', func['DATA_NASCIMENTO']],
+    ['Admissão', func['DATA_ADMISSAO']], ['WhatsApp', func['TELEFONE']],
+    ['Perfil SST', func['PERFIL_SST']], ['Camisa', func['TAM_CAMISA']], ['Bota', func['TAM_BOTA']],
+    ['Banco', func['BANCO']], ['Agência', func['AGENCIA']], ['Conta', func['CONTA']], ['PIX', func['PIX']],
+  ].filter(([,v]) => v)
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:8px">
+      <div class="card-titulo"><i class="ti ti-id-badge"></i> Dados cadastrais</div>
+      ${campos.map(([k,v]) => `
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12px">
+          <span style="color:var(--text-secondary)">${k}</span>
+          <span style="font-weight:600;max-width:60%;text-align:right">${v}</span>
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="editarFuncionario('${func['ID']}')" class="btn-primario" style="flex:1;font-size:12px">
+        <i class="ti ti-pencil"></i> Editar
+      </button>
+      <a href="https://wa.me/55${String(func['TELEFONE']||'').replace(/\D/g,'')}" target="_blank"
+         style="flex:1;background:#22C55E;color:#fff;border-radius:var(--radius-md);padding:12px;font-size:12px;font-weight:700;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px">
+        <i class="ti ti-brand-whatsapp"></i> WhatsApp
+      </a>
+    </div>`
+}
+async function renderFichaExames() {
+  const el = document.getElementById('ficha-painel-exames')
+  el.innerHTML = '<p class="lista-vazia"><i class="ti ti-loader-2"></i> Carregando...</p>'
+  const res = await chamarGAS({ acao: 'listar_exames', dados: { func_id: fichaFuncId } })
+  if (!res || !res.ok || !res.data?.length) { el.innerHTML = '<p class="lista-vazia">Nenhum exame</p>'; return }
+  el.innerHTML = res.data.map(e => `
+    <div class="lista-item" style="margin-bottom:6px">
+      <div class="lista-item-info">
+        <div class="lista-item-nome">${e['TIPO_EXAME']||e['EXAME']||'—'}</div>
+        <div class="lista-item-sub">${e['DATA_VENCIMENTO']||''}</div>
+      </div>
+      <span class="badge ${e['STATUS']==='Vencido'?'badge-vermelho':e['STATUS']==='A vencer'?'badge-amarelo':'badge-verde'}">${e['STATUS']||'—'}</span>
+    </div>`).join('')
+}
+async function renderFichaEpi() {
+  const el = document.getElementById('ficha-painel-epi')
+  el.innerHTML = '<p class="lista-vazia"><i class="ti ti-loader-2"></i> Carregando...</p>'
+  const res = await chamarGAS({ acao: 'listar_epi_entregas', dados: { func_id: fichaFuncId } })
+  if (!res || !res.ok || !res.data?.length) { el.innerHTML = '<p class="lista-vazia">Nenhuma entrega</p>'; return }
+  el.innerHTML = res.data.slice(0,10).map(e => `
+    <div class="lista-item" style="margin-bottom:6px">
+      <div class="lista-item-info">
+        <div class="lista-item-nome">${e['ITENS']||e['EPI']||'—'}</div>
+        <div class="lista-item-sub">${e['DATA_ENTREGA']||''} · ${e['MOTIVO']||''}</div>
+      </div>
+      <span class="badge ${e['STATUS_ASSINATURA']==='Assinado'?'badge-verde':'badge-amarelo'}">${e['STATUS_ASSINATURA']||'Pendente'}</span>
+    </div>`).join('')
+}
+async function renderFichaFolhas() {
+  const el = document.getElementById('ficha-painel-folhas')
+  el.innerHTML = '<p class="lista-vazia"><i class="ti ti-loader-2"></i> Carregando...</p>'
+  const res = await chamarGAS({ acao: 'listar_folhas' })
+  if (!res || !res.ok) { el.innerHTML = '<p class="lista-vazia">Erro</p>'; return }
+  const folhas = (res.data||[]).filter(f => String(f['ID FUNC.']) === String(fichaFuncId))
+  if (!folhas.length) { el.innerHTML = '<p class="lista-vazia">Nenhuma folha</p>'; return }
+  el.innerHTML = folhas.map(f => `
+    <div class="lista-item" style="margin-bottom:6px">
+      <div class="lista-item-info">
+        <div class="lista-item-nome">${normalizarComp(f['COMPETÊNCIA']||'')}</div>
+        <div class="lista-item-sub">${f['DATA ENVIO']||''}</div>
+      </div>
+      <span class="badge ${f['STATUS']==='Assinado'?'badge-verde':'badge-amarelo'}">${f['STATUS']||'—'}</span>
+    </div>`).join('')
+}
+async function renderFichaPagamentos() {
+  const el = document.getElementById('ficha-painel-pagamentos')
+  el.innerHTML = '<p class="lista-vazia"><i class="ti ti-loader-2"></i> Carregando...</p>'
+  const res = await chamarGAS({ acao: 'listar_pagamentos', dados: { func_id: fichaFuncId } })
+  if (!res || !res.ok || !res.data?.length) { el.innerHTML = '<p class="lista-vazia">Nenhum pagamento</p>'; return }
+  el.innerHTML = res.data.map(p => `
+    <div class="lista-item" style="margin-bottom:6px">
+      <div class="lista-item-info">
+        <div class="lista-item-nome">${normalizarComp(p['COMPETENCIA']||'')} ${p['VALOR_LIQUIDO']?'· R$ '+formatarValor(p['VALOR_LIQUIDO']):''}</div>
+        <div class="lista-item-sub">${p['DATA_GERACAO']||''}</div>
+      </div>
+      <span class="badge ${p['STATUS']==='Pago'?'badge-verde':'badge-amarelo'}">${p['STATUS']||'—'}</span>
+    </div>`).join('')
+}
+
+// ── TIMELINE DE PAGAMENTO ────────────────────────────────────────
+function renderTimelinePagamento(status) {
+  const steps = [
+    { label: 'Enviado',    done: true },
+    { label: 'Assinado',   done: ['Assinado','Notificado','Pago'].includes(status) },
+    { label: 'Notificado', done: ['Notificado','Pago'].includes(status) },
+    { label: 'Pago',       done: status === 'Pago' },
+  ]
+  const ativo = steps.findIndex(s => !s.done)
+  return `
+    <div class="timeline">
+      ${steps.map((s, i) => `
+        ${i > 0 ? `<div class="tl-line ${steps[i-1].done?'done':''}"></div>` : ''}
+        <div class="tl-step">
+          <div class="tl-dot ${s.done?'done':i===ativo?'active':''}">
+            ${s.done ? '<i class="ti ti-check" style="font-size:10px"></i>' : i===ativo ? '<i class="ti ti-clock" style="font-size:10px"></i>' : (i+1)}
+          </div>
+          <span class="tl-label ${s.done?'done':i===ativo?'active':''}">${s.label}</span>
+        </div>`).join('')}
+    </div>`
+}
+
+// ── LOG DE AUDITORIA ─────────────────────────────────────────────
+let logCache = []
+async function carregarLog() {
+  const res = await chamarGAS({ acao: 'listar_log' })
+  if (!res || !res.ok) return
+  logCache = res.data || []
+  renderLog(logCache)
+  // Popula filtro usuário
+  const sel = document.getElementById('sel-log-usuario')
+  if (sel) {
+    const usuarios = [...new Set(logCache.map(l => l['USUARIO']).filter(Boolean))]
+    sel.innerHTML = '<option value="">Todos</option>' + usuarios.map(u => `<option>${u}</option>`).join('')
+    sel.onchange = filtrarLog
+  }
+}
+function filtrarLog() {
+  const usuario = document.getElementById('sel-log-usuario')?.value || ''
+  const busca   = (document.getElementById('inp-log-busca')?.value || '').toLowerCase()
+  renderLog(logCache.filter(l =>
+    (!usuario || l['USUARIO'] === usuario) &&
+    (!busca   || JSON.stringify(l).toLowerCase().includes(busca))
+  ))
+}
+function renderLog(lista) {
+  const el = document.getElementById('lista-log')
+  if (!el) return
+  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum registro</p>'; return }
+  el.innerHTML = lista.slice(0,50).map(l => `
+    <div class="log-item">
+      <div class="log-acao">${l['ACAO']||'—'}</div>
+      <div class="log-detalhe">${l['DETALHES']||''}</div>
+      <div class="log-meta">${l['USUARIO']||'—'} · ${l['DATA_HORA']||''}</div>
+    </div>`).join('')
+}
+
+// ── PENDÊNCIAS DO DIA ────────────────────────────────────────────
+function renderPendencias(dashboard) {
+  const card  = document.getElementById('card-pendencias')
+  const lista = document.getElementById('lista-pendencias')
+  if (!card || !lista) return
+  const pendencias = []
+  if (dashboard.examesVencidos > 0)
+    pendencias.push({ urgencia: 'urgente', texto: `${dashboard.examesVencidos} exame(s) vencido(s)`, action: () => irPara('exames') })
+  if (dashboard.examesAVencer > 0)
+    pendencias.push({ urgencia: 'atencao', texto: `${dashboard.examesAVencer} exame(s) vencendo em breve`, action: () => irPara('exames') })
+  if (dashboard.epiRepor > 0)
+    pendencias.push({ urgencia: 'atencao', texto: `${dashboard.epiRepor} EPI(s) para repor estoque`, action: () => irPara('epi') })
+  if (dashboard.folhasPendentes > 0)
+    pendencias.push({ urgencia: 'info', texto: `${dashboard.folhasPendentes} folha(s) aguardando assinatura`, action: () => irPara('fracionar') })
+  if (dashboard.pagtosPendentes > 0)
+    pendencias.push({ urgencia: 'urgente', texto: `${dashboard.pagtosPendentes} pagamento(s) aguardando`, action: () => irPara('pagamento') })
+  if (!pendencias.length) { card.style.display = 'none'; return }
+  card.style.display = 'block'
+  lista.innerHTML = pendencias.map((p,i) => `
+    <div class="pendencia-item" onclick="window._pendenciaActions[${i}]()">
+      <div class="pendencia-dot ${p.urgencia}"></div>
+      <div style="flex:1;font-size:12px;font-weight:500">${p.texto}</div>
+      <i class="ti ti-chevron-right" style="color:var(--text-hint);font-size:14px"></i>
+    </div>`).join('')
+  window._pendenciaActions = pendencias.map(p => p.action)
+}
+
+
+// ── TEMA ────────────────────────────────────────────────────────
+function toggleTema() {
+  const escuro = document.documentElement.getAttribute('data-tema') === 'escuro'
+  document.documentElement.setAttribute('data-tema', escuro ? 'claro' : 'escuro')
+  const btn = document.getElementById('btn-tema')
+  if (btn) btn.innerHTML = escuro ? '<i class="ti ti-moon"></i>' : '<i class="ti ti-sun"></i>'
+  localStorage.setItem('sst-tema', escuro ? 'claro' : 'escuro')
+}
+function aplicarTemaInicial() {
+  const tema = localStorage.getItem('sst-tema') || 'claro'
+  document.documentElement.setAttribute('data-tema', tema)
+  const btn = document.getElementById('btn-tema')
+  if (btn) btn.innerHTML = tema === 'escuro' ? '<i class="ti ti-sun"></i>' : '<i class="ti ti-moon"></i>'
+}
+
+// ── BUSCA GLOBAL ─────────────────────────────────────────────────
+function toggleBusca() {
+  const c = document.getElementById('busca-global-container')
+  const visivel = c.style.display !== 'none'
+  c.style.display = visivel ? 'none' : 'block'
+  if (!visivel) setTimeout(() => document.getElementById('inp-busca-global').focus(), 50)
+  else document.getElementById('busca-resultados').style.display = 'none'
+}
+function fecharBusca() {
+  const c = document.getElementById('busca-global-container')
+  if (c) c.style.display = 'none'
+  const r = document.getElementById('busca-resultados')
+  if (r) r.style.display = 'none'
+  const i = document.getElementById('inp-busca-global')
+  if (i) i.value = ''
+}
+function buscaGlobal(q) {
+  const el = document.getElementById('busca-resultados')
+  if (!q || q.length < 2) { el.style.display = 'none'; return }
+  const ql = q.toLowerCase()
+  const resultados = []
+  funcionarios.filter(f => (f['NOME_COMPLETO']||'').toLowerCase().includes(ql)).slice(0,5).forEach(f => {
+    resultados.push({ tipo:'Funcionário', label:f['NOME_COMPLETO'], sub:(f['FUNCAO']||'')+'·'+(f['UNIDADE']||''), bg:'var(--verde-claro)', cor:'var(--verde-text)', action:()=>abrirFicha(f['ID']) })
+  })
+  if (!resultados.length) { el.innerHTML='<div style="padding:14px;text-align:center;font-size:12px;color:var(--text-hint)">Sem resultados</div>'; el.style.display='block'; return }
+  window._buscaActions = resultados.map(r => () => { fecharBusca(); r.action() })
+  el.innerHTML = resultados.map((r,i) => `
+    <div class="busca-item" onclick="window._buscaActions[${i}]()">
+      <span class="busca-item-tipo" style="background:${r.bg};color:${r.cor}">${r.tipo}</span>
+      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.label}</div><div style="font-size:11px;color:var(--text-secondary)">${r.sub}</div></div>
+      <i class="ti ti-arrow-right" style="color:var(--text-hint);font-size:14px"></i>
+    </div>`).join('')
+  el.style.display = 'block'
+}
+
+// ── FICHA FUNCIONÁRIO ────────────────────────────────────────────
+let fichaFuncId = null
+function abrirFicha(funcId) {
+  const func = funcionarios.find(f => String(f['ID']) === String(funcId))
+  if (!func) return
+  fichaFuncId = String(funcId)
+  document.getElementById('ficha-av').textContent   = getIniciais(func['NOME_COMPLETO'])
+  document.getElementById('ficha-nome').textContent = func['NOME_COMPLETO']
+  document.getElementById('ficha-sub').textContent  = (func['FUNCAO']||'—')+' · '+(func['UNIDADE']||'—')
+  irPara('ficha-func')
+  // Reseta tabs
+  document.querySelectorAll('.ficha-tab').forEach((t,i) => t.classList.toggle('ativo', i===0))
+  document.querySelectorAll('.ficha-painel').forEach((p,i) => p.classList.toggle('ativo', i===0))
+  renderFichaGeral(func)
+}
+function abrirFichaTab(tab, btn) {
+  document.querySelectorAll('.ficha-tab').forEach(t => t.classList.remove('ativo'))
+  document.querySelectorAll('.ficha-painel').forEach(p => p.classList.remove('ativo'))
+  btn.classList.add('ativo')
+  const painel = document.getElementById('ficha-painel-' + tab)
+  if (painel) painel.classList.add('ativo')
+  if (tab === 'exames')     renderFichaExames()
+  if (tab === 'epi')        renderFichaEpi()
+  if (tab === 'folhas')     renderFichaFolhas()
+  if (tab === 'pagamentos') renderFichaPagamentos()
+}
+function renderFichaGeral(func) {
+  const el = document.getElementById('ficha-painel-geral')
+  if (!el) return
+  const campos = [
+    ['CPF',func['CPF']],['RG',func['RG']],['Nascimento',func['DATA_NASCIMENTO']],
+    ['Admissão',func['DATA_ADMISSAO']],['WhatsApp',func['TELEFONE']],
+    ['Banco',func['BANCO']],['Agência',func['AGENCIA']],['Conta',func['CONTA']],['PIX',func['PIX']],
+    ['Salário base',func['SALARIO_BASE']?'R$ '+formatarValor(func['SALARIO_BASE']):''],
+    ['Comissão anual',func['COMISSAO_ANUAL']?'R$ '+formatarValor(func['COMISSAO_ANUAL']):''],
+  ].filter(([,v]) => v)
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:8px">
+      <div class="card-titulo"><i class="ti ti-id-badge"></i> Dados cadastrais</div>
+      ${campos.map(([k,v]) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12px"><span style="color:var(--text-secondary)">${k}</span><span style="font-weight:600;max-width:60%;text-align:right">${v}</span></div>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="editarFuncionario('${func['ID']}')" class="btn-primario" style="flex:1;font-size:12px"><i class="ti ti-pencil"></i> Editar</button>
+      <a href="https://wa.me/55${String(func['TELEFONE']||'').replace(/\D/g,'')}" target="_blank" style="flex:1;background:#22C55E;color:#fff;border-radius:var(--radius-md);padding:12px;font-size:12px;font-weight:700;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-brand-whatsapp"></i> WhatsApp</a>
+    </div>`
+}
+async function renderFichaExames() {
+  const el = document.getElementById('ficha-painel-exames')
+  el.innerHTML = '<p class="lista-vazia">Carregando...</p>'
+  const res = await chamarGAS({ acao: 'listar_exames_func', dados: { func_id: fichaFuncId } })
+  const lista = res?.ok ? res.data : []
+  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum exame</p>'; return }
+  el.innerHTML = lista.map(e => `<div class="lista-item" style="margin-bottom:6px"><div class="lista-item-info"><div class="lista-item-nome">${e['TIPO_EXAME']||'—'}</div><div class="lista-item-sub">${e['DATA_VENCIMENTO']||''}</div></div><span class="badge ${e['STATUS']==='Vencido'?'badge-vermelho':e['STATUS']==='A vencer'?'badge-amarelo':'badge-verde'}">${e['STATUS']||'—'}</span></div>`).join('')
+}
+async function renderFichaEpi() {
+  const el = document.getElementById('ficha-painel-epi')
+  el.innerHTML = '<p class="lista-vazia">Carregando...</p>'
+  const res = await chamarGAS({ acao: 'listar_epi_entregas', dados: { func_id: fichaFuncId } })
+  const lista = res?.ok ? res.data : []
+  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhuma entrega</p>'; return }
+  el.innerHTML = lista.slice(0,15).map(e => `<div class="lista-item" style="margin-bottom:6px"><div class="lista-item-info"><div class="lista-item-nome">${e['ITENS']||e['EPI']||'—'}</div><div class="lista-item-sub">${e['DATA_ENTREGA']||''}</div></div><span class="badge ${e['STATUS_ASSINATURA']==='Assinado'?'badge-verde':'badge-amarelo'}">${e['STATUS_ASSINATURA']||'Pendente'}</span></div>`).join('')
+}
+async function renderFichaFolhas() {
+  const el = document.getElementById('ficha-painel-folhas')
+  el.innerHTML = '<p class="lista-vazia">Carregando...</p>'
+  const res = await chamarGAS({ acao: 'listar_folhas' })
+  const lista = (res?.ok ? res.data : []).filter(f => String(f['ID FUNC.']) === fichaFuncId)
+  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhuma folha</p>'; return }
+  el.innerHTML = lista.map(f => `<div class="lista-item" style="margin-bottom:6px"><div class="lista-item-info"><div class="lista-item-nome">${normalizarComp(f['COMPETÊNCIA']||'')}</div><div class="lista-item-sub">${f['DATA ENVIO']||''}</div></div><span class="badge ${f['STATUS']==='Assinado'?'badge-verde':'badge-amarelo'}">${f['STATUS']||'—'}</span></div>`).join('')
+}
+async function renderFichaPagamentos() {
+  const el = document.getElementById('ficha-painel-pagamentos')
+  el.innerHTML = '<p class="lista-vazia">Carregando...</p>'
+  const res = await chamarGAS({ acao: 'listar_pagamentos', dados: { func_id: fichaFuncId } })
+  const lista = res?.ok ? res.data : []
+  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum pagamento</p>'; return }
+  el.innerHTML = lista.map(p => `<div class="lista-item" style="margin-bottom:6px"><div class="lista-item-info"><div class="lista-item-nome">${normalizarComp(p['COMPETENCIA']||'')}${p['VALOR_LIQUIDO']?' · R$ '+formatarValor(p['VALOR_LIQUIDO']):''}</div><div class="lista-item-sub">${p['DATA_GERACAO']||''}</div></div><span class="badge ${p['STATUS']==='Pago'?'badge-verde':'badge-amarelo'}">${p['STATUS']||'—'}</span></div>`).join('')
+}
+
+// ── TIMELINE ─────────────────────────────────────────────────────
+function renderTimeline(status) {
+  const steps = ['Enviado','Assinado','Notificado','Pago']
+  const idx = steps.indexOf(status)
+  return `<div class="timeline">${steps.map((s,i)=>`
+    ${i>0?`<div class="tl-line ${i<=idx?'done':''}"></div>`:''}
+    <div class="tl-step">
+      <div class="tl-dot ${i<idx?'done':i===idx?'active':''}">
+        ${i<idx?'<i class="ti ti-check" style="font-size:9px"></i>':i===idx?'<i class="ti ti-clock" style="font-size:9px"></i>':i+1}
+      </div>
+      <span class="tl-label ${i<idx?'done':i===idx?'active':''}">${s}</span>
+    </div>`).join('')}</div>`
+}
+
+// ── PENDÊNCIAS DO DIA ────────────────────────────────────────────
+function renderPendencias(dados) {
+  const card  = document.getElementById('card-pendencias')
+  const lista = document.getElementById('lista-pendencias')
+  if (!card || !lista || !dados) return
+  const ps = []
+  if ((dados.examesVencidos||0) > 0)   ps.push({u:'urgente', t:`${dados.examesVencidos} exame(s) vencido(s)`, a:()=>irPara('exames')})
+  if ((dados.examesAVencer||0) > 0)    ps.push({u:'atencao', t:`${dados.examesAVencer} exame(s) vencendo em breve`, a:()=>irPara('exames')})
+  if ((dados.epiRepor||0) > 0)         ps.push({u:'atencao', t:`${dados.epiRepor} EPI(s) para repor`, a:()=>irPara('epi')})
+  if ((dados.folhasPendentes||0) > 0)  ps.push({u:'info', t:`${dados.folhasPendentes} folha(s) aguardando assinatura`, a:()=>irPara('fracionar')})
+  if ((dados.pagtosPendentes||0) > 0)  ps.push({u:'urgente', t:`${dados.pagtosPendentes} pagamento(s) aguardando`, a:()=>irPara('pagamento')})
+  if (!ps.length) { card.style.display='none'; return }
+  card.style.display = 'block'
+  window._pendenciaActions = ps.map(p => p.a)
+  lista.innerHTML = ps.map((p,i)=>`
+    <div class="pendencia-item" onclick="window._pendenciaActions[${i}]()">
+      <div class="pendencia-dot ${p.u}"></div>
+      <div style="flex:1;font-size:12px;font-weight:500">${p.t}</div>
+      <i class="ti ti-chevron-right" style="color:var(--text-hint);font-size:13px"></i>
+    </div>`).join('')
+}
+
+// ── LOG DE AUDITORIA ─────────────────────────────────────────────
+async function carregarLog() {
+  mostrarLoading('Carregando log...')
+  const res = await chamarGAS({ acao: 'listar_log' })
+  esconderLoading()
+  logCache = res?.ok ? res.data : []
+  renderLog(logCache)
+  const sel = document.getElementById('sel-log-usuario')
+  if (sel) {
+    const usuarios = [...new Set(logCache.map(l => l['USUARIO']).filter(Boolean))]
+    sel.innerHTML = '<option value="">Todos</option>' + usuarios.map(u=>`<option>${u}</option>`).join('')
+    sel.onchange = filtrarLog
+  }
+}
+function filtrarLog() {
+  const u = document.getElementById('sel-log-usuario')?.value||''
+  const b = (document.getElementById('inp-log-busca')?.value||'').toLowerCase()
+  renderLog(logCache.filter(l => (!u||l['USUARIO']===u) && (!b||JSON.stringify(l).toLowerCase().includes(b))))
+}
+function renderLog(lista) {
+  const el = document.getElementById('lista-log')
+  if (!el) return
+  if (!lista.length) { el.innerHTML='<p class="lista-vazia">Nenhum registro</p>'; return }
+  el.innerHTML = lista.slice(0,60).map(l=>`
+    <div class="log-item">
+      <div class="log-acao">${l['ACAO']||'—'}</div>
+      <div class="log-detalhe">${l['DETALHES']||''}</div>
+      <div class="log-meta">${l['USUARIO']||'—'} · ${l['DATA_HORA']||''}</div>
+    </div>`).join('')
+}
+
 const TITULOS = {
-  'inicio':'Início','lista-func':'Funcionários','novo-func':'Novo Funcionário',
+  'inicio':'Início','lista-func':'Pessoal','novo-func':'Novo Funcionário',
+  'ficha-func':'Ficha do Funcionário',
   'exames':'Exames','epi':'EPI','fracionar':'Folha de Pagamento',
-  'pagamento':'💰 Controle de Pagamento',
+  'pagamento':'Controle de Pagamento',
+  'log':'Log de Auditoria',
 }
 
 function irPara(pg) {
@@ -134,6 +580,7 @@ function irPara(pg) {
   if (pg === 'epi')        carregarEpi()
   if (pg === 'fracionar')  { preencherMesesFracionar(); carregarEntregasFolha() }
   if (pg === 'pagamento')  iniciarPagamento()
+  if (pg === 'log')        carregarLog()
 }
 
 async function chamarGAS(dados) {
@@ -154,6 +601,7 @@ async function carregarDashboard() {
     chamarGAS({ acao: 'listar_epi_entregas' }),
     chamarGAS({ acao: 'listar_folhas' }),
   ])
+  renderPendencias({ examesVencidos: parseInt(document.getElementById('num-vencidos')?.textContent)||0, examesAVencer: parseInt(document.getElementById('num-avencer')?.textContent)||0 })
   document.getElementById('num-funcs').textContent = funcionarios.length
   if (resEx && resEx.ok) {
     todosExames = resEx.data
