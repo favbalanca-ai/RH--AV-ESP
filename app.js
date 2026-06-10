@@ -1394,8 +1394,13 @@ function normalizarComp(comp) {
   return s
 }
 
-function iniciarPagamento() {
+async function iniciarPagamento() {
   carregarNotifPendentes()
+  // Garante que funcionários estão carregados
+  if (!funcionarios.length) {
+    const res = await chamarGAS({ acao: 'listar_funcionarios' })
+    if (res && res.ok) { funcionarios = res.data; preencherSelectsOcultos() }
+  }
   const sel = document.getElementById('sel-func-pgto')
   if (sel) {
     sel.innerHTML = '<option value="">Selecione...</option>'
