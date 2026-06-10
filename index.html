@@ -200,6 +200,15 @@
     <!-- EXAMES -->
     <div id="pg-exames" class="pagina">
       <div class="search-bar"><i class="ti ti-search" aria-hidden="true"></i><input type="text" id="busca-exame" placeholder="Buscar funcionário..." oninput="filtrarExames(this.value)"></div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+        <select id="filtro-status-exame" onchange="filtrarExames()" style="flex:1;border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;font-family:inherit;background:var(--card-bg);color:var(--text-primary);outline:none">
+          <option value="">Todos os status</option>
+          <option value="✅ OK">OK</option>
+          <option value="⚠️ A VENCER">A vencer</option>
+          <option value="❌ VENCIDO">Vencido</option>
+          <option value="⏳ PENDENTE">Pendente</option>
+        </select>
+      </div>
       <div id="lista-exames" class="lista"></div>
     </div>
 
@@ -234,7 +243,9 @@
           <i class="ti ti-send" aria-hidden="true"></i> Confirmar entrega
         </button>
       </div>
-      <div id="historico-epi-wrap" style="display:none;margin-top:14px">
+      <div id="historico-epi-wrap" style="display:none;margin-top:12px">
+        <div class="card"><div class="card-titulo"><i class="ti ti-history" aria-hidden="true"></i> Últimas entregas</div><div id="lista-entregas" class="lista"></div></div>
+      </div>
         <div class="card">
           <div class="card-titulo"><i class="ti ti-history" aria-hidden="true"></i> Histórico de entregas</div>
           <div id="historico-epi" class="lista"></div>
