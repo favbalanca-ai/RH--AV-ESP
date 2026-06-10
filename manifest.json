@@ -1,8 +1,8 @@
 {
-  "name": "SST Fazenda Água Viva",
-  "short_name": "SST FAV",
-  "description": "Sistema de Saúde e Segurança do Trabalho — Fazenda Água Viva",
-  "start_url": "/RH--AV-ESP/",
+  "name": "Fazenda Água Viva — Pgto",
+  "short_name": "FAV Pgto",
+  "description": "Confirmação de pagamento — Fazenda Água Viva",
+  "start_url": "/RH--AV-ESP/pagar.html",
   "scope": "/RH--AV-ESP/",
   "display": "standalone",
   "orientation": "portrait",
@@ -12,6 +12,22 @@
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
+  "share_target": {
+    "action": "/RH--AV-ESP/pagar.html",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "comprovante",
+          "accept": ["application/pdf", "image/*"]
+        }
+      ]
+    }
+  },
   "categories": ["business", "productivity"],
   "lang": "pt-BR"
 }
