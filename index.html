@@ -230,15 +230,17 @@
           </button>
         </div>
         <!-- Funcionário -->
-        <div id="sel-func-display" class="func-selector" onclick="abrirSeletorFunc()">
-          <div class="avatar" id="sel-func-avatar">?</div>
-          <div style="flex:1;min-width:0">
-            <div id="sel-func-nome" style="font-size:13px;color:var(--text-secondary)">Selecione o funcionário...</div>
-            <div id="sel-func-sub" style="font-size:10px;color:var(--text-hint)"></div>
+        <div style="position:relative">
+          <div id="sel-func-display" class="func-selector">
+            <div class="avatar" id="sel-func-avatar">?</div>
+            <div style="flex:1;min-width:0">
+              <div id="sel-func-nome" style="font-size:13px;color:var(--text-secondary)">Selecione o funcionário...</div>
+              <div id="sel-func-sub" style="font-size:10px;color:var(--text-hint)"></div>
+            </div>
+            <i class="ti ti-chevron-down" style="color:var(--text-hint);font-size:16px" aria-hidden="true"></i>
           </div>
-          <i class="ti ti-chevron-down" style="color:var(--text-hint);font-size:16px" aria-hidden="true"></i>
+          <select id="sel-func-epi-hidden" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px" onchange="selecionarFuncEpi(this.value)"></select>
         </div>
-        <select id="sel-func-epi-hidden" style="display:none" onchange="selecionarFuncEpi(this.value)"></select>
         <!-- EPIs selecionados -->
         <div id="epi-itens-lista" style="margin-top:8px"></div>
         <!-- Buscar EPI -->
