@@ -4,62 +4,89 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1A5C2A">
 <title>Confirmação de Pagamento — Fazenda Água Viva</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif}
 :root{--verde:#1A5C2A;--verde-claro:#EAF3DE;--verde-text:#3B6D11;--border:rgba(0,0,0,0.1)}
 body{background:#F4F6F4;min-height:100vh;display:flex;flex-direction:column}
-.header{background:var(--verde);color:#fff;padding:14px 16px;text-align:center;flex-shrink:0}
-.header h1{font-size:16px;font-weight:600}
-.header p{font-size:10px;opacity:0.7;margin-top:2px}
+.header{background:var(--verde);color:#fff;padding:16px;text-align:center}
+.header h1{font-size:17px;font-weight:700}
+.header p{font-size:11px;opacity:0.65;margin-top:3px}
 .content{flex:1;padding:12px;display:flex;flex-direction:column;gap:10px;max-width:480px;margin:0 auto;width:100%}
-.card{background:#fff;border-radius:14px;padding:14px;border:0.5px solid var(--border)}
-.card-title{font-size:13px;font-weight:600;color:#1A1A1A;margin-bottom:10px;display:flex;align-items:center;gap:6px}
-.row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12px}
+.card{background:#fff;border-radius:16px;padding:16px;border:0.5px solid var(--border);box-shadow:0 1px 4px rgba(0,0,0,0.05)}
+.card-title{font-size:13px;font-weight:700;color:#1A1A1A;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--border);font-size:13px}
 .row:last-child{border:none}
-.row-label{color:#6B7280;font-weight:500}
-.row-value{font-weight:600;color:#1A1A1A}
-.valor-destaque{background:var(--verde-claro);border-radius:10px;padding:14px;text-align:center;margin:10px 0}
-.valor-num{font-size:28px;font-weight:700;color:var(--verde);display:block}
-.valor-label{font-size:11px;color:var(--verde-text);margin-top:2px}
-.btn-principal{background:var(--verde);color:#fff;border:none;border-radius:12px;padding:16px;font-size:15px;font-weight:600;width:100%;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;font-family:inherit;margin-top:6px}
-.btn-principal:disabled{background:#E5E7EB;color:#9CA3AF;cursor:not-allowed}
-.upload-area{border:1.5px dashed rgba(0,0,0,0.2);border-radius:10px;padding:20px;text-align:center;cursor:pointer;background:#FAFAFA;margin-top:8px}
-.upload-area:active{background:#F0F0F0}
-.upload-icon{font-size:32px;margin-bottom:8px;display:block}
-.upload-label{font-size:13px;font-weight:500;color:#6B7280}
-.upload-sub{font-size:11px;color:#9CA3AF;margin-top:4px}
-#preview-img{max-width:100%;border-radius:8px;margin-top:10px;display:none}
-.estado{text-align:center;padding:30px 16px;display:flex;flex-direction:column;align-items:center;gap:12px}
-.estado-icon{font-size:56px}
-.estado h2{font-size:18px;font-weight:600}
+.row-label{color:#6B7280}
+.row-value{font-weight:600;color:#1A1A1A;text-align:right;max-width:60%}
+.valor-destaque{background:var(--verde-claro);border-radius:12px;padding:18px;text-align:center;margin:4px 0 12px}
+.valor-num{font-size:32px;font-weight:800;color:var(--verde);display:block}
+.valor-label{font-size:12px;color:var(--verde-text);margin-top:3px}
+.pix-box{background:#EEF4FF;border:0.5px solid rgba(24,95,165,0.2);border-radius:12px;padding:14px;margin-bottom:8px}
+.pix-label{font-size:10px;color:#6B7280;font-weight:700;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em}
+.pix-value{font-size:16px;font-weight:700;color:#185FA5;word-break:break-all;margin-bottom:8px}
+.btn-copiar-pix{background:#185FA5;color:#fff;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;width:100%;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;font-family:inherit}
+.btn-copiar-pix:active{opacity:0.85}
+.dados-banco{font-size:12px;color:#6B7280;margin-top:8px;line-height:1.8}
+.dados-banco strong{color:#374151}
+
+/* ETAPAS */
+.etapas{display:flex;flex-direction:column;gap:8px}
+.etapa{display:flex;align-items:flex-start;gap:12px;padding:12px;background:#F9FAFB;border-radius:12px;border:0.5px solid #E5E7EB;cursor:pointer;transition:all .15s}
+.etapa.concluida{background:var(--verde-claro);border-color:rgba(26,92,42,0.2)}
+.etapa.ativa{background:#fff;border-color:var(--verde);box-shadow:0 0 0 2px rgba(26,92,42,0.1)}
+.etapa-num{width:32px;height:32px;border-radius:50%;background:#E5E7EB;color:#6B7280;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
+.etapa.concluida .etapa-num{background:var(--verde);color:#fff}
+.etapa.ativa .etapa-num{background:var(--verde);color:#fff}
+.etapa-texto{flex:1}
+.etapa-titulo{font-size:14px;font-weight:700;color:#1A1A1A}
+.etapa.concluida .etapa-titulo{color:var(--verde-text)}
+.etapa-sub{font-size:11px;color:#6B7280;margin-top:2px;line-height:1.4}
+.etapa-check{font-size:20px;flex-shrink:0}
+
+/* BOTÕES DE AÇÃO */
+.btn-grande{border:none;border-radius:14px;padding:18px;font-size:16px;font-weight:700;width:100%;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;font-family:inherit;transition:all .15s;margin-top:4px}
+.btn-grande:active{transform:scale(0.97)}
+.btn-verde{background:var(--verde);color:#fff}
+.btn-email{background:#185FA5;color:#fff}
+.btn-cinza{background:#F3F4F6;color:#374151;border:0.5px solid #E5E7EB}
+
+/* Upload */
+.upload-wrap{margin-top:8px}
+.upload-opcoes{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px}
+.upload-btn{background:var(--verde-claro);border:0.5px solid rgba(26,92,42,0.2);border-radius:12px;padding:12px 6px;text-align:center;cursor:pointer;transition:all .15s}
+.upload-btn:active{transform:scale(0.96)}
+.upload-btn div:first-child{font-size:24px;margin-bottom:4px}
+.upload-btn div:last-child{font-size:10px;font-weight:700;color:var(--verde-text)}
+.preview-comp{width:100%;border-radius:10px;margin-top:8px;display:none;border:0.5px solid var(--border)}
+.comp-selecionado{background:var(--verde-claro);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--verde-text);font-weight:600;display:none;align-items:center;gap:8px;margin-top:8px}
+
+/* Estado */
+.estado{text-align:center;padding:32px 16px;display:flex;flex-direction:column;align-items:center;gap:14px}
+.estado-icon{font-size:60px}
+.estado h2{font-size:20px;font-weight:700}
 .estado p{font-size:13px;color:#6B7280;line-height:1.6}
-.loading-spinner{width:32px;height:32px;border:3px solid var(--verde-claro);border-top-color:var(--verde);border-radius:50%;animation:spin 0.7s linear infinite}
+.spinner{width:34px;height:34px;border:3px solid var(--verde-claro);border-top-color:var(--verde);border-radius:50%;animation:spin 0.7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.aviso{background:#FFF8E1;border:0.5px solid rgba(133,79,11,0.2);border-radius:10px;padding:10px 12px;font-size:11px;color:#854F0B;line-height:1.5}
-.dados-pix{background:#F0F4FF;border:0.5px solid rgba(24,95,165,0.2);border-radius:10px;padding:12px}
-.dado-pix-label{font-size:10px;color:#6B7280;font-weight:600;margin-bottom:2px}
-.dado-pix-value{font-size:13px;font-weight:600;color:#185FA5;word-break:break-all}
-.copy-btn{background:none;border:0.5px solid rgba(24,95,165,0.3);border-radius:6px;padding:4px 8px;font-size:10px;color:#185FA5;cursor:pointer;margin-top:4px;font-family:inherit}
+
+.aviso-email{background:#FFF8E1;border:0.5px solid rgba(133,79,11,0.2);border-radius:12px;padding:12px;font-size:12px;color:#854F0B;line-height:1.6;margin-top:6px}
+.divider{display:flex;align-items:center;gap:10px;margin:10px 0;color:#9CA3AF;font-size:11px}
+.divider::before,.divider::after{content:'';flex:1;height:0.5px;background:#E5E7EB}
 </style>
 </head>
-<script>
-// Registra Service Worker para Web Share Target
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/RH--AV-ESP/sw.js', { scope: '/RH--AV-ESP/' })
-    .catch(() => {})
-}
-</script>
 <body>
+
 <div class="header">
   <h1>🌿 Fazenda Água Viva</h1>
   <p>Confirmação de Pagamento</p>
 </div>
+
 <div class="content">
 
   <!-- Carregando -->
   <div id="estado-loading" class="card">
-    <div class="estado"><div class="loading-spinner"></div><p>Carregando dados...</p></div>
+    <div class="estado"><div class="spinner"></div><p>Carregando...</p></div>
   </div>
 
   <!-- Erro -->
@@ -67,160 +94,136 @@ if ('serviceWorker' in navigator) {
     <div class="estado"><div class="estado-icon">❌</div><h2>Link inválido</h2><p>Este link não foi encontrado ou já expirou.</p></div>
   </div>
 
-  <!-- Já confirmado -->
+  <!-- Já pago -->
   <div id="estado-pago" class="card" style="display:none">
-    <div class="estado"><div class="estado-icon">✅</div><h2>Pagamento já confirmado</h2><p id="pago-data"></p></div>
-  </div>
-
-  <!-- Formulário de confirmação -->
-  <div id="estado-confirmar" style="display:none">
-
-    <!-- Dados do pagamento -->
-    <div class="card">
-      <div class="card-title">📋 Dados do pagamento</div>
-      <div class="row"><span class="row-label">Funcionário</span><span class="row-value" id="info-nome"></span></div>
-      <div class="row"><span class="row-label">Função</span><span class="row-value" id="info-funcao"></span></div>
-      <div class="row"><span class="row-label">Competência</span><span class="row-value" id="info-comp"></span></div>
-      <div class="valor-destaque">
-        <span class="valor-num" id="info-valor">—</span>
-        <span class="valor-label">Valor líquido a pagar</span>
-      </div>
-    </div>
-
-    <!-- Dados bancários -->
-    <div class="card" id="card-dados-bancarios" style="display:none">
-      <div class="card-title">🏦 Dados para pagamento</div>
-      <div id="dados-bancarios-body"></div>
-    </div>
-
-    <!-- Comprovante -->
-    <div class="card">
-      <div class="card-title">📎 Comprovante de pagamento</div>
-      <div class="aviso">Após efetuar o pagamento, anexe o comprovante aqui para confirmar.</div>
-
-      <!-- Botão principal de anexo -->
-      <label for="file-comprovante" style="display:block;margin-top:10px">
-        <div id="upload-area" style="background:#1A5C2A;border-radius:14px;padding:16px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:opacity 0.15s">
-          <div style="width:48px;height:48px;background:rgba(255,255,255,0.15);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">📎</div>
-          <div style="flex:1">
-            <div id="upload-label" style="font-size:14px;font-weight:700;color:#fff">Toque para anexar comprovante</div>
-            <div id="upload-sub" style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:2px">Foto, print ou PDF do comprovante</div>
-          </div>
-          <div style="color:rgba(255,255,255,0.6);font-size:20px">›</div>
-        </div>
-      </label>
-
-      <!-- Botões rápidos câmera / galeria / arquivo -->
-      <div id="btns-rapidos" style="display:flex;gap:8px;margin-top:8px">
-        <label style="flex:1" for="file-camera">
-          <div style="background:#EAF3DE;border:0.5px solid rgba(26,92,42,0.2);border-radius:10px;padding:10px;text-align:center;cursor:pointer">
-            <div style="font-size:20px">📷</div>
-            <div style="font-size:10px;font-weight:600;color:#3B6D11;margin-top:3px">Câmera</div>
-          </div>
-        </label>
-        <label style="flex:1" for="file-galeria">
-          <div style="background:#EAF3DE;border:0.5px solid rgba(26,92,42,0.2);border-radius:10px;padding:10px;text-align:center;cursor:pointer">
-            <div style="font-size:20px">🖼️</div>
-            <div style="font-size:10px;font-weight:600;color:#3B6D11;margin-top:3px">Galeria</div>
-          </div>
-        </label>
-        <label style="flex:1" for="file-comprovante">
-          <div style="background:#EAF3DE;border:0.5px solid rgba(26,92,42,0.2);border-radius:10px;padding:10px;text-align:center;cursor:pointer">
-            <div style="font-size:20px">📄</div>
-            <div style="font-size:10px;font-weight:600;color:#3B6D11;margin-top:3px">Arquivo</div>
-          </div>
-        </label>
-      </div>
-
-      <input type="file" id="file-comprovante" accept="image/*,application/pdf" style="display:none" onchange="selecionarComprovante()">
-      <input type="file" id="file-camera" accept="image/*" capture="environment" style="display:none" onchange="selecionarComprovanteInput(this)">
-      <input type="file" id="file-galeria" accept="image/*" style="display:none" onchange="selecionarComprovanteInput(this)">
-
-      <!-- Botão email pré-preenchido -->
-      <div style="margin-top:10px;background:#E6F1FB;border:0.5px solid rgba(24,95,165,0.2);border-radius:14px;padding:14px">
-        <div style="font-size:11px;font-weight:700;color:#185FA5;margin-bottom:8px">📧 Prefere enviar por email?</div>
-        <div style="font-size:11px;color:#374151;margin-bottom:10px;line-height:1.5">
-          Toque no botão abaixo — o email já abre preenchido com destinatário e assunto. 
-          Só anexe o comprovante e envie.
-        </div>
-        <button onclick="abrirEmailPreenchido()" style="background:#185FA5;color:#fff;border:none;border-radius:10px;padding:12px 16px;font-size:13px;font-weight:700;width:100%;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
-          <span style="font-size:18px">📧</span> Abrir Gmail com comprovante
-        </button>
-        <div style="font-size:10px;color:#6B7280;text-align:center;margin-top:6px">
-          Sistema confirma automaticamente em até 5 minutos
-        </div>
-      </div>
-
-      <img id="preview-img" alt="Comprovante" style="display:none;width:100%;border-radius:10px;margin-top:10px;border:0.5px solid var(--border)">
-
-      <div class="card-title" style="margin-top:14px">📅 Data do pagamento</div>
-      <input type="date" id="data-pagamento" style="width:100%;border:0.5px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;font-family:inherit">
-
-      <button class="btn-principal" id="btn-confirmar" onclick="confirmarPagamento()" disabled>
-        ✅ Confirmar pagamento
-      </button>
-    </div>
-
+    <div class="estado"><div class="estado-icon">✅</div><h2>Pagamento confirmado!</h2><p id="pago-data"></p></div>
   </div>
 
   <!-- Sucesso -->
   <div id="estado-sucesso" class="card" style="display:none">
     <div class="estado">
       <div class="estado-icon">🎉</div>
-      <h2>Pagamento confirmado!</h2>
-      <p>O comprovante foi salvo automaticamente.<br>O sistema foi atualizado.</p>
+      <h2>Obrigado!</h2>
+      <p>Pagamento confirmado com sucesso.<br>O sistema foi atualizado automaticamente.</p>
     </div>
   </div>
 
+  <!-- FORMULÁRIO PRINCIPAL -->
+  <div id="estado-confirmar" style="display:none">
+
+    <!-- Dados + valor -->
+    <div class="card">
+      <div class="row"><span class="row-label">Funcionário</span><span class="row-value" id="info-nome"></span></div>
+      <div class="row"><span class="row-label">Competência</span><span class="row-value" id="info-comp"></span></div>
+      <div class="valor-destaque">
+        <span class="valor-num" id="info-valor">—</span>
+        <span class="valor-label">Valor líquido a pagar</span>
+      </div>
+      <!-- PIX -->
+      <div id="card-pix" style="display:none">
+        <div class="pix-box">
+          <div class="pix-label">Chave PIX</div>
+          <div class="pix-value" id="info-pix"></div>
+          <button class="btn-copiar-pix" onclick="copiarPix()">
+            📋 Copiar chave PIX
+          </button>
+        </div>
+        <div class="dados-banco" id="info-banco"></div>
+      </div>
+    </div>
+
+    <!-- ETAPAS SIMPLIFICADAS -->
+    <div class="card">
+      <div class="card-title">📋 Confirmar pagamento</div>
+      <div class="etapas">
+
+        <!-- Etapa 1: Já paguei -->
+        <div class="etapa ativa" id="etapa-1">
+          <div class="etapa-num" id="num-1">1</div>
+          <div class="etapa-texto">
+            <div class="etapa-titulo">Já efetuei o pagamento</div>
+            <div class="etapa-sub">Toque para confirmar que o pagamento foi realizado</div>
+          </div>
+          <div class="etapa-check" id="check-1">○</div>
+        </div>
+
+        <!-- Etapa 2: Comprovante (opcional) -->
+        <div class="etapa" id="etapa-2" style="opacity:0.5">
+          <div class="etapa-num" id="num-2">2</div>
+          <div class="etapa-texto">
+            <div class="etapa-titulo">Comprovante <span style="font-size:10px;font-weight:400;color:#6B7280">(opcional)</span></div>
+            <div class="etapa-sub">Foto, arquivo ou envie por email</div>
+          </div>
+          <div class="etapa-check" id="check-2">○</div>
+        </div>
+
+      </div>
+
+      <!-- Painel Etapa 1 -->
+      <div id="painel-1" style="margin-top:12px">
+        <button class="btn-grande btn-verde" onclick="confirmarPago()">
+          ✅ Já paguei
+        </button>
+      </div>
+
+      <!-- Painel Etapa 2 -->
+      <div id="painel-2" style="display:none;margin-top:12px">
+
+        <div class="upload-wrap">
+          <div class="upload-opcoes">
+            <label class="upload-btn" for="file-camera">
+              <div>📷</div><div>Câmera</div>
+            </label>
+            <label class="upload-btn" for="file-galeria">
+              <div>🖼️</div><div>Galeria</div>
+            </label>
+            <label class="upload-btn" for="file-arquivo">
+              <div>📄</div><div>Arquivo</div>
+            </label>
+          </div>
+          <input type="file" id="file-camera"  accept="image/*" capture="environment" style="display:none" onchange="selecionarComp(this)">
+          <input type="file" id="file-galeria" accept="image/*" style="display:none" onchange="selecionarComp(this)">
+          <input type="file" id="file-arquivo" accept="image/*,application/pdf" style="display:none" onchange="selecionarComp(this)">
+          <div class="comp-selecionado" id="comp-selecionado">
+            <span>✅</span><span id="comp-nome"></span>
+          </div>
+          <img id="preview-img" class="preview-comp" alt="Comprovante">
+        </div>
+
+        <div class="divider">ou envie por email</div>
+
+        <button class="btn-grande btn-email" onclick="abrirEmailPreenchido()" style="font-size:14px">
+          📧 Abrir Gmail já preenchido
+        </button>
+        <div class="aviso-email">
+          O email abre com destinatário e assunto prontos. Só anexe o comprovante e envie — confirmamos em até 5 minutos.
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:8px">
+          <button class="btn-grande btn-cinza" onclick="pularComprovante()" style="flex:1;font-size:13px;padding:14px">
+            Pular por enquanto
+          </button>
+          <button class="btn-grande btn-verde" id="btn-enviar-comp" onclick="enviarComComprovante()" style="flex:1;font-size:13px;padding:14px;display:none">
+            Enviar ✓
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
 </div>
+
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxZAoTs9hTLs3LbOgjGKPiytHTEP6N0O34WpUHUYPRaFh5yKS6P6gXNRS9dMLlmHLtW/exec'
-let dadosPagto = null
-let arquivoBase64 = null
-let arquivoExt = 'jpg'
+let dadosPagto = null, arquivoBase64 = null, arquivoExt = 'jpg', etapaAtual = 1
 
-// Inicializa data com hoje
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('data-pagamento').value = new Date().toISOString().split('T')[0]
-  const params = new URLSearchParams(window.location.search)
-  const token  = params.get('t')
+  const token = new URLSearchParams(window.location.search).get('t')
   if (!token) { mostrar('erro'); return }
   carregarDados(token)
-
-  // Detecta arquivo recebido via Web Share Target
-  if (params.get('shared') === '1') {
-    carregarArquivoCompartilhado()
-  }
 })
-
-async function carregarArquivoCompartilhado() {
-  try {
-    const cache = await caches.open('share-target-temp')
-    const resp  = await cache.match('shared-file')
-    if (!resp) return
-    const blob     = await resp.blob()
-    const nome     = resp.headers.get('X-File-Name') || 'comprovante'
-    const file     = new File([blob], nome, { type: blob.type })
-    // Injeta no input de comprovante
-    const dt = new DataTransfer()
-    dt.items.add(file)
-    const inp = document.getElementById('file-comprovante')
-    if (inp) {
-      inp.files = dt.files
-      inp.dispatchEvent(new Event('change'))
-    }
-    // Limpa o cache temporário
-    await cache.delete('shared-file')
-    // Feedback visual
-    const area = document.getElementById('upload-area')
-    if (area) {
-      area.style.background = '#EAF3DE'
-      area.style.borderColor = '#1A5C2A'
-    }
-    document.getElementById('upload-label').textContent = '✅ ' + nome
-    document.getElementById('upload-sub').textContent   = 'Comprovante recebido — confirme abaixo'
-  } catch(e) {}
-}
 
 async function carregarDados(token) {
   try {
@@ -234,136 +237,163 @@ async function carregarDados(token) {
       mostrar('pago'); return
     }
 
-    // Preenche dados
-    // Normaliza competência — trata objeto Date serializado, dd/mm/yyyy, etc
-    function normalizarComp(s) {
-      const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
-      s = String(s || '').trim()
-      // Objeto Date: "Fri May 01 2026 04:00:00..."
-      const mEng = {'Jan':0,'Feb':1,'Mar':2,'Apr':3,'May':4,'Jun':5,'Jul':6,'Aug':7,'Sep':8,'Oct':9,'Nov':10,'Dec':11}
-      const mMatch = s.match(/([A-Z][a-z]{2})\s+\d{2}\s+(\d{4})/)
-      if (mMatch && mEng[mMatch[1]] !== undefined) return meses[mEng[mMatch[1]]] + '/' + mMatch[2]
-      // dd/mm/yyyy
-      const d1 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
-      if (d1) return meses[parseInt(d1[2])-1] + '/' + d1[3]
-      // mm/yyyy
-      const d2 = s.match(/^(\d{2})\/(\d{4})$/)
-      if (d2) return meses[parseInt(d2[1])-1] + '/' + d2[2]
-      return s
-    }
-
-    // Normaliza valor — US (1940.43) ou BR (1.940,43)
-    function normalizarValor(v) {
-      const s = String(v || '').trim()
-      if (!s) return null
-      if (s.indexOf(',') === -1) return parseFloat(s)
-      return parseFloat(s.replace(/\./g,'').replace(',','.'))
-    }
-
-    document.getElementById('info-nome').textContent   = dadosPagto.nome_func
-    document.getElementById('info-funcao').textContent = dadosPagto.funcao || '—'
-    document.getElementById('info-comp').textContent   = normalizarComp(dadosPagto.competencia)
-
-    const valor = normalizarValor(dadosPagto.valor_liquido)
-    if (valor && !isNaN(valor)) {
-      document.getElementById('info-valor').textContent = 'R$ ' + valor.toLocaleString('pt-BR', {minimumFractionDigits:2})
-    }
-
-    // Dados bancários
-    const banco   = dadosPagto.banco   || ''
-    const agencia = dadosPagto.agencia || ''
-    const conta   = dadosPagto.conta   || ''
-    const pix     = dadosPagto.pix     || ''
-    if (pix || banco) {
-      document.getElementById('card-dados-bancarios').style.display = 'block'
-      let html = ''
-      if (pix)     html += `<div class="dados-pix"><div class="dado-pix-label">PIX</div><div class="dado-pix-value">${pix}</div><button class="copy-btn" onclick="copiar('${pix}')">📋 Copiar</button></div><br>`
-      if (banco)   html += `<div class="row"><span class="row-label">Banco</span><span class="row-value">${banco}</span></div>`
-      if (agencia) html += `<div class="row"><span class="row-label">Agência</span><span class="row-value">${agencia}</span></div>`
-      if (conta)   html += `<div class="row"><span class="row-label">Conta</span><span class="row-value">${conta}</span></div>`
-      document.getElementById('dados-bancarios-body').innerHTML = html
-    }
-
+    preencherDados()
     mostrar('confirmar')
   } catch(e) { mostrar('erro') }
 }
 
-function selecionarComprovante() {
-  const file = document.getElementById('file-comprovante').files[0]
-  if (!file) return
+function preencherDados() {
+  document.getElementById('info-nome').textContent = dadosPagto.nome_func || '—'
+  document.getElementById('info-comp').textContent = normalizarComp(dadosPagto.competencia)
+
+  const valor = normalizarValor(dadosPagto.valor_liquido)
+  if (valor) document.getElementById('info-valor').textContent = 'R$ ' + valor.toLocaleString('pt-BR',{minimumFractionDigits:2})
+
+  const pix = dadosPagto.pix || ''
+  const banco = dadosPagto.banco || ''
+  if (pix || banco) {
+    document.getElementById('card-pix').style.display = 'block'
+    if (pix) document.getElementById('info-pix').textContent = pix
+    let b = ''
+    if (banco)              b += '<strong>Banco:</strong> ' + banco + '&nbsp;&nbsp;'
+    if (dadosPagto.agencia) b += '<strong>Agência:</strong> ' + dadosPagto.agencia + '&nbsp;&nbsp;'
+    if (dadosPagto.conta)   b += '<strong>Conta:</strong> ' + dadosPagto.conta
+    document.getElementById('info-banco').innerHTML = b
+  }
+}
+
+// ── ETAPA 1: Confirmar que pagou ─────────────────────────────────
+async function confirmarPago() {
+  const btn = document.querySelector('#painel-1 button')
+  btn.disabled = true; btn.textContent = '⏳ Confirmando...'
+
+  try {
+    const res  = await fetch(GAS_URL, { method:'POST', body: JSON.stringify({
+      acao: 'confirmar_pagamento_empregador',
+      token: dadosPagto.token,
+      data_pagamento: new Date().toISOString().split('T')[0],
+      sem_comprovante: true
+    })})
+    const data = await res.json()
+
+    if (data.ok) {
+      // Marca etapa 1 concluída
+      document.getElementById('etapa-1').className = 'etapa concluida'
+      document.getElementById('check-1').textContent = '✅'
+      document.getElementById('num-1').textContent = '✓'
+      document.getElementById('painel-1').style.display = 'none'
+      // Ativa etapa 2
+      document.getElementById('etapa-2').className = 'etapa ativa'
+      document.getElementById('etapa-2').style.opacity = '1'
+      document.getElementById('num-2').textContent = '2'
+      document.getElementById('painel-2').style.display = 'block'
+      etapaAtual = 2
+    } else {
+      btn.disabled = false; btn.textContent = '✅ Já paguei'
+      alert(data.erro || 'Erro. Tente novamente.')
+    }
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '✅ Já paguei'
+    alert('Erro de conexão. Tente novamente.')
+  }
+}
+
+// ── ETAPA 2: Comprovante ─────────────────────────────────────────
+function selecionarComp(input) {
+  const file = input.files[0]; if (!file) return
   arquivoExt = file.name.split('.').pop().toLowerCase()
-  document.getElementById('upload-label').textContent = '✅ ' + file.name
-  document.getElementById('btn-confirmar').disabled = false
+  document.getElementById('comp-nome').textContent = file.name
+  document.getElementById('comp-selecionado').style.display = 'flex'
+  document.getElementById('btn-enviar-comp').style.display = 'flex'
 
   if (file.type.startsWith('image/')) {
-    const reader = new FileReader()
-    reader.onload = e => {
-      const img = document.getElementById('preview-img')
-      img.src = e.target.result; img.style.display = 'block'
-    }
-    reader.readAsDataURL(file)
+    const r = new FileReader()
+    r.onload = e => { const img = document.getElementById('preview-img'); img.src = e.target.result; img.style.display = 'block' }
+    r.readAsDataURL(file)
   }
-
-  // Converte para base64
   const r2 = new FileReader()
   r2.onload = () => { arquivoBase64 = r2.result.split(',')[1] }
   r2.readAsDataURL(file)
 }
 
-async function confirmarPagamento() {
-  if (!arquivoBase64) return alert('Selecione o comprovante primeiro')
-  const btn = document.getElementById('btn-confirmar')
-  btn.disabled = true; btn.textContent = '⏳ Confirmando...'
+async function enviarComComprovante() {
+  if (!arquivoBase64) return
+  const btn = document.getElementById('btn-enviar-comp')
+  btn.disabled = true; btn.textContent = '⏳ Enviando...'
 
   try {
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        acao:               'confirmar_pagamento_empregador',
-        token:              dadosPagto.token,
-        comprovante_base64: arquivoBase64,
-        extensao:           arquivoExt,
-        data_pagamento:     document.getElementById('data-pagamento').value,
-      })
-    })
+    const res  = await fetch(GAS_URL, { method:'POST', body: JSON.stringify({
+      acao: 'registrar_comprovante',
+      token: dadosPagto.token,
+      comprovante_base64: arquivoBase64,
+      extensao: arquivoExt,
+    })})
     const data = await res.json()
-    if (data.ok) { mostrar('sucesso') }
-    else {
-      btn.disabled = false; btn.textContent = '✅ Confirmar pagamento'
-      alert('Erro: ' + (data.erro || 'Tente novamente'))
+    if (data.ok) {
+      concluirEtapa2()
+    } else {
+      btn.disabled = false; btn.textContent = 'Enviar ✓'
+      alert(data.erro || 'Erro ao enviar.')
     }
   } catch(e) {
-    btn.disabled = false; btn.textContent = '✅ Confirmar pagamento'
-    alert('Erro de conexão. Tente novamente.')
+    btn.disabled = false; btn.textContent = 'Enviar ✓'
   }
+}
+
+function pularComprovante() { concluirEtapa2() }
+
+function concluirEtapa2() {
+  document.getElementById('etapa-2').className = 'etapa concluida'
+  document.getElementById('check-2').textContent = '✅'
+  document.getElementById('num-2').textContent = '✓'
+  document.getElementById('painel-2').style.display = 'none'
+  mostrar('sucesso')
 }
 
 function abrirEmailPreenchido() {
   const nome  = document.getElementById('info-nome')?.textContent || 'Funcionário'
   const comp  = document.getElementById('info-comp')?.textContent || ''
   const token = new URLSearchParams(window.location.search).get('t') || ''
-
-  const para    = 'fav.balanca@gmail.com'
   const assunto = encodeURIComponent('Comprovante ' + nome + ' ' + comp + ' [' + token.substring(0,8) + ']')
-  const corpo   = encodeURIComponent(
-    'Olá,\n\nSegue em anexo o comprovante de pagamento.\n\n' +
-    'Funcionário: ' + nome + '\n' +
-    'Competência: ' + comp + '\n\n' +
-    'IMPORTANTE: Anexe o comprovante antes de enviar.\n\n' +
-    'Fazenda Água Viva'
-  )
-  window.location.href = 'mailto:' + para + '?subject=' + assunto + '&body=' + corpo
+  const corpo   = encodeURIComponent('Olá,\n\nSegue em anexo o comprovante de pagamento.\n\nFuncionário: ' + nome + '\nCompetência: ' + comp + '\n\nAnexe o comprovante e envie.\n\nFazenda Água Viva')
+  window.open('mailto:fav.balanca@gmail.com?subject=' + assunto + '&body=' + corpo, '_blank')
 }
 
-function copiar(texto) {
-  navigator.clipboard.writeText(texto).then(() => alert('Copiado!'))
+function copiarPix() {
+  const pix = document.getElementById('info-pix')?.textContent
+  if (!pix) return
+  navigator.clipboard.writeText(pix).then(() => {
+    const btn = document.querySelector('.btn-copiar-pix')
+    btn.textContent = '✅ PIX copiado!'
+    setTimeout(() => btn.innerHTML = '📋 Copiar chave PIX', 2500)
+  }).catch(() => alert('PIX: ' + pix))
 }
 
 function mostrar(estado) {
   ['loading','erro','pago','confirmar','sucesso'].forEach(s => {
     const el = document.getElementById('estado-' + s)
-    if (el) el.style.display = s === estado ? 'block' : 'none'
+    if (el) el.style.display = s === estado ? (s === 'confirmar' ? 'block' : 'block') : 'none'
   })
+}
+
+function normalizarComp(s) {
+  const M = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+  s = String(s||'').trim()
+  const m = s.match(/([A-Z][a-z]{2})\s+\d{2}\s+(\d{4})/)
+  const e = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11}
+  if (m && e[m[1]] !== undefined) return M[e[m[1]]] + '/' + m[2]
+  const d1 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (d1) return M[parseInt(d1[2])-1] + '/' + d1[3]
+  const d2 = s.match(/^(\d{2})\/(\d{4})$/)
+  if (d2) return M[parseInt(d2[1])-1] + '/' + d2[2]
+  return s
+}
+
+function normalizarValor(v) {
+  const s = String(v||'').trim()
+  if (!s) return null
+  if (s.indexOf(',') === -1) return parseFloat(s)
+  return parseFloat(s.replace(/\./g,'').replace(',','.'))
 }
 </script>
 </body>
