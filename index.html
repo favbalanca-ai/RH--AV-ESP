@@ -4,22 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1A5C2A">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 <link rel="stylesheet" href="style.css">
-<script src="https://apis.google.com/js/api.js"></script>
-<script src="https://accounts.google.com/gsi/client"></script>
 <script src="https://apis.google.com/js/api.js"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <title>SST — Fazenda Água Viva</title>
 </head>
 <body>
 
+<!-- LOGIN -->
 <div id="tela-login">
   <div class="login-wrap">
     <div class="login-logo">🌿</div>
     <h1 class="login-titulo">Fazenda Água Viva</h1>
-    <p class="login-sub">Sistema SST — Acesso Restrito</p>
+    <p class="login-sub">Sistema SST</p>
     <form id="form-login" style="display:flex;flex-direction:column;gap:10px">
       <div class="campo-grupo"><label>Usuário</label><input type="text" id="login-user" placeholder="seu usuário" autocomplete="username" required></div>
       <div class="campo-grupo"><label>Senha</label><input type="password" id="login-senha" placeholder="••••••••" autocomplete="current-password" required></div>
@@ -31,17 +34,32 @@
   </div>
 </div>
 
+<!-- APP -->
 <div id="tela-app" style="display:none">
   <header class="app-header">
     <div>
-      <p class="app-sub">Fazenda Água Viva — SST</p>
+      <p class="app-sub" id="app-sub-header">Fazenda Água Viva — SST</p>
       <h1 class="app-titulo" id="titulo-pagina">Início</h1>
     </div>
     <div class="header-actions">
-      <button onclick="sincronizarManual()" id="btn-sync" class="btn-sync" title="Sincronizar assinaturas"><i class="ti ti-refresh" aria-hidden="true"></i></button>
+      <button onclick="toggleBusca()" id="btn-busca" class="btn-header" title="Buscar"><i class="ti ti-search" aria-hidden="true"></i></button>
+      <button onclick="sincronizarManual()" id="btn-sync" class="btn-header" title="Sincronizar"><i class="ti ti-refresh" aria-hidden="true"></i></button>
+      <button onclick="toggleTema()" id="btn-tema" class="btn-header" title="Tema"><i class="ti ti-moon" aria-hidden="true"></i></button>
       <button onclick="logout()" class="btn-sair">Sair</button>
     </div>
   </header>
+
+  <!-- Busca global -->
+  <div id="busca-global-container" style="display:none;position:relative">
+    <div class="busca-global-wrap">
+      <div class="busca-global">
+        <i class="ti ti-search" aria-hidden="true"></i>
+        <input type="text" id="inp-busca-global" placeholder="Buscar funcionário, folha, EPI..." oninput="buscaGlobal(this.value)" autocomplete="off">
+        <button onclick="fecharBusca()" style="background:none;border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:16px;padding:0;font-family:inherit"><i class="ti ti-x"></i></button>
+      </div>
+    </div>
+    <div id="busca-resultados" style="display:none"></div>
+  </div>
 
   <div id="toast" class="toast" style="display:none"></div>
   <div id="loading" class="loading-overlay" style="display:none">
@@ -53,13 +71,21 @@
 
     <!-- INÍCIO -->
     <div id="pg-inicio" class="pagina ativa">
-      <div id="lembretes-wrap" style="display:none;margin-bottom:10px"></div>
-      <div class="cards-grid">
-        <div class="card-stat verde"><i class="ti ti-users stat-icone" aria-hidden="true"></i><span class="stat-num" id="num-funcs">—</span><span class="stat-label">Ativos</span></div>
-        <div class="card-stat vermelho"><i class="ti ti-circle-x stat-icone" style="color:var(--red-text)" aria-hidden="true"></i><span class="stat-num" id="num-vencidos">—</span><span class="stat-label">Exames vencidos</span></div>
-        <div class="card-stat amarelo"><i class="ti ti-alert-triangle stat-icone" style="color:var(--amber-text)" aria-hidden="true"></i><span class="stat-num" id="num-avencer">—</span><span class="stat-label">A vencer</span></div>
-        <div class="card-stat amarelo"><i class="ti ti-shield stat-icone" style="color:var(--amber-text)" aria-hidden="true"></i><span class="stat-num" id="num-epi">—</span><span class="stat-label">EPI p/ repor</span></div>
+      <!-- Pendências do dia -->
+      <div class="pendencias-card" id="card-pendencias" style="display:none">
+        <div class="card-titulo" style="margin-bottom:8px"><i class="ti ti-alert-circle" aria-hidden="true" style="color:var(--amber-text)"></i> Pendências</div>
+        <div id="lista-pendencias"></div>
       </div>
+      <!-- Stats -->
+      <div class="cards-grid">
+        <div class="card-stat verde" onclick="irPara('lista-func')"><i class="ti ti-users stat-icone" aria-hidden="true"></i><span class="stat-num" id="num-funcs">—</span><span class="stat-label">Ativos</span></div>
+        <div class="card-stat vermelho" onclick="irPara('exames')"><i class="ti ti-circle-x stat-icone" style="color:var(--red-text)" aria-hidden="true"></i><span class="stat-num" id="num-vencidos">—</span><span class="stat-label">Exames vencidos</span></div>
+        <div class="card-stat amarelo" onclick="irPara('exames')"><i class="ti ti-alert-triangle stat-icone" style="color:var(--amber-text)" aria-hidden="true"></i><span class="stat-num" id="num-avencer">—</span><span class="stat-label">A vencer</span></div>
+        <div class="card-stat amarelo" onclick="irPara('epi')"><i class="ti ti-shield stat-icone" style="color:var(--amber-text)" aria-hidden="true"></i><span class="stat-num" id="num-epi">—</span><span class="stat-label">EPI p/ repor</span></div>
+      </div>
+      <!-- Lembretes -->
+      <div id="lembretes-wrap" style="display:none;margin-bottom:10px"></div>
+      <!-- Ações rápidas -->
       <div class="card">
         <div class="card-titulo"><i class="ti ti-bolt" aria-hidden="true"></i> Ações rápidas</div>
         <div class="acoes-grid">
@@ -68,7 +94,7 @@
           <button class="btn-acao" onclick="irPara('exames')"><div class="acao-icon amber"><i class="ti ti-stethoscope" aria-hidden="true"></i></div><span class="label">Exames</span></button>
           <button class="btn-acao" onclick="irPara('epi')"><div class="acao-icon coral"><i class="ti ti-shield" aria-hidden="true"></i></div><span class="label">Entregar EPI</span></button>
           <button class="btn-acao" onclick="irPara('fracionar')"><div class="acao-icon purple"><i class="ti ti-file-invoice" aria-hidden="true"></i></div><span class="label">Folha pgto.</span></button>
-          <button class="btn-acao" onclick="irPara('pagamento')"><div class="acao-icon" style="background:var(--verde-claro);color:var(--verde-text)"><i class="ti ti-cash" aria-hidden="true"></i></div><span class="label">Pagamento</span></button>
+          <button class="btn-acao" onclick="irPara('pagamento')"><div class="acao-icon green"><i class="ti ti-cash" aria-hidden="true"></i></div><span class="label">Pagamentos</span></button>
         </div>
       </div>
     </div>
@@ -80,7 +106,30 @@
       <div id="lista-funcionarios" class="lista"></div>
     </div>
 
-    <!-- NOVO FUNCIONÁRIO -->
+    <!-- FICHA FUNCIONÁRIO -->
+    <div id="pg-ficha-func" class="pagina">
+      <div class="ficha-header">
+        <div class="ficha-av" id="ficha-av">?</div>
+        <div>
+          <div class="ficha-nome" id="ficha-nome">—</div>
+          <div class="ficha-sub" id="ficha-sub">—</div>
+        </div>
+      </div>
+      <div class="ficha-tabs">
+        <button class="ficha-tab ativo" onclick="abrirFichaTab('geral',this)"><i class="ti ti-info-circle"></i> Geral</button>
+        <button class="ficha-tab" onclick="abrirFichaTab('exames',this)"><i class="ti ti-stethoscope"></i> Exames</button>
+        <button class="ficha-tab" onclick="abrirFichaTab('epi',this)"><i class="ti ti-shield"></i> EPI</button>
+        <button class="ficha-tab" onclick="abrirFichaTab('folhas',this)"><i class="ti ti-file-invoice"></i> Folhas</button>
+        <button class="ficha-tab" onclick="abrirFichaTab('pagamentos',this)"><i class="ti ti-cash"></i> Pgto</button>
+      </div>
+      <div id="ficha-painel-geral" class="ficha-painel ativo"></div>
+      <div id="ficha-painel-exames" class="ficha-painel"></div>
+      <div id="ficha-painel-epi" class="ficha-painel"></div>
+      <div id="ficha-painel-folhas" class="ficha-painel"></div>
+      <div id="ficha-painel-pagamentos" class="ficha-painel"></div>
+    </div>
+
+    <!-- NOVO / EDITAR FUNCIONÁRIO -->
     <div id="pg-novo-func" class="pagina">
       <div class="card">
         <form id="form-funcionario" class="formulario">
@@ -92,14 +141,13 @@
           </div>
           <div class="dois-col">
             <div class="campo-grupo"><label>Data Nascimento</label><input type="date" name="data_nascimento"></div>
-            <div class="campo-grupo"><label>Telefone (WhatsApp) *</label><input type="tel" name="telefone" required placeholder="(62) 99999-9999"></div>
+            <div class="campo-grupo"><label>WhatsApp *</label><input type="tel" name="telefone" required placeholder="(62) 99999-9999"></div>
           </div>
-          <div class="campo-grupo"><label>Empregador</label><input type="text" name="empregador"></div>
           <div class="campo-grupo"><label>Unidade *</label>
             <select name="unidade" required><option value="">Selecione...</option><option>Fazenda Água Viva</option><option>Fazenda Roncador</option><option>Fazenda Espora</option></select>
           </div>
           <div class="campo-grupo"><label>Função *</label><input type="text" name="funcao" required placeholder="ex: Tratorista, Cozinheira..."></div>
-          <div class="campo-grupo"><label>Perfil SST * <small>(define exames automáticos)</small></label>
+          <div class="campo-grupo"><label>Perfil SST *</label>
             <select name="perfil_sst" required>
               <option value="">Selecione...</option>
               <option value="CASEIRO_AGROPECUARIO">Trab. Agrícola / Caseiro</option>
@@ -113,7 +161,10 @@
               <option value="BIOFABRICA">Biofábrica</option>
             </select>
           </div>
-          <div class="campo-grupo"><label>Data de Admissão</label><input type="date" name="data_admissao"></div>
+          <div class="dois-col">
+            <div class="campo-grupo"><label>Data Admissão</label><input type="date" name="data_admissao"></div>
+            <div class="campo-grupo"><label>Empregador</label><input type="text" name="empregador"></div>
+          </div>
           <div class="dois-col">
             <div class="campo-grupo"><label>Opera Máquina?</label><select name="opera_maquina"><option>Não</option><option>Sim</option></select></div>
             <div class="campo-grupo"><label>Aplica Defensivo?</label><select name="aplica_defensivo"><option>Não</option><option>Sim</option></select></div>
@@ -122,205 +173,160 @@
             <div class="campo-grupo"><label>Tam. Camisa</label><input type="text" name="tam_camisa" placeholder="P, M, G..."></div>
             <div class="campo-grupo"><label>Tam. Bota</label><input type="text" name="tam_bota" placeholder="38, 39..."></div>
           </div>
-
-          <div style="margin-top:4px;margin-bottom:4px;font-size:11px;font-weight:600;color:var(--verde);border-top:0.5px solid var(--border);padding-top:10px">
+          <div style="font-size:11px;font-weight:700;color:var(--verde);border-top:0.5px solid var(--border);padding-top:10px;margin:4px 0 8px">
             💰 Dados de Pagamento
           </div>
-          <div class="campo-grupo"><label>WhatsApp do Empregador *</label><input type="tel" name="whatsapp_empregador" placeholder="(61) 99999-9999" required></div>
+          <div class="campo-grupo"><label>WhatsApp Empregador</label><input type="tel" name="whatsapp_empregador" placeholder="(61) 99999-9999"></div>
           <div class="dois-col">
-            <div class="campo-grupo"><label>Banco</label><input type="text" name="banco" placeholder="ex: Bradesco 237"></div>
-            <div class="campo-grupo"><label>Agência</label><input type="text" name="agencia" placeholder="ex: 2094-1"></div>
-          </div>
-          <div class="dois-col">
-            <div class="campo-grupo"><label>Conta</label><input type="text" name="conta" placeholder="ex: 27902-1"></div>
-            <div class="campo-grupo"><label>PIX</label><input type="text" name="pix" placeholder="CPF, email ou telefone"></div>
+            <div class="campo-grupo"><label>Banco</label><input type="text" name="banco" placeholder="ex: Banco do Brasil"></div>
+            <div class="campo-grupo"><label>Agência</label><input type="text" name="agencia"></div>
           </div>
           <div class="dois-col">
-            <div class="campo-grupo"><label>Salário base (R$)</label><input type="number" name="salario_base" placeholder="0,00" step="0.01"></div>
-            <div class="campo-grupo"><label>Comissão anual (R$) 🔒</label><input type="number" name="comissao_anual" placeholder="0,00" step="0.01"></div>
+            <div class="campo-grupo"><label>Conta</label><input type="text" name="conta"></div>
+            <div class="campo-grupo"><label>PIX</label><input type="text" name="pix" placeholder="CPF, telefone..."></div>
           </div>
-
-          <div class="info-box"><i class="ti ti-info-circle" style="vertical-align:-2px" aria-hidden="true"></i> Ao salvar, os exames do perfil são cadastrados automaticamente e a pasta do Drive é criada.</div>
-          <div class="dois-col mt-2">
-            <button type="button" class="btn-secundario" onclick="irPara('lista-func')">Cancelar</button>
-            <button type="submit" class="btn-primario" id="btn-salvar-func"><i class="ti ti-device-floppy" aria-hidden="true"></i> Cadastrar</button>
+          <div class="dois-col">
+            <div class="campo-grupo"><label>Salário base</label><input type="number" name="salario_base" step="0.01" placeholder="0,00"></div>
+            <div class="campo-grupo"><label>Comissão anual</label><input type="number" name="comissao_anual" step="0.01" placeholder="0,00"></div>
           </div>
+          <div class="campo-grupo"><label>Observações</label><textarea name="observacoes" rows="2" placeholder="Observações gerais..."></textarea></div>
+          <button type="submit" class="btn-primario w-full" id="btn-salvar-func" style="margin-top:6px">
+            <i class="ti ti-device-floppy" aria-hidden="true"></i> Cadastrar
+          </button>
         </form>
       </div>
     </div>
 
     <!-- EXAMES -->
     <div id="pg-exames" class="pagina">
-      <div class="filtro-wrap">
-        <select id="filtro-status-exame" onchange="filtrarExames()">
-          <option value="">Todos os status</option>
-          <option>⛔ VENCIDO</option><option>⚠️ A VENCER</option><option>✅ VIGENTE</option><option>⏳ PENDENTE</option>
-        </select>
-      </div>
+      <div class="search-bar"><i class="ti ti-search" aria-hidden="true"></i><input type="text" id="busca-exame" placeholder="Buscar funcionário..." oninput="filtrarExames(this.value)"></div>
       <div id="lista-exames" class="lista"></div>
     </div>
 
     <!-- EPI -->
     <div id="pg-epi" class="pagina">
-
-      <!-- Modal Estoque (oculto por padrão) -->
-      <div id="estoque-modal" style="display:none" class="card mb-3">
-        <div class="card-titulo"><i class="ti ti-box" aria-hidden="true"></i> Estoque atual</div>
-        <div id="estoque-modal-body"></div>
+      <div class="card mb-3">
+        <div class="card-titulo"><i class="ti ti-user" aria-hidden="true"></i> Funcionário</div>
+        <div style="position:relative">
+          <div class="func-selector" id="epi-func-display">
+            <div class="av" id="epi-func-av">?</div>
+            <div style="flex:1"><div id="epi-func-nome" style="font-size:13px;color:var(--text-secondary)">Selecione o funcionário...</div><div id="epi-func-sub" style="font-size:10px;color:var(--text-hint)"></div></div>
+            <i class="ti ti-chevron-down" style="color:var(--text-hint)" aria-hidden="true"></i>
+          </div>
+          <select id="sel-func-epi" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px" onchange="selecionarFuncEpi(this.value)"></select>
+        </div>
       </div>
-
-      <!-- Entrega compacta -->
-      <div class="card">
-        <!-- Header com botão estoque -->
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <div class="card-titulo" style="margin:0"><i class="ti ti-send" aria-hidden="true"></i> Nova entrega</div>
-          <button onclick="toggleEstoqueModal()" style="background:var(--surface);border:0.5px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:600;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;gap:4px">
-            <i class="ti ti-box" style="font-size:13px" aria-hidden="true"></i> Estoque
-          </button>
-        </div>
-
-        <!-- Funcionário -->
-        <div style="position:relative;margin-bottom:8px">
-          <div id="sel-func-display" class="func-selector">
-            <div class="avatar" id="sel-func-avatar">?</div>
-            <div style="flex:1;min-width:0">
-              <div id="sel-func-nome" style="font-size:13px;color:var(--text-secondary)">Selecione o funcionário...</div>
-              <div id="sel-func-sub" style="font-size:10px;color:var(--text-hint)"></div>
-            </div>
-            <i class="ti ti-chevron-down" style="color:var(--text-hint);font-size:16px" aria-hidden="true"></i>
+      <div id="epi-form-wrap" style="display:none">
+        <div class="card mb-3">
+          <div class="card-titulo"><i class="ti ti-shield-check" aria-hidden="true"></i> EPIs para entregar</div>
+          <div id="epi-itens-lista"></div>
+          <div class="add-epi-trigger" id="add-epi-trigger" style="display:none" onclick="abrirSelectEpi()">
+            <i class="ti ti-plus" style="font-size:16px" aria-hidden="true"></i> Adicionar EPI
           </div>
-          <select id="sel-func-epi-hidden" onchange="selecionarFuncEpi(this.value)"
-            style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px">
-          </select>
+          <div id="epi-estoque-modal" style="display:none;margin-top:8px"></div>
         </div>
-
-        <!-- EPIs selecionados -->
-        <div id="epi-itens-lista" style="margin-top:8px"></div>
-
-        <!-- Buscar e adicionar EPI -->
-        <div style="position:relative;margin-top:6px">
-          <div class="add-epi-trigger">
-            <i class="ti ti-plus" style="font-size:14px" aria-hidden="true"></i>
-            <span id="add-epi-hint">Buscar e adicionar EPI...</span>
-          </div>
-          <select id="sel-epi-hidden" onchange="adicionarItemEpi(this)"
-            style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px">
-            <option value="">Selecione um EPI...</option>
-          </select>
+        <div class="card mb-3">
+          <div class="card-titulo"><i class="ti ti-message-circle" aria-hidden="true"></i> Motivo</div>
+          <div id="motivo-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+          <input type="text" id="epi-outro-motivo" placeholder="Outro motivo..." style="display:none;width:100%;border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:9px 11px;font-size:13px;font-family:inherit;color:var(--text-primary);background:var(--card-bg);outline:none">
         </div>
-
-        <!-- Motivo — chips compactos -->
-        <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap">
-          <span style="font-size:11px;font-weight:600;color:var(--text-secondary);white-space:nowrap">Motivo:</span>
-          <div id="motivo-chips" style="display:flex;gap:5px;flex-wrap:wrap">
-            <button class="motivo-chip ativo" onclick="selecionarMotivo(this,'Admissional')">Admissional</button>
-            <button class="motivo-chip" onclick="selecionarMotivo(this,'Reposição')">Reposição</button>
-            <button class="motivo-chip" onclick="selecionarMotivo(this,'Desgaste')">Desgaste</button>
-            <button class="motivo-chip" onclick="selecionarMotivo(this,'Perda')">Perda</button>
-            <button class="motivo-chip" onclick="selecionarMotivo(this,'Troca de Tamanho')">Troca</button>
-          </div>
-        </div>
-
-        <button id="btn-enviar-epi" onclick="enviarEpi()" class="btn-primario w-full" style="margin-top:10px" disabled>
-          <i class="ti ti-brand-whatsapp" aria-hidden="true"></i>
-          <span id="btn-epi-label">Gerar recibo e enviar</span>
+        <button onclick="confirmarEntregaEpi()" class="btn-primario w-full" id="btn-confirmar-epi">
+          <i class="ti ti-send" aria-hidden="true"></i> Confirmar entrega
         </button>
-        <div id="link-assinatura-epi" class="link-assinatura-box"></div>
       </div>
-
-      <!-- Histórico -->
-      <div class="card mt-3">
-        <div class="card-titulo"><i class="ti ti-history" aria-hidden="true"></i> Últimas entregas</div>
-        <div id="lista-entregas" class="lista"></div>
+      <div id="historico-epi-wrap" style="display:none;margin-top:14px">
+        <div class="card">
+          <div class="card-titulo"><i class="ti ti-history" aria-hidden="true"></i> Histórico de entregas</div>
+          <div id="historico-epi" class="lista"></div>
+        </div>
       </div>
     </div>
 
-    <!-- FOLHA (FRACIONAR) -->
+    <!-- FOLHA DE PAGAMENTO -->
     <div id="pg-fracionar" class="pagina">
-
-      <!-- Upload e separar -->
-      <div class="card mb-3" id="card-upload-frac">
-          <div class="campo-grupo">
-            <label>Tipo de documento *</label>
-            <select id="sel-tipo-doc" onchange="tipoDocAtual=this.value">
-              <option value="Folha">💰 Folha de Pagamento (Holerite)</option>
-              <option value="Ponto">📋 Folha de Ponto</option>
-            </select>
-          </div>
-        <div class="card-titulo"><i class="ti ti-scissors" aria-hidden="true"></i> Folha de pagamento</div>
-        <div class="campo-grupo">
-          <label>Competência *</label>
-          <select id="sel-comp-frac" required></select>
+      <div class="card mb-3">
+        <div class="card-titulo"><i class="ti ti-file-invoice" aria-hidden="true"></i> Tipo de documento *</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:8px 12px;border:0.5px solid var(--border);border-radius:var(--radius-sm);flex:1;background:var(--surface)">
+            <input type="radio" name="tipo-doc" value="Folha" checked style="accent-color:var(--verde)"> <span>Folha de Pagamento</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:8px 12px;border:0.5px solid var(--border);border-radius:var(--radius-sm);flex:1;background:var(--surface)">
+            <input type="radio" name="tipo-doc" value="Ponto" style="accent-color:var(--verde)"> <span>Folha de Ponto</span>
+          </label>
         </div>
-        <div class="campo-grupo" style="margin-top:8px">
-          <label>PDF completo *</label>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button type="button" onclick="abrirDrivePicker()" id="btn-drive-picker"
-              style="flex:1;background:var(--blue-bg);color:var(--blue-text);border:0.5px solid rgba(24,95,165,0.2);border-radius:var(--radius-md);padding:10px 12px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;justify-content:center">
-              <i class="ti ti-brand-google-drive" aria-hidden="true"></i> Drive
-            </button>
-            <span style="font-size:11px;color:var(--text-hint)">ou</span>
-            <label style="flex:1;background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-md);padding:10px 12px;font-size:12px;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;gap:6px;justify-content:center">
-              <i class="ti ti-upload" aria-hidden="true"></i> Upload
-              <input type="file" id="input-pdf-frac" accept=".pdf" style="display:none">
-            </label>
-          </div>
-          <div id="pdf-selecionado" style="display:none;margin-top:6px;font-size:11px;color:var(--verde-text);background:var(--verde-claro);padding:6px 10px;border-radius:8px;align-items:center;gap:6px">
-            <i class="ti ti-file-check"></i>
-            <span id="pdf-nome"></span>
-          </div>
-        </div>
-        <div id="frac-preview" class="info-box" style="display:none;margin-top:8px"></div>
-        <button id="btn-fracionar" onclick="processarFracionamento()" class="btn-primario w-full" style="margin-top:10px">
-          <i class="ti ti-scissors" aria-hidden="true"></i> Separar PDF
-        </button>
+        <div id="tipo-doc-label" style="font-size:11px;color:var(--verde-text);font-weight:600;margin-top:6px"></div>
       </div>
-
-      <!-- Barra de progresso + páginas (aparece após separar) -->
-      <div id="frac-resultado" style="display:none">
-        <!-- Step bar -->
-        <div class="card mb-3" style="padding:12px 14px">
-          <div class="step-bar">
-            <div class="step"><div class="step-dot done" id="step1"><i class="ti ti-check" style="font-size:10px" aria-hidden="true"></i></div><span class="step-label">Upload</span></div>
+      <div class="card mb-3">
+        <div class="card-titulo"><i class="ti ti-calendar" aria-hidden="true"></i> Competência *</div>
+        <div style="position:relative">
+          <div id="comp-display" style="padding:10px 12px;background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-md);font-size:13px;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:space-between">
+            <span id="comp-display-label">Selecione a competência...</span>
+            <i class="ti ti-chevron-down" style="color:var(--text-hint)" aria-hidden="true"></i>
+          </div>
+          <select id="sel-comp-frac" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px" onchange="atualizarCompDisplay()"></select>
+        </div>
+      </div>
+      <div class="card mb-3">
+        <div class="card-titulo"><i class="ti ti-file-upload" aria-hidden="true"></i> PDF completo *</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button onclick="abrirDrivePicker()" class="btn-primario" style="flex:1;font-size:12px;background:var(--blue-text)">
+            <i class="ti ti-brand-google-drive" aria-hidden="true"></i> Drive
+          </button>
+          <span style="font-size:11px;color:var(--text-hint)">ou</span>
+          <label style="flex:1">
+            <input type="file" id="input-pdf-frac" accept="application/pdf" style="display:none" onchange="mostrarPdfSelecionado(this)">
+            <div class="btn-primario" style="font-size:12px;background:var(--surface);color:var(--text-primary);border:0.5px solid var(--border)">
+              <i class="ti ti-upload" aria-hidden="true"></i> Upload
+            </div>
+          </label>
+        </div>
+        <div id="pdf-selecionado" style="display:none;margin-top:8px;font-size:11px;color:var(--verde-text);font-weight:600;padding:6px 10px;background:var(--verde-claro);border-radius:var(--radius-sm)"></div>
+      </div>
+      <button onclick="processarFracionamento()" class="btn-primario w-full" id="btn-fracionar" style="margin-bottom:10px">
+        <i class="ti ti-scissors" aria-hidden="true"></i> Separar PDF
+      </button>
+      <div id="frac-step-wrap" style="display:none">
+        <div class="card mb-3">
+          <div class="step-bar" id="step-bar">
+            <div class="step"><div class="step-dot done" id="step1"><i class="ti ti-check" style="font-size:10px" aria-hidden="true"></i></div><span class="step-label">PDF</span></div>
             <div class="step-line"></div>
             <div class="step"><div class="step-dot done" id="step2"><i class="ti ti-check" style="font-size:10px" aria-hidden="true"></i></div><span class="step-label">Separar</span></div>
             <div class="step-line"></div>
-            <div class="step"><div class="step-dot active" id="step3">3</div><span class="step-label" id="step3-label" style="color:var(--verde);font-weight:600">Enviar</span></div>
+            <div class="step"><div class="step-dot active" id="step3">3</div><span class="step-label" id="step3-label" style="color:var(--verde);font-weight:700">Enviar</span></div>
           </div>
           <p id="frac-resumo" style="font-size:11px;color:var(--text-secondary);text-align:center;margin-top:4px"></p>
         </div>
-
-        <!-- Botões enviar todos -->
         <div style="display:flex;gap:8px;margin-bottom:10px">
           <button onclick="enviarTodasPendentes('zapsign')" class="btn-primario" id="btn-enviar-todos" style="flex:1;font-size:12px">
-            <i class="ti ti-brand-whatsapp" aria-hidden="true"></i>
-            <span id="btn-todos-label">ZapSign</span>
+            <i class="ti ti-brand-whatsapp" aria-hidden="true"></i> <span id="btn-todos-label">ZapSign</span>
           </button>
           <button onclick="enviarTodasPendentes('proprio')" class="btn-primario" id="btn-enviar-todos-proprio" style="flex:1;font-size:12px;background:var(--blue-text)">
-            <i class="ti ti-writing" aria-hidden="true"></i>
-            <span>Assinatura Própria</span>
+            <i class="ti ti-writing" aria-hidden="true"></i> Assinatura Própria
           </button>
         </div>
-
-        <!-- Cards das páginas -->
         <div class="card">
           <div class="card-titulo"><i class="ti ti-files" aria-hidden="true"></i> Páginas separadas</div>
           <div id="frac-lista"></div>
         </div>
       </div>
-
-      <!-- Histórico -->
       <div class="card mt-3">
         <div class="card-titulo"><i class="ti ti-history" aria-hidden="true"></i> Histórico de envios</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <select id="sel-comp-notif" style="flex:1;border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:7px 10px;font-size:12px;font-family:inherit;background:var(--card-bg);color:var(--text-primary);outline:none"></select>
+          <button onclick="notificarPagamentoLote()" class="btn-primario" style="font-size:11px;padding:8px 12px;background:#25D366">
+            <i class="ti ti-send" aria-hidden="true"></i> Notificar
+          </button>
+        </div>
         <div id="historico-folha" class="lista"></div>
       </div>
     </div>
 
-
     <!-- PAGAMENTO -->
     <div id="pg-pagamento" class="pagina">
-
-      <!-- Seletor de funcionário -->
+      <div class="card mb-3" id="card-notif-pendentes" style="display:none">
+        <div class="card-titulo" style="color:var(--amber-text)"><i class="ti ti-bell-ringing" aria-hidden="true"></i> Aguardando pagamento</div>
+        <div id="lista-notif-pendentes"></div>
+      </div>
       <div class="card mb-3">
         <div class="card-titulo"><i class="ti ti-user" aria-hidden="true"></i> Funcionário</div>
         <div style="position:relative;margin-bottom:10px">
@@ -339,66 +345,61 @@
           <div class="campo-grupo"><label>Comissão anual 🔒</label><input type="text" id="txt-comissao-anual" readonly style="background:var(--surface);color:var(--text-secondary)"></div>
         </div>
       </div>
-
-      <!-- Histórico de pagamentos de salário -->
       <div class="card mb-3" id="card-hist-pagamentos" style="display:none">
         <div class="card-titulo"><i class="ti ti-receipt" aria-hidden="true"></i> Salários</div>
         <div id="historico-pagamentos" class="lista"></div>
       </div>
-
-      <!-- Comissão / adiantamentos -->
       <div class="card mb-3" id="card-comissao-func" style="display:none">
         <div class="card-titulo"><i class="ti ti-coin" aria-hidden="true"></i> Comissão <span id="ano-label-pgto"></span></div>
         <div id="comissao-resumo-body"></div>
         <div style="border-top:0.5px solid var(--border);padding-top:10px;margin-top:6px">
-          <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">Registrar adiantamento</div>
+          <div style="font-size:11px;font-weight:700;color:var(--text-secondary);margin-bottom:8px">Registrar adiantamento</div>
           <div class="dois-col">
             <div class="campo-grupo"><label>Data</label><input type="date" id="inp-data-adiant"></div>
             <div class="campo-grupo"><label>Valor (R$)</label><input type="number" id="inp-valor-adiant" placeholder="0,00" step="0.01"></div>
           </div>
           <div class="dois-col">
-            <div class="campo-grupo"><label>Forma</label>
-              <select id="sel-forma-adiant">
-                <option>Pix</option><option>Dinheiro</option><option>Transferência</option><option>Cheque</option>
-              </select>
-            </div>
+            <div class="campo-grupo"><label>Forma</label><select id="sel-forma-adiant"><option>Pix</option><option>Dinheiro</option><option>Transferência</option><option>Cheque</option></select></div>
             <div class="campo-grupo"><label>Obs.</label><input type="text" id="inp-obs-adiant" placeholder="opcional"></div>
           </div>
-          <button onclick="registrarAdiantamento()" class="btn-primario w-full mt-2">
-            <i class="ti ti-plus" aria-hidden="true"></i> Registrar adiantamento
-          </button>
+          <button onclick="registrarAdiantamento()" class="btn-primario w-full mt-2"><i class="ti ti-plus" aria-hidden="true"></i> Registrar adiantamento</button>
         </div>
       </div>
-
-      <!-- Histórico adiantamentos -->
       <div class="card mb-3" id="card-hist-adiant" style="display:none">
         <div class="card-titulo"><i class="ti ti-history" aria-hidden="true"></i> Adiantamentos</div>
         <div id="lista-adiantamentos" class="lista"></div>
       </div>
-
-      <!-- Extrato -->
       <div class="card mb-3" id="card-extrato" style="display:none">
         <div class="card-titulo"><i class="ti ti-file-text" aria-hidden="true"></i> Extrato</div>
         <div class="dois-col" style="margin-bottom:8px">
           <div class="campo-grupo"><label>De</label><input type="date" id="ext-inicio"></div>
           <div class="campo-grupo"><label>Até</label><input type="date" id="ext-fim"></div>
         </div>
-        <button onclick="gerarExtrato()" class="btn-primario w-full" style="margin-bottom:10px">
-          <i class="ti ti-search" aria-hidden="true"></i> Consultar
-        </button>
+        <button onclick="gerarExtrato()" class="btn-primario w-full" style="margin-bottom:10px"><i class="ti ti-search" aria-hidden="true"></i> Consultar</button>
         <div id="extrato-corpo" style="display:none">
           <div id="extrato-lista"></div>
           <div id="extrato-totais" style="background:var(--surface);border-radius:10px;padding:10px 12px;margin-top:8px"></div>
         </div>
       </div>
+    </div>
 
+    <!-- LOG AUDITORIA -->
+    <div id="pg-log" class="pagina">
+      <div class="card">
+        <div class="card-titulo"><i class="ti ti-shield-check" aria-hidden="true"></i> Log de auditoria</div>
+        <div class="dois-col" style="margin-bottom:10px">
+          <div class="campo-grupo"><label>Filtrar usuário</label><select id="sel-log-usuario"><option value="">Todos</option></select></div>
+          <div class="campo-grupo"><label>Ação</label><input type="text" id="inp-log-busca" placeholder="ex: PAGAMENTO" oninput="filtrarLog()"></div>
+        </div>
+        <div id="lista-log"></div>
+      </div>
     </div>
 
   </main>
 
   <nav class="nav-bottom">
     <button class="nav-btn ativo" data-pg="inicio" onclick="irPara('inicio')"><i class="ti ti-home" aria-hidden="true"></i><span class="nav-label">Início</span></button>
-    <button class="nav-btn" data-pg="lista-func" onclick="irPara('lista-func')"><i class="ti ti-users" aria-hidden="true"></i><span class="nav-label">Funcionários</span></button>
+    <button class="nav-btn" data-pg="lista-func" onclick="irPara('lista-func')"><i class="ti ti-users" aria-hidden="true"></i><span class="nav-label">Pessoal</span></button>
     <button class="nav-btn" data-pg="exames" onclick="irPara('exames')"><i class="ti ti-stethoscope" aria-hidden="true"></i><span class="nav-label">Exames</span></button>
     <button class="nav-btn" data-pg="epi" onclick="irPara('epi')"><i class="ti ti-shield" aria-hidden="true"></i><span class="nav-label">EPI</span></button>
     <button class="nav-btn" data-pg="fracionar" onclick="irPara('fracionar')"><i class="ti ti-file-invoice" aria-hidden="true"></i><span class="nav-label">Folha</span></button>
