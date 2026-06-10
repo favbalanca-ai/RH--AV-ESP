@@ -136,6 +136,21 @@ if ('serviceWorker' in navigator) {
       <input type="file" id="file-camera" accept="image/*" capture="environment" style="display:none" onchange="selecionarComprovanteInput(this)">
       <input type="file" id="file-galeria" accept="image/*" style="display:none" onchange="selecionarComprovanteInput(this)">
 
+      <!-- Botão email pré-preenchido -->
+      <div style="margin-top:10px;background:#E6F1FB;border:0.5px solid rgba(24,95,165,0.2);border-radius:14px;padding:14px">
+        <div style="font-size:11px;font-weight:700;color:#185FA5;margin-bottom:8px">📧 Prefere enviar por email?</div>
+        <div style="font-size:11px;color:#374151;margin-bottom:10px;line-height:1.5">
+          Toque no botão abaixo — o email já abre preenchido com destinatário e assunto. 
+          Só anexe o comprovante e envie.
+        </div>
+        <button onclick="abrirEmailPreenchido()" style="background:#185FA5;color:#fff;border:none;border-radius:10px;padding:12px 16px;font-size:13px;font-weight:700;width:100%;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+          <span style="font-size:18px">📧</span> Abrir Gmail com comprovante
+        </button>
+        <div style="font-size:10px;color:#6B7280;text-align:center;margin-top:6px">
+          Sistema confirma automaticamente em até 5 minutos
+        </div>
+      </div>
+
       <img id="preview-img" alt="Comprovante" style="display:none;width:100%;border-radius:10px;margin-top:10px;border:0.5px solid var(--border)">
 
       <div class="card-title" style="margin-top:14px">📅 Data do pagamento</div>
@@ -321,6 +336,23 @@ async function confirmarPagamento() {
     btn.disabled = false; btn.textContent = '✅ Confirmar pagamento'
     alert('Erro de conexão. Tente novamente.')
   }
+}
+
+function abrirEmailPreenchido() {
+  const nome  = document.getElementById('info-nome')?.textContent || 'Funcionário'
+  const comp  = document.getElementById('info-comp')?.textContent || ''
+  const token = new URLSearchParams(window.location.search).get('t') || ''
+
+  const para    = 'fav.balanca@gmail.com'
+  const assunto = encodeURIComponent('Comprovante ' + nome + ' ' + comp + ' [' + token.substring(0,8) + ']')
+  const corpo   = encodeURIComponent(
+    'Olá,\n\nSegue em anexo o comprovante de pagamento.\n\n' +
+    'Funcionário: ' + nome + '\n' +
+    'Competência: ' + comp + '\n\n' +
+    'IMPORTANTE: Anexe o comprovante antes de enviar.\n\n' +
+    'Fazenda Água Viva'
+  )
+  window.location.href = 'mailto:' + para + '?subject=' + assunto + '&body=' + corpo
 }
 
 function copiar(texto) {
