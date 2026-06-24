@@ -1434,7 +1434,7 @@ async function enviarPaginaZapSign(idx) {
       let links = `<span class="btn-enviado-frac"><i class="ti ti-check"></i></span>`
       if (res.data.sign_url) {
         links += `<a href="${res.data.sign_url}" target="_blank" class="btn-link-frac"><i class="ti ti-external-link"></i> Link</a>`
-        const tel = p.telefone.replace(/\D/g,'')
+        const tel = String(p.telefone||'').replace(/\D/g,'')
         const waUrl = `https://wa.me/55${tel}?text=${encodeURIComponent('Olá '+p.nome.split(' ')[0]+', assine seu holerite: '+res.data.sign_url)}`
         links += `<a href="${waUrl}" target="_blank" class="btn-wa-frac"><i class="ti ti-brand-whatsapp"></i></a>`
       }
