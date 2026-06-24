@@ -1,3 +1,36 @@
+// DEBUG: captura qualquer erro JS e mostra no toast com localização
+window.onerror = function(msg, src, linha, col, err) {
+  const local = src ? src.split('/').pop() + ':' + linha : ''
+  const el = document.getElementById('toast')
+  if (el) {
+    el.textContent = '🐛 ' + msg + (local ? ' [' + local + ']' : '')
+    el.className = 'toast erro'
+    el.style.display = 'block'
+    el.style.maxWidth = '95vw'
+    el.style.fontSize = '10px'
+    el.style.bottom = '100px'
+    el.style.whiteSpace = 'pre-wrap'
+    setTimeout(() => el.style.display = 'none', 10000)
+  }
+  console.error('ERRO GLOBAL:', msg, src, linha, col)
+  return false
+}
+window.addEventListener('unhandledrejection', e => {
+  const msg = e.reason?.message || String(e.reason)
+  const stack = (e.reason?.stack || '').split('\n')[1] || ''
+  const el = document.getElementById('toast')
+  if (el) {
+    el.textContent = '🐛 ' + msg + ' | ' + stack.trim()
+    el.className = 'toast erro'
+    el.style.display = 'block'
+    el.style.maxWidth = '95vw'
+    el.style.fontSize = '10px'
+    el.style.bottom = '100px'
+    el.style.whiteSpace = 'pre-wrap'
+    setTimeout(() => el.style.display = 'none', 10000)
+  }
+})
+
 let motivoEpiSelecionado = 'Admissional'
 
 function selecionarMotivo(btn, motivo) {
