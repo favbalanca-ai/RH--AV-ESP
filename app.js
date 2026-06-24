@@ -856,15 +856,24 @@ function copiarLink() {
 function renderEntregas(lista) {
   const el = document.getElementById('lista-entregas')
   if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhuma entrega</p>'; return }
-  el.innerHTML = lista.map(e => `
+  el.innerHTML = lista.map(e => {
+    const func  = funcionarios.find(f => f['NOME_COMPLETO'] === e['FUNCIONÁRIO'])
+    const tel   = String(func?.['TELEFONE'] || e['TELEFONE'] || '').replace(/\D/g,'')
+    const waUrl = tel ? `https://wa.me/55${tel}` : ''
+    return `
     <div class="lista-item">
       <div class="avatar" style="background:var(--blue-bg);color:var(--blue-text)">${getIniciais(e['FUNCIONÁRIO']||'?')}</div>
       <div class="lista-item-info">
-        <div class="lista-item-nome">${e['FUNCIONÁRIO']}</div>
-        <div class="lista-item-sub">${e['DESCRIÇÃO DO EPI']} · ${e['DATA ENTREGA']} · ${e['MOTIVO ENTREGA']||''}</div>
+        <div class="lista-item-nome">${e['FUNCIONÁRIO']||'—'}</div>
+        <div class="lista-item-sub">${e['DESCRIÇÃO DO EPI']||''} · ${e['DATA ENTREGA']||''} · ${e['MOTIVO ENTREGA']||''}</div>
         ${e['LINK DOC ASSINADO'] ? `<a href="${e['LINK DOC ASSINADO']}" target="_blank" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px;margin-top:2px"><i class="ti ti-file-check" style="font-size:10px"></i> Ver documento assinado</a>` : ''}
-      </div>${badge(e['ASSINADO?'])}
-    </div>`).join('')
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        ${badge(e['ASSINADO?'])}
+        ${waUrl && e['ASSINADO?'] !== 'Sim' ? `<a href="${waUrl}" target="_blank" style="background:#22C55E;color:#fff;border-radius:6px;padding:3px 7px;font-size:10px;text-decoration:none;display:flex;align-items:center;gap:3px"><i class="ti ti-brand-whatsapp" style="font-size:10px"></i></a>` : ''}
+      </div>
+    </div>`
+  }).join('')
 }
 
 // ─── FOLHA / FRACIONAR ────────────────────────────────────────────
