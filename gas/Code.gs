@@ -362,7 +362,7 @@ function enviarParaZapSign(pdfBase64, nomeDoc, nomeSignatario, telefone) {
       name: nomeSignatario,
       phone_country: '55',
       phone_number: tel,
-      auth_mode: 'assinaturaTela',
+      auth_mode: 'assinaturaTela-tokenWhatsapp', // token de verificação via WhatsApp (não SMS)
       send_automatic_whatsapp: true,
       send_automatic_email: false
     }],
