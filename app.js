@@ -1,34 +1,10 @@
-// DEBUG: captura qualquer erro JS e mostra no toast com localização
+// Captura erros JS não tratados e registra no console (sem expor detalhes crus ao usuário)
 window.onerror = function(msg, src, linha, col, err) {
-  const local = src ? src.split('/').pop() + ':' + linha : ''
-  const el = document.getElementById('toast')
-  if (el) {
-    el.textContent = '🐛 ' + msg + (local ? ' [' + local + ']' : '')
-    el.className = 'toast erro'
-    el.style.display = 'block'
-    el.style.maxWidth = '95vw'
-    el.style.fontSize = '10px'
-    el.style.bottom = '100px'
-    el.style.whiteSpace = 'pre-wrap'
-    setTimeout(() => el.style.display = 'none', 10000)
-  }
-  console.error('ERRO GLOBAL:', msg, src, linha, col)
+  console.error('ERRO GLOBAL:', msg, src, linha, col, err)
   return false
 }
 window.addEventListener('unhandledrejection', e => {
-  const msg = e.reason?.message || String(e.reason)
-  const stack = (e.reason?.stack || '').split('\n')[1] || ''
-  const el = document.getElementById('toast')
-  if (el) {
-    el.textContent = '🐛 ' + msg + ' | ' + stack.trim()
-    el.className = 'toast erro'
-    el.style.display = 'block'
-    el.style.maxWidth = '95vw'
-    el.style.fontSize = '10px'
-    el.style.bottom = '100px'
-    el.style.whiteSpace = 'pre-wrap'
-    setTimeout(() => el.style.display = 'none', 10000)
-  }
+  console.error('PROMISE REJEITADA:', e.reason)
 })
 
 let motivoEpiSelecionado = 'Admissional'
@@ -216,7 +192,7 @@ function buscaGlobal(q) {
   el.innerHTML = resultados.map((r,i) => `
     <div class="busca-item" onclick="window._buscaActions[${i}]()">
       <span class="busca-item-tipo" style="background:${r.bg};color:${r.cor}">${r.tipo}</span>
-      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.label}</div><div style="font-size:11px;color:var(--text-secondary)">${r.sub}</div></div>
+      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.label)}</div><div style="font-size:11px;color:var(--text-secondary)">${esc(r.sub)}</div></div>
       <i class="ti ti-arrow-right" style="color:var(--text-hint);font-size:14px"></i>
     </div>`).join('')
   el.style.display = 'block'
@@ -261,7 +237,7 @@ function renderFichaGeral(func) {
   el.innerHTML = `
     <div class="card" style="margin-bottom:8px">
       <div class="card-titulo"><i class="ti ti-id-badge"></i> Dados cadastrais</div>
-      ${campos.map(([k,v]) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12px"><span style="color:var(--text-secondary)">${k}</span><span style="font-weight:600;max-width:60%;text-align:right">${v}</span></div>`).join('')}
+      ${campos.map(([k,v]) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12px"><span style="color:var(--text-secondary)">${esc(k)}</span><span style="font-weight:600;max-width:60%;text-align:right">${esc(v)}</span></div>`).join('')}
     </div>
     <div style="display:flex;gap:8px">
       <button onclick="editarFuncionario('${func['ID']}')" class="btn-primario" style="flex:1;font-size:12px"><i class="ti ti-pencil"></i> Editar</button>
@@ -274,7 +250,7 @@ async function renderFichaExames() {
   const res = await chamarGAS({ acao: 'listar_exames_func', dados: { func_id: fichaFuncId } })
   const lista = res?.ok ? res.data : []
   if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum exame</p>'; return }
-  el.innerHTML = lista.map(e => `<div class="lista-item" style="margin-bottom:6px"><div class="lista-item-info"><div class="lista-item-nome">${e['TIPO_EXAME']||'—'}</div><div class="lista-item-sub">${e['DATA_VENCIMENTO']||''}</div></div><span class="badge ${e['STATUS']==='Vencido'?'badge-vermelho':e['STATUS']==='A vencer'?'badge-amarelo':'badge-verde'}">${e['STATUS']||'—'}</span></div>`).join('')
+  el.innerHTML = lista.map(e => `<div class="lista-item" style="margin-bottom:6px"><div class="lista-item-info"><div class="lista-item-nome">${esc(e['TIPO_EXAME']||'—')}</div><div class="lista-item-sub">${esc(e['DATA_VENCIMENTO']||'')}</div></div><span class="badge ${e['STATUS']==='Vencido'?'badge-vermelho':e['STATUS']==='A vencer'?'badge-amarelo':'badge-verde'}">${esc(e['STATUS']||'—')}</span></div>`).join('')
 }
 async function renderFichaEpi() {
   const el = document.getElementById('ficha-painel-epi')
@@ -282,7 +258,7 @@ async function renderFichaEpi() {
   const res = await chamarGAS({ acao: 'listar_epi_entregas', dados: { func_id: fichaFuncId } })
   const lista = res?.ok ? res.data : []
   if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhuma entrega</p>'; return }
-  el.innerHTML = lista.slice(0,15).map(e => `<div class="lista-item" style="margin-bottom:6px"><div class="lista-item-info"><div class="lista-item-nome">${e['ITENS']||e['EPI']||'—'}</div><div class="lista-item-sub">${e['DATA_ENTREGA']||''}</div></div><span class="badge ${e['STATUS_ASSINATURA']==='Assinado'?'badge-verde':'badge-amarelo'}">${e['STATUS_ASSINATURA']||'Pendente'}</span></div>`).join('')
+  el.innerHTML = lista.slice(0,15).map(e => `<div class="lista-item" style="margin-bottom:6px"><div class="lista-item-info"><div class="lista-item-nome">${esc(e['ITENS']||e['EPI']||'—')}</div><div class="lista-item-sub">${esc(e['DATA_ENTREGA']||'')}</div></div><span class="badge ${e['STATUS_ASSINATURA']==='Assinado'?'badge-verde':'badge-amarelo'}">${esc(e['STATUS_ASSINATURA']||'Pendente')}</span></div>`).join('')
 }
 async function renderFichaFolhas() {
   const el = document.getElementById('ficha-painel-folhas')
@@ -299,21 +275,6 @@ async function renderFichaPagamentos() {
   const lista = res?.ok ? res.data : []
   if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum pagamento</p>'; return }
   el.innerHTML = lista.map(p => `<div class="lista-item" style="margin-bottom:6px"><div class="lista-item-info"><div class="lista-item-nome">${normalizarComp(p['COMPETENCIA']||'')}${p['VALOR_LIQUIDO']?' · R$ '+formatarValor(p['VALOR_LIQUIDO']):''}</div><div class="lista-item-sub">${p['DATA_GERACAO']||''}</div></div><span class="badge ${p['STATUS']==='Pago'?'badge-verde':'badge-amarelo'}">${p['STATUS']||'—'}</span></div>`).join('')
-}
-
-// ── TIMELINE ─────────────────────────────────────────────────────
-// FIX #4: removida a função duplicada renderTimelinePagamento — usar apenas renderTimeline
-function renderTimeline(status) {
-  const steps = ['Enviado','Assinado','Notificado','Pago']
-  const idx = steps.indexOf(status)
-  return `<div class="timeline">${steps.map((s,i)=>`
-    ${i>0?`<div class="tl-line ${i<=idx?'done':''}"></div>`:''}
-    <div class="tl-step">
-      <div class="tl-dot ${i<idx?'done':i===idx?'active':''}">
-        ${i<idx?'<i class="ti ti-check" style="font-size:9px"></i>':i===idx?'<i class="ti ti-clock" style="font-size:9px"></i>':i+1}
-      </div>
-      <span class="tl-label ${i<idx?'done':i===idx?'active':''}">${s}</span>
-    </div>`).join('')}</div>`
 }
 
 // ── PENDÊNCIAS DO DIA ────────────────────────────────────────────
@@ -366,9 +327,9 @@ function renderLog(lista) {
   if (!lista.length) { el.innerHTML='<p class="lista-vazia">Nenhum registro</p>'; return }
   el.innerHTML = lista.slice(0,60).map(l=>`
     <div class="log-item">
-      <div class="log-acao">${l['ACAO']||'—'}</div>
-      <div class="log-detalhe">${l['DETALHES']||''}</div>
-      <div class="log-meta">${l['USUARIO']||'—'} · ${l['DATA_HORA']||''}</div>
+      <div class="log-acao">${esc(l['ACAO']||'—')}</div>
+      <div class="log-detalhe">${esc(l['DETALHES']||'')}</div>
+      <div class="log-meta">${esc(l['USUARIO']||'—')} · ${esc(l['DATA_HORA']||'')}</div>
     </div>`).join('')
 }
 
@@ -463,8 +424,8 @@ function renderLembretes(pendentesEpi, pendentesFolha) {
       return `<div style="display:flex;align-items:center;gap:10px;padding:10px;background:#fff;border-radius:var(--radius-md);border:0.5px solid rgba(133,79,11,0.15)">
         <div class="avatar" style="background:var(--amber-bg);color:var(--amber-text)">${getIniciais(item.nome||'?')}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.nome}</div>
-          <div style="font-size:11px;color:var(--text-secondary)"><span class="badge badge-amarelo" style="margin-right:4px">${item.tipo}</span>${item.descricao} · ${item.data}</div>
+          <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(item.nome)}</div>
+          <div style="font-size:11px;color:var(--text-secondary)"><span class="badge badge-amarelo" style="margin-right:4px">${esc(item.tipo)}</span>${esc(item.descricao)} · ${esc(item.data)}</div>
         </div>
         <div style="display:flex;gap:5px;flex-shrink:0">
           ${tel ? `<a href="https://wa.me/${tel}?text=${encodeURIComponent('Olá '+item.nome.split(' ')[0]+', seu documento aguarda assinatura. Por favor acesse o link que enviamos no WhatsApp.')}" target="_blank" style="background:#22C55E;color:#fff;border:none;border-radius:7px;padding:6px 9px;font-size:13px;text-decoration:none;display:flex;align-items:center"><i class="ti ti-brand-whatsapp"></i></a>` : ''}
@@ -536,9 +497,9 @@ function renderFuncionarios(lista) {
     <div class="lista-item">
       <div class="avatar">${getIniciais(f['NOME_COMPLETO'])}</div>
       <div class="lista-item-info">
-        <div class="lista-item-nome">${f['NOME_COMPLETO']}</div>
-        <div class="lista-item-sub">${f['FUNCAO']} · ${f['UNIDADE']}</div>
-        <div class="lista-item-sub">${f['TELEFONE']||''}</div>
+        <div class="lista-item-nome">${esc(f['NOME_COMPLETO'])}</div>
+        <div class="lista-item-sub">${esc(f['FUNCAO'])} · ${esc(f['UNIDADE'])}</div>
+        <div class="lista-item-sub">${esc(f['TELEFONE']||'')}</div>
       </div>
       <div style="display:flex;gap:5px;align-items:center">
         <button onclick="editarFuncionario('${f['ID']}')" class="btn-epi-rapido" title="Editar" style="background:var(--blue-bg);color:var(--blue-text)">
@@ -661,8 +622,8 @@ function filtrarExames(busca) {
     const bc = status.includes('VENCIDO') ? 'var(--red-text)' : status.includes('A VENCER') ? 'var(--amber-text)' : 'var(--border)'
     return `<div class="lista-item" style="border-color:${bc}">
       <div class="lista-item-info">
-        <div class="lista-item-nome">${e['FUNCIONÁRIO']}</div>
-        <div class="lista-item-sub">${e['EXAME REALIZADO']}</div>
+        <div class="lista-item-nome">${esc(e['FUNCIONÁRIO'])}</div>
+        <div class="lista-item-sub">${esc(e['EXAME REALIZADO'])}</div>
         <div class="lista-item-sub">${e['DATA REALIZAÇÃO']?'Realizado: '+e['DATA REALIZAÇÃO']:'Não realizado'}${e['DATA VENCIMENTO']?' · Vence: '+e['DATA VENCIMENTO']:''}</div>
       </div>${badge(status)}
     </div>`
@@ -708,8 +669,8 @@ function renderEstoqueModal(lista) {
     return `<div class="epi-estoque-item">
       <div class="epi-icone-wrap">${gi(e['DESCRIÇÃO DO EPI'])}</div>
       <div class="epi-est-info">
-        <div class="epi-est-nome">${e['DESCRIÇÃO DO EPI']}</div>
-        <div class="epi-est-ca">CA ${e['Nº CA']||'—'} · ${e['UNIDADE']||'un'}</div>
+        <div class="epi-est-nome">${esc(e['DESCRIÇÃO DO EPI'])}</div>
+        <div class="epi-est-ca">CA ${esc(e['Nº CA']||'—')} · ${esc(e['UNIDADE']||'un')}</div>
       </div>
       <div class="epi-est-right">
         <span class="epi-est-qty">${e['ESTOQUE ATUAL']}</span>
@@ -772,8 +733,8 @@ function filtrarEpiBusca(q) {
   const itens = estoque.filter(e => parseInt(e['ESTOQUE ATUAL']) > 0 && (!q || e['DESCRIÇÃO DO EPI'].toLowerCase().includes(q.toLowerCase())))
   lista.innerHTML = itens.map(e => `
     <div onclick="adicionarItemEpiBusca('${e['CÓD.']}')" style="padding:8px 10px;cursor:pointer;border-bottom:0.5px solid rgba(0,0,0,0.06);display:flex;align-items:center;justify-content:space-between">
-      <span style="font-size:12px;font-weight:500">${e['DESCRIÇÃO DO EPI']}</span>
-      <span style="font-size:11px;color:#6B7280">${e['ESTOQUE ATUAL']} ${e['UNIDADE']||'un'}</span>
+      <span style="font-size:12px;font-weight:500">${esc(e['DESCRIÇÃO DO EPI'])}</span>
+      <span style="font-size:11px;color:#6B7280">${esc(e['ESTOQUE ATUAL'])} ${esc(e['UNIDADE']||'un')}</span>
     </div>`).join('') || '<p style="padding:10px;font-size:12px;color:#9CA3AF;text-align:center">Nenhum EPI disponível</p>'
 }
 
@@ -806,7 +767,7 @@ function renderItensEpi() {
   const el = document.getElementById('epi-itens-lista')
   el.innerHTML = itensEpiSel.map(item => `
     <div class="epi-item-card">
-      <span class="epi-item-nome">${item.cod} — ${item.descricao}</span>
+      <span class="epi-item-nome">${esc(item.cod)} — ${esc(item.descricao)}</span>
       <div class="qty-ctrl">
         <button class="qty-btn" onclick="alterarQtdEpi('${item.cod}',-1)">−</button>
         <span class="qty-num">${item.quantidade}</span>
@@ -904,8 +865,8 @@ function renderEntregas(lista) {
     <div class="lista-item">
       <div class="avatar" style="background:var(--blue-bg);color:var(--blue-text)">${getIniciais(e['FUNCIONÁRIO']||'?')}</div>
       <div class="lista-item-info">
-        <div class="lista-item-nome">${e['FUNCIONÁRIO']||'—'}</div>
-        <div class="lista-item-sub">${e['DESCRIÇÃO DO EPI']||''} · ${e['DATA ENTREGA']||''} · ${e['MOTIVO ENTREGA']||''}</div>
+        <div class="lista-item-nome">${esc(e['FUNCIONÁRIO']||'—')}</div>
+        <div class="lista-item-sub">${esc(e['DESCRIÇÃO DO EPI']||'')} · ${esc(e['DATA ENTREGA']||'')} · ${esc(e['MOTIVO ENTREGA']||'')}</div>
         ${e['LINK DOC ASSINADO'] ? `<a href="${e['LINK DOC ASSINADO']}" target="_blank" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px;margin-top:2px"><i class="ti ti-file-check" style="font-size:10px"></i> Ver documento assinado</a>` : ''}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
@@ -958,10 +919,6 @@ function mostrarModalEnvio(tipo, dadosEnvio) {
 // ── EPI ───────────────────────────────────────────────────────────
 function enviarComZapSign_epi()          { document.getElementById('modal-envio')?.remove(); enviarEpi('zapsign') }
 function enviarComAssinaturaPropria_epi(){ document.getElementById('modal-envio')?.remove(); enviarEpi('proprio') }
-
-// ── Folha ─────────────────────────────────────────────────────────
-function enviarComZapSign_folha(idx)          { document.getElementById('modal-envio')?.remove(); enviarPaginaZapSign(idx) }
-function enviarComAssinaturaPropria_folha(idx){ document.getElementById('modal-envio')?.remove(); enviarPaginaAssinaturaPropria(idx) }
 
 async function enviarPaginaAssinaturaPropria(idx, tipo) {
   const p = paginasFracionadas[idx]
@@ -1149,15 +1106,15 @@ function renderHistoricoFolha(lista) {
   const competencias = [...new Set(assinados.map(f => f['COMPETÊNCIA']))]
   const selComp = document.getElementById('sel-comp-notif')
   if (selComp && competencias.length) {
-    selComp.innerHTML = competencias.map(c => `<option value="${c}">${c}</option>`).join('')
+    selComp.innerHTML = competencias.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')
   }
 
   el.innerHTML = lista.map(f => `
     <div class="lista-item">
       <div class="avatar" style="background:var(--purple-bg);color:var(--purple-text)">${getIniciais(f['FUNCIONÁRIO']||'?')}</div>
       <div class="lista-item-info">
-        <div class="lista-item-nome">${f['FUNCIONÁRIO']}</div>
-        <div class="lista-item-sub">${f['COMPETÊNCIA']} · ${f['DATA ENVIO']}</div>
+        <div class="lista-item-nome">${esc(f['FUNCIONÁRIO'])}</div>
+        <div class="lista-item-sub">${esc(f['COMPETÊNCIA'])} · ${esc(f['DATA ENVIO'])}</div>
         ${f['LINK DOC ASSINADO'] ? `<a href="${f['LINK DOC ASSINADO']}" target="_blank" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px;margin-top:2px"><i class="ti ti-file-check" style="font-size:10px"></i> Ver assinado</a>` : ''}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
@@ -1400,8 +1357,8 @@ function renderCardIdentificado(i, func, metodo) {
     <div class="fpc-func">
       <div class="fpc-av">${getIniciais(func['NOME_COMPLETO'])}</div>
       <div>
-        <div class="fpc-nome">${func['NOME_COMPLETO']}</div>
-        <div class="fpc-sub">${func['FUNCAO']||''} · ${func['UNIDADE']||''}</div>
+        <div class="fpc-nome">${esc(func['NOME_COMPLETO'])}</div>
+        <div class="fpc-sub">${esc(func['FUNCAO']||'')} · ${esc(func['UNIDADE']||'')}</div>
         ${metodo === 'ia' || metodo === 'auto' ? `<div class="fpc-auto"><i class="ti ti-robot" style="font-size:9px"></i> Identificado pela IA</div>` : metodo === 'cache' ? `<div class="fpc-auto"><i class="ti ti-history" style="font-size:9px"></i> Mapeamento salvo — confirme</div>` : '<div class="fpc-manual-tag">Selecionado manualmente</div>'}
       </div>
     </div>`
@@ -1417,7 +1374,7 @@ function renderCardManual(i) {
   document.getElementById('fpc-func-' + i).innerHTML = `
     <select class="frac-select-manual" onchange="selecionarFuncManual(${i}, this.value)">
       <option value="">Selecione o funcionário...</option>
-      ${funcionarios.map(f => `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>`).join('')}
+      ${funcionarios.map(f => `<option value="${esc(f['ID'])}">${esc(f['NOME_COMPLETO'])}</option>`).join('')}
     </select>`
 }
 
@@ -1595,13 +1552,13 @@ function preencherSelectsOcultos() {
   const selFunc = document.getElementById('sel-func-epi-hidden')
   if (selFunc) {
     selFunc.innerHTML = '<option value="">Selecione...</option>'
-    funcionarios.forEach(f => { selFunc.innerHTML += `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>` })
+    funcionarios.forEach(f => { selFunc.innerHTML += `<option value="${esc(f['ID'])}">${esc(f['NOME_COMPLETO'])}</option>` })
   }
   const selEpi = document.getElementById('sel-epi-hidden')
   if (selEpi && estoque.length) {
     selEpi.innerHTML = '<option value="">Selecione...</option>'
     estoque.filter(e => parseInt(e['ESTOQUE ATUAL']) > 0).forEach(e => {
-      selEpi.innerHTML += `<option value="${e['CÓD.']}">${e['CÓD.']} — ${e['DESCRIÇÃO DO EPI']}</option>`
+      selEpi.innerHTML += `<option value="${esc(e['CÓD.'])}">${esc(e['CÓD.'])} — ${esc(e['DESCRIÇÃO DO EPI'])}</option>`
     })
   }
 }
@@ -1611,6 +1568,14 @@ function arrayBufferToBase64(buffer) {
   let binary = ''; const bytes = new Uint8Array(buffer)
   for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
   return btoa(binary)
+}
+
+// Escapa texto para inserção segura em innerHTML (evita XSS/quebra de layout
+// quando campos livres como Observações contêm < > & " ')
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ))
 }
 
 // FIX #2: badge-cinza adicionado ao mapa
@@ -1701,7 +1666,7 @@ function popularSelectPgto() {
   if (!sel) return
   sel.innerHTML = '<option value="">Selecione...</option>'
   funcionarios.forEach(f => {
-    sel.innerHTML += `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>`
+    sel.innerHTML += `<option value="${esc(f['ID'])}">${esc(f['NOME_COMPLETO'])}</option>`
   })
 }
 
@@ -1777,7 +1742,7 @@ function renderAdiantamentos(lista) {
     <div class="lista-item">
       <div class="lista-item-info">
         <div class="lista-item-nome">R$ ${formatarValor(a['VALOR'])}</div>
-        <div class="lista-item-sub">${a['DATA_PAGTO']} · ${a['FORMA_PAGTO']}${a['OBSERVACOES']?' · '+a['OBSERVACOES']:''}</div>
+        <div class="lista-item-sub">${esc(a['DATA_PAGTO'])} · ${esc(a['FORMA_PAGTO'])}${a['OBSERVACOES']?' · '+esc(a['OBSERVACOES']):''}</div>
       </div>
       <span class="badge badge-verde">Pago</span>
     </div>`).join('')
@@ -1960,8 +1925,8 @@ async function carregarNotifPendentes() {
     <div style="background:#FFFBF5;border:0.5px solid rgba(133,79,11,0.2);border-radius:10px;padding:10px;margin-bottom:6px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <div>
-          <div style="font-size:13px;font-weight:600">${p['NOME_FUNC']}</div>
-          <div style="font-size:10px;color:var(--text-secondary)">${normalizarComp(p['COMPETENCIA']||'')}${p['VALOR_LIQUIDO']?' · R$ '+formatarValor(p['VALOR_LIQUIDO']):''}</div>
+          <div style="font-size:13px;font-weight:600">${esc(p['NOME_FUNC'])}</div>
+          <div style="font-size:10px;color:var(--text-secondary)">${esc(normalizarComp(p['COMPETENCIA']||''))}${p['VALOR_LIQUIDO']?' · R$ '+formatarValor(p['VALOR_LIQUIDO']):''}</div>
         </div>
         <span class="badge ba">Aguardando</span>
       </div>
