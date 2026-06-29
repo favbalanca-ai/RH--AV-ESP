@@ -72,27 +72,32 @@ html, body {
 /* ── LOGIN ─────────────────────────────────────────────────────── */
 #tela-login {
   min-height: 100vh;
-  background: linear-gradient(160deg, #1A5C2A 0%, #0f3d1a 100%);
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 60%),
+    linear-gradient(160deg, #2E7D32 0%, #1A5C2A 45%, #0f3d1a 100%);
   display: flex; align-items: center; justify-content: center;
-  padding: 20px;
+  padding: 24px;
 }
 .login-wrap {
   background: var(--card-bg);
-  border-radius: var(--radius-xl);
-  padding: 32px 24px;
+  border-radius: 24px;
+  padding: 34px 24px 30px;
   width: 100%; max-width: 360px;
-  box-shadow: 0 24px 64px rgba(0,0,0,0.3);
+  border: 0.5px solid rgba(255,255,255,0.4);
+  box-shadow: 0 30px 70px rgba(0,0,0,0.35);
 }
 .login-logo {
-  width: 60px; height: 60px;
+  width: 64px; height: 64px;
   background: var(--verde-claro);
-  border-radius: 18px;
+  border-radius: 20px;
   display: flex; align-items: center; justify-content: center;
-  margin: 0 auto 16px;
-  font-size: 30px;
+  margin: 0 auto 18px;
+  font-size: 32px;
+  box-shadow: 0 8px 20px rgba(26,92,42,0.18);
+  border: 1px solid rgba(26,92,42,0.10);
 }
-.login-titulo { font-size: 20px; font-weight: 700; color: var(--verde); text-align: center; }
-.login-sub { font-size: 12px; color: var(--text-secondary); text-align: center; margin: 4px 0 24px; }
+.login-titulo { font-size: 21px; font-weight: 800; color: var(--verde); text-align: center; letter-spacing: -0.02em; }
+.login-sub { font-size: 12px; color: var(--text-secondary); text-align: center; margin: 5px 0 26px; }
 .login-perfil-tag {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 2px 10px; border-radius: 20px;
@@ -392,18 +397,19 @@ html, body {
 
 /* ── FICHA FUNCIONÁRIO ──────────────────────────────────────────── */
 #pg-ficha-func .ficha-header {
-  background: var(--verde);
-  margin: -10px -10px 12px;
-  padding: 20px 16px 24px;
+  background: linear-gradient(135deg, #226e34 0%, var(--verde) 55%, #15491f 100%);
+  margin: -10px -10px 14px;
+  padding: 22px 16px 26px;
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
   display: flex; align-items: center; gap: 14px;
+  box-shadow: 0 6px 18px rgba(21,73,31,0.25);
 }
 .ficha-av {
-  width: 52px; height: 52px; border-radius: 50%;
-  background: rgba(255,255,255,0.2); color: #fff;
-  font-size: 18px; font-weight: 700;
+  width: 54px; height: 54px; border-radius: 50%;
+  background: rgba(255,255,255,0.18); color: #fff;
+  font-size: 18px; font-weight: 800;
   display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; border: 2px solid rgba(255,255,255,0.3);
+  flex-shrink: 0; border: 2px solid rgba(255,255,255,0.35);
 }
 .ficha-nome { font-size: 16px; font-weight: 700; color: #fff; }
 .ficha-sub  { font-size: 11px; color: rgba(255,255,255,0.7); margin-top: 2px; }
@@ -412,7 +418,7 @@ html, body {
   overflow-x: auto; padding-bottom: 4px;
 }
 .ficha-tab {
-  padding: 7px 14px; border-radius: 20px;
+  padding: 8px 15px; border-radius: 20px;
   font-size: 12px; font-weight: 600;
   border: 0.5px solid var(--border);
   background: var(--card-bg); color: var(--text-secondary);
@@ -421,6 +427,7 @@ html, body {
 }
 .ficha-tab.ativo {
   background: var(--verde); color: #fff; border-color: var(--verde);
+  box-shadow: 0 3px 10px rgba(26,92,42,0.30);
 }
 .ficha-painel { display: none; }
 .ficha-painel.ativo { display: block; }
