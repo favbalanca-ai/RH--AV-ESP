@@ -343,7 +343,7 @@ function renderLog(lista) {
   el.innerHTML = lista.slice(0,60).map(l=>`
     <div class="log-item">
       <div class="log-acao">${esc(l['ACAO']||'—')}</div>
-      <div class="log-detalhe">${esc(l['DETALHES']||'')}</div>
+      <div class="log-detalhe">${esc(l['DETALHE']||l['DETALHES']||'')}</div>
       <div class="log-meta">${esc(l['USUARIO']||'—')} · ${esc(l['DATA_HORA']||'')}</div>
     </div>`).join('')
 }
@@ -420,7 +420,7 @@ async function carregarErrosBackend() {
   const lista = (res && res.ok && Array.isArray(res.data) ? res.data : [])
     .filter(l => String(l['ACAO'] || '').toUpperCase().includes('ERRO'))
     .slice(0, 40)
-    .map(l => ({ tipo: l['ACAO'], extra: l['USUARIO'], msg: l['DETALHES'], quando: l['DATA_HORA'] }))
+    .map(l => ({ tipo: l['ACAO'], extra: l['USUARIO'], msg: l['DETALHE'] || l['DETALHES'], quando: l['DATA_HORA'] }))
   renderListaErros(el, lista, 'Nenhum erro no servidor')
 }
 
