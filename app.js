@@ -1,34 +1,25 @@
-// DEBUG: captura qualquer erro JS e mostra no toast com localização
+// ── Histórico de erros do app (guardado localmente p/ a aba Diagnóstico) ──
+const ERR_LOG_KEY = 'sst_err_log'
+function registrarErroLocal(tipo, msg, extra) {
+  try {
+    const lista = JSON.parse(localStorage.getItem(ERR_LOG_KEY) || '[]')
+    lista.unshift({ quando: new Date().toLocaleString('pt-BR'), tipo, msg: String(msg || '').slice(0, 300), extra: String(extra || '').slice(0, 200) })
+    localStorage.setItem(ERR_LOG_KEY, JSON.stringify(lista.slice(0, 50)))
+  } catch (e) {}
+}
+function lerErrosLocais() { try { return JSON.parse(localStorage.getItem(ERR_LOG_KEY) || '[]') } catch (e) { return [] } }
+function limparErrosLocais() { try { localStorage.removeItem(ERR_LOG_KEY) } catch (e) {} renderDiagnostico() }
+
+// Captura erros JS não tratados: console + histórico local (sem expor ao usuário)
 window.onerror = function(msg, src, linha, col, err) {
-  const local = src ? src.split('/').pop() + ':' + linha : ''
-  const el = document.getElementById('toast')
-  if (el) {
-    el.textContent = '🐛 ' + msg + (local ? ' [' + local + ']' : '')
-    el.className = 'toast erro'
-    el.style.display = 'block'
-    el.style.maxWidth = '95vw'
-    el.style.fontSize = '10px'
-    el.style.bottom = '100px'
-    el.style.whiteSpace = 'pre-wrap'
-    setTimeout(() => el.style.display = 'none', 10000)
-  }
-  console.error('ERRO GLOBAL:', msg, src, linha, col)
+  registrarErroLocal('JS', msg, src ? src.split('/').pop() + ':' + linha : '')
+  console.error('ERRO GLOBAL:', msg, src, linha, col, err)
   return false
 }
 window.addEventListener('unhandledrejection', e => {
-  const msg = e.reason?.message || String(e.reason)
-  const stack = (e.reason?.stack || '').split('\n')[1] || ''
-  const el = document.getElementById('toast')
-  if (el) {
-    el.textContent = '🐛 ' + msg + ' | ' + stack.trim()
-    el.className = 'toast erro'
-    el.style.display = 'block'
-    el.style.maxWidth = '95vw'
-    el.style.fontSize = '10px'
-    el.style.bottom = '100px'
-    el.style.whiteSpace = 'pre-wrap'
-    setTimeout(() => el.style.display = 'none', 10000)
-  }
+  const r = e.reason
+  registrarErroLocal('Promise', (r && r.message) || String(r), (r && r.stack ? String(r.stack).split('\n')[1] : '') || '')
+  console.error('PROMISE REJEITADA:', r)
 })
 
 let motivoEpiSelecionado = 'Admissional'
@@ -216,7 +207,7 @@ function buscaGlobal(q) {
   el.innerHTML = resultados.map((r,i) => `
     <div class="busca-item" onclick="window._buscaActions[${i}]()">
       <span class="busca-item-tipo" style="background:${r.bg};color:${r.cor}">${r.tipo}</span>
-      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.label}</div><div style="font-size:11px;color:var(--text-secondary)">${r.sub}</div></div>
+      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.label)}</div><div style="font-size:11px;color:var(--text-secondary)">${esc(r.sub)}</div></div>
       <i class="ti ti-arrow-right" style="color:var(--text-hint);font-size:14px"></i>
     </div>`).join('')
   el.style.display = 'block'
@@ -261,11 +252,11 @@ function renderFichaGeral(func) {
   el.innerHTML = `
     <div class="card" style="margin-bottom:8px">
       <div class="card-titulo"><i class="ti ti-id-badge"></i> Dados cadastrais</div>
-      ${campos.map(([k,v]) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12px"><span style="color:var(--text-secondary)">${k}</span><span style="font-weight:600;max-width:60%;text-align:right">${v}</span></div>`).join('')}
+      ${campos.map(([k,v]) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12px"><span style="color:var(--text-secondary)">${esc(k)}</span><span style="font-weight:600;max-width:60%;text-align:right">${esc(v)}</span></div>`).join('')}
     </div>
     <div style="display:flex;gap:8px">
       <button onclick="editarFuncionario('${func['ID']}')" class="btn-primario" style="flex:1;font-size:12px"><i class="ti ti-pencil"></i> Editar</button>
-      <a href="https://wa.me/55${String(func['TELEFONE']||'').replace(/\D/g,'')}" target="_blank" style="flex:1;background:#22C55E;color:#fff;border-radius:var(--radius-md);padding:12px;font-size:12px;font-weight:700;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-brand-whatsapp"></i> WhatsApp</a>
+      <a href="https://wa.me/${telWhats(func['TELEFONE'])}" target="_blank" style="flex:1;background:#22C55E;color:#fff;border-radius:var(--radius-md);padding:12px;font-size:12px;font-weight:700;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-brand-whatsapp"></i> WhatsApp</a>
     </div>`
 }
 async function renderFichaExames() {
@@ -274,7 +265,7 @@ async function renderFichaExames() {
   const res = await chamarGAS({ acao: 'listar_exames_func', dados: { func_id: fichaFuncId } })
   const lista = res?.ok ? res.data : []
   if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum exame</p>'; return }
-  el.innerHTML = lista.map(e => `<div class="lista-item" style="margin-bottom:6px"><div class="lista-item-info"><div class="lista-item-nome">${e['TIPO_EXAME']||'—'}</div><div class="lista-item-sub">${e['DATA_VENCIMENTO']||''}</div></div><span class="badge ${e['STATUS']==='Vencido'?'badge-vermelho':e['STATUS']==='A vencer'?'badge-amarelo':'badge-verde'}">${e['STATUS']||'—'}</span></div>`).join('')
+  el.innerHTML = lista.map(e => `<div class="lista-item" style="margin-bottom:6px"><div class="lista-item-info"><div class="lista-item-nome">${esc(e['TIPO_EXAME']||'—')}</div><div class="lista-item-sub">${esc(e['DATA_VENCIMENTO']||'')}</div></div><span class="badge ${e['STATUS']==='Vencido'?'badge-vermelho':e['STATUS']==='A vencer'?'badge-amarelo':'badge-verde'}">${esc(e['STATUS']||'—')}</span></div>`).join('')
 }
 async function renderFichaEpi() {
   const el = document.getElementById('ficha-painel-epi')
@@ -282,7 +273,7 @@ async function renderFichaEpi() {
   const res = await chamarGAS({ acao: 'listar_epi_entregas', dados: { func_id: fichaFuncId } })
   const lista = res?.ok ? res.data : []
   if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhuma entrega</p>'; return }
-  el.innerHTML = lista.slice(0,15).map(e => `<div class="lista-item" style="margin-bottom:6px"><div class="lista-item-info"><div class="lista-item-nome">${e['ITENS']||e['EPI']||'—'}</div><div class="lista-item-sub">${e['DATA_ENTREGA']||''}</div></div><span class="badge ${e['STATUS_ASSINATURA']==='Assinado'?'badge-verde':'badge-amarelo'}">${e['STATUS_ASSINATURA']||'Pendente'}</span></div>`).join('')
+  el.innerHTML = lista.slice(0,15).map(e => `<div class="lista-item" style="margin-bottom:6px"><div class="lista-item-info"><div class="lista-item-nome">${esc(e['ITENS']||e['EPI']||'—')}</div><div class="lista-item-sub">${esc(e['DATA_ENTREGA']||'')}</div></div><span class="badge ${e['STATUS_ASSINATURA']==='Assinado'?'badge-verde':'badge-amarelo'}">${esc(e['STATUS_ASSINATURA']||'Pendente')}</span></div>`).join('')
 }
 async function renderFichaFolhas() {
   const el = document.getElementById('ficha-painel-folhas')
@@ -299,21 +290,6 @@ async function renderFichaPagamentos() {
   const lista = res?.ok ? res.data : []
   if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum pagamento</p>'; return }
   el.innerHTML = lista.map(p => `<div class="lista-item" style="margin-bottom:6px"><div class="lista-item-info"><div class="lista-item-nome">${normalizarComp(p['COMPETENCIA']||'')}${p['VALOR_LIQUIDO']?' · R$ '+formatarValor(p['VALOR_LIQUIDO']):''}</div><div class="lista-item-sub">${p['DATA_GERACAO']||''}</div></div><span class="badge ${p['STATUS']==='Pago'?'badge-verde':'badge-amarelo'}">${p['STATUS']||'—'}</span></div>`).join('')
-}
-
-// ── TIMELINE ─────────────────────────────────────────────────────
-// FIX #4: removida a função duplicada renderTimelinePagamento — usar apenas renderTimeline
-function renderTimeline(status) {
-  const steps = ['Enviado','Assinado','Notificado','Pago']
-  const idx = steps.indexOf(status)
-  return `<div class="timeline">${steps.map((s,i)=>`
-    ${i>0?`<div class="tl-line ${i<=idx?'done':''}"></div>`:''}
-    <div class="tl-step">
-      <div class="tl-dot ${i<idx?'done':i===idx?'active':''}">
-        ${i<idx?'<i class="ti ti-check" style="font-size:9px"></i>':i===idx?'<i class="ti ti-clock" style="font-size:9px"></i>':i+1}
-      </div>
-      <span class="tl-label ${i<idx?'done':i===idx?'active':''}">${s}</span>
-    </div>`).join('')}</div>`
 }
 
 // ── PENDÊNCIAS DO DIA ────────────────────────────────────────────
@@ -351,7 +327,7 @@ async function carregarLog() {
   const sel = document.getElementById('sel-log-usuario')
   if (sel) {
     const usuarios = [...new Set(logCache.map(l => l['USUARIO']).filter(Boolean))]
-    sel.innerHTML = '<option value="">Todos</option>' + usuarios.map(u=>`<option>${u}</option>`).join('')
+    sel.innerHTML = '<option value="">Todos</option>' + usuarios.map(u=>`<option>${esc(u)}</option>`).join('')
     sel.onchange = filtrarLog
   }
 }
@@ -366,9 +342,9 @@ function renderLog(lista) {
   if (!lista.length) { el.innerHTML='<p class="lista-vazia">Nenhum registro</p>'; return }
   el.innerHTML = lista.slice(0,60).map(l=>`
     <div class="log-item">
-      <div class="log-acao">${l['ACAO']||'—'}</div>
-      <div class="log-detalhe">${l['DETALHES']||''}</div>
-      <div class="log-meta">${l['USUARIO']||'—'} · ${l['DATA_HORA']||''}</div>
+      <div class="log-acao">${esc(l['ACAO']||'—')}</div>
+      <div class="log-detalhe">${esc(l['DETALHES']||'')}</div>
+      <div class="log-meta">${esc(l['USUARIO']||'—')} · ${esc(l['DATA_HORA']||'')}</div>
     </div>`).join('')
 }
 
@@ -378,6 +354,7 @@ const TITULOS = {
   'exames':'Exames','epi':'EPI','fracionar':'Folha de Pagamento',
   'pagamento':'Controle de Pagamento',
   'log':'Log de Auditoria',
+  'diagnostico':'Diagnóstico',
 }
 
 function irPara(pg) {
@@ -393,25 +370,88 @@ function irPara(pg) {
   if (pg === 'fracionar')  { preencherMesesFracionar(); carregarEntregasFolha() }
   if (pg === 'pagamento')  iniciarPagamento()
   if (pg === 'log')        carregarLog()
+  if (pg === 'diagnostico') renderDiagnostico()
 }
 
-async function chamarGAS(dados) {
+// ─── DIAGNÓSTICO / HISTÓRICO DE ERROS ────────────────────────────
+function diagRow(k, v) {
+  return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--border);font-size:12px"><span style="color:var(--text-secondary)">${esc(k)}</span>${v}</div>`
+}
+function renderListaErros(el, lista, vazio) {
+  if (!lista.length) { el.innerHTML = `<p class="lista-vazia">${esc(vazio)}</p>`; return }
+  el.innerHTML = lista.map(e => `
+    <div class="log-item">
+      <div class="log-acao" style="color:var(--red-text)">${esc(e.tipo || 'Erro')}${e.extra ? ' · ' + esc(e.extra) : ''}</div>
+      <div class="log-detalhe">${esc(e.msg || '')}</div>
+      <div class="log-meta">${esc(e.quando || '')}</div>
+    </div>`).join('')
+}
+function renderDiagnostico() {
+  const st = document.getElementById('diag-status')
+  if (st) {
+    const online = navigator.onLine
+    let host = '—'; try { host = new URL(GAS_URL).host } catch (e) {}
+    st.innerHTML =
+      diagRow('Conexão', `<span class="badge ${online ? 'badge-verde' : 'badge-vermelho'}">${online ? 'Online' : 'Offline'}</span>`) +
+      diagRow('Backend', `<span style="font-size:11px;color:var(--text-secondary)">${esc(host)}</span>`) +
+      diagRow('Usuário', `<span style="font-size:11px;color:var(--text-secondary)">${esc(USUARIO || '—')}</span>`)
+  }
+  const elL = document.getElementById('diag-erros-locais')
+  if (elL) renderListaErros(elL, lerErrosLocais(), 'Nenhum erro registrado no app 🎉')
+  carregarErrosBackend()
+}
+async function testarConexao() {
+  const el = document.getElementById('diag-conexao')
+  if (el) { el.style.display = 'block'; el.innerHTML = '⏳ Testando...' }
+  const t0 = Date.now()
+  const res = await chamarGAS({ acao: 'listar_funcionarios' }, { timeoutMs: 20000 })
+  const ms = Date.now() - t0
+  if (el) {
+    if (res && res.ok) el.innerHTML = `<span style="color:var(--verde-text);font-weight:700">✅ Backend respondeu</span> · ${ms} ms`
+    else el.innerHTML = `<span style="color:var(--red-text);font-weight:700">❌ Falhou</span> · ${esc((res && res.erro) || 'erro')} · ${ms} ms`
+  }
+  const elL = document.getElementById('diag-erros-locais')
+  if (elL) renderListaErros(elL, lerErrosLocais(), 'Nenhum erro registrado no app 🎉')
+}
+async function carregarErrosBackend() {
+  const el = document.getElementById('diag-erros-backend'); if (!el) return
+  el.innerHTML = '<p class="lista-vazia">Carregando...</p>'
+  const res = await chamarGAS({ acao: 'listar_log' })
+  const lista = (res && res.ok && Array.isArray(res.data) ? res.data : [])
+    .filter(l => String(l['ACAO'] || '').toUpperCase().includes('ERRO'))
+    .slice(0, 40)
+    .map(l => ({ tipo: l['ACAO'], extra: l['USUARIO'], msg: l['DETALHES'], quando: l['DATA_HORA'] }))
+  renderListaErros(el, lista, 'Nenhum erro no servidor')
+}
+
+async function chamarGAS(dados, { timeoutMs = 120000 } = {}) {
+  const ctrl  = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     const res = await fetch(GAS_URL, {
       method: 'POST',
       body: JSON.stringify({ ...dados, usuario: dados.usuario || USUARIO, senha: dados.senha || SENHA_ADM }),
+      signal: ctrl.signal,
     })
+    if (!res.ok) { registrarErroLocal('HTTP', 'HTTP ' + res.status, dados.acao || ''); return { ok: false, erro: 'Erro HTTP ' + res.status } }
     return await res.json()
-  } catch(e) { return { ok: false, erro: 'Erro de conexão: ' + e.message } }
+  } catch(e) {
+    if (e.name === 'AbortError') { registrarErroLocal('Timeout', 'Tempo esgotado na requisição', dados.acao || ''); return { ok: false, erro: 'Tempo esgotado. Verifique sua conexão e tente novamente.' } }
+    registrarErroLocal('Conexão', e.message, dados.acao || '')
+    return { ok: false, erro: 'Erro de conexão: ' + e.message }
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────
 async function carregarDashboard() {
-  const [resEx, resEst, resEpi, resFolha] = await Promise.all([
+  const [resEx, resEst, resEpi, resFolha, resPgto] = await Promise.all([
     chamarGAS({ acao: 'listar_exames' }),
     chamarGAS({ acao: 'listar_epi_estoque' }),
     chamarGAS({ acao: 'listar_epi_entregas' }),
     chamarGAS({ acao: 'listar_folhas' }),
+    chamarGAS({ acao: 'listar_pagamentos', dados: { status: 'Aguardando Pagamento' } }),
   ])
 
   document.getElementById('num-funcs').textContent = funcionarios.length
@@ -436,8 +476,10 @@ async function carregarDashboard() {
   const pendentesFolha = (resFolha && resFolha.ok) ? resFolha.data.filter(f => f['STATUS']    === 'Pendente' && f['ZAPSIGN_DOC']) : []
   folhasPendentes = pendentesFolha.length
 
+  const pagtosPendentes = (resPgto && resPgto.ok && Array.isArray(resPgto.data)) ? resPgto.data.length : 0
+
   // Agora passa dados reais para renderPendencias
-  renderPendencias({ examesVencidos, examesAVencer, epiRepor, folhasPendentes, pagtosPendentes: 0 })
+  renderPendencias({ examesVencidos, examesAVencer, epiRepor, folhasPendentes, pagtosPendentes })
   renderLembretes(pendentesEpi, pendentesFolha)
 }
 
@@ -460,8 +502,8 @@ function renderLembretes(pendentesEpi, pendentesFolha) {
       return `<div style="display:flex;align-items:center;gap:10px;padding:10px;background:#fff;border-radius:var(--radius-md);border:0.5px solid rgba(133,79,11,0.15)">
         <div class="avatar" style="background:var(--amber-bg);color:var(--amber-text)">${getIniciais(item.nome||'?')}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.nome}</div>
-          <div style="font-size:11px;color:var(--text-secondary)"><span class="badge badge-amarelo" style="margin-right:4px">${item.tipo}</span>${item.descricao} · ${item.data}</div>
+          <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(item.nome)}</div>
+          <div style="font-size:11px;color:var(--text-secondary)"><span class="badge badge-amarelo" style="margin-right:4px">${esc(item.tipo)}</span>${esc(item.descricao)} · ${esc(item.data)}</div>
         </div>
         <div style="display:flex;gap:5px;flex-shrink:0">
           ${tel ? `<a href="https://wa.me/${tel}?text=${encodeURIComponent('Olá '+item.nome.split(' ')[0]+', seu documento aguarda assinatura. Por favor acesse o link que enviamos no WhatsApp.')}" target="_blank" style="background:#22C55E;color:#fff;border:none;border-radius:7px;padding:6px 9px;font-size:13px;text-decoration:none;display:flex;align-items:center"><i class="ti ti-brand-whatsapp"></i></a>` : ''}
@@ -492,12 +534,23 @@ async function carregarFuncionarios() {
 }
 
 function filtrarFuncionarios(q) {
-  renderFuncionarios(q ? funcionarios.filter(f => f['NOME_COMPLETO'].toLowerCase().includes(q.toLowerCase())) : funcionarios)
+  renderFuncionarios(q ? funcionarios.filter(f => (f['NOME_COMPLETO']||'').toLowerCase().includes(q.toLowerCase())) : funcionarios)
 }
 
 function getIniciais(nome) {
-  const p = String(nome).trim().split(' ').filter(x => x.length > 1)
-  return p.length >= 2 ? (p[0][0] + p[p.length-1][0]).toUpperCase() : (nome[0]||'?').toUpperCase()
+  const s = String(nome == null ? '' : nome).trim()
+  const p = s.split(' ').filter(x => x.length > 1)
+  if (p.length >= 2) return (p[0][0] + p[p.length-1][0]).toUpperCase()
+  return (s[0] || '?').toUpperCase()
+}
+
+// Normaliza telefone BR para link de WhatsApp: retorna '55'+DDD+numero
+// sem duplicar o 55 (evita wa.me/5555... quando o telefone já vem com país).
+// Retorna '' se o número for curto demais.
+function telWhats(raw) {
+  var t = String(raw == null ? '' : raw).replace(/\D/g, '')
+  if (t.length >= 12 && t.substring(0, 2) === '55') t = t.substring(2)
+  return t.length >= 10 ? '55' + t : ''
 }
 
 
@@ -533,9 +586,9 @@ function renderFuncionarios(lista) {
     <div class="lista-item">
       <div class="avatar">${getIniciais(f['NOME_COMPLETO'])}</div>
       <div class="lista-item-info">
-        <div class="lista-item-nome">${f['NOME_COMPLETO']}</div>
-        <div class="lista-item-sub">${f['FUNCAO']} · ${f['UNIDADE']}</div>
-        <div class="lista-item-sub">${f['TELEFONE']||''}</div>
+        <div class="lista-item-nome">${esc(f['NOME_COMPLETO'])}</div>
+        <div class="lista-item-sub">${esc(f['FUNCAO'])} · ${esc(f['UNIDADE'])}</div>
+        <div class="lista-item-sub">${esc(f['TELEFONE']||'')}</div>
       </div>
       <div style="display:flex;gap:5px;align-items:center">
         <button onclick="editarFuncionario('${f['ID']}')" class="btn-epi-rapido" title="Editar" style="background:var(--blue-bg);color:var(--blue-text)">
@@ -573,6 +626,9 @@ function editarFuncionario(funcId) {
       'telefone':             func['TELEFONE'],
       'email':                func['EMAIL'],
       'perfil_sst':           func['PERFIL_SST'],
+      'empregador':           func['EMPREGADOR'],
+      'opera_maquina':        func['OPERA_MAQUINA'],
+      'aplica_defensivo':     func['APLICA_DEFENSIVO'],
       'tam_camisa':           func['TAM_CAMISA'],
       'tam_bota':             func['TAM_BOTA'],
       'whatsapp_empregador':  func['WHATSAPP_EMPREGADOR'],
@@ -581,6 +637,7 @@ function editarFuncionario(funcId) {
       'conta':                func['CONTA'],
       'pix':                  func['PIX'],
       'salario_base':         func['SALARIO_BASE'],
+      'comissao_anual':       func['COMISSAO_ANUAL'],
       'observacoes':          func['OBSERVACOES'],
     }
 
@@ -654,8 +711,8 @@ function filtrarExames(busca) {
     const bc = status.includes('VENCIDO') ? 'var(--red-text)' : status.includes('A VENCER') ? 'var(--amber-text)' : 'var(--border)'
     return `<div class="lista-item" style="border-color:${bc}">
       <div class="lista-item-info">
-        <div class="lista-item-nome">${e['FUNCIONÁRIO']}</div>
-        <div class="lista-item-sub">${e['EXAME REALIZADO']}</div>
+        <div class="lista-item-nome">${esc(e['FUNCIONÁRIO'])}</div>
+        <div class="lista-item-sub">${esc(e['EXAME REALIZADO'])}</div>
         <div class="lista-item-sub">${e['DATA REALIZAÇÃO']?'Realizado: '+e['DATA REALIZAÇÃO']:'Não realizado'}${e['DATA VENCIMENTO']?' · Vence: '+e['DATA VENCIMENTO']:''}</div>
       </div>${badge(status)}
     </div>`
@@ -701,8 +758,8 @@ function renderEstoqueModal(lista) {
     return `<div class="epi-estoque-item">
       <div class="epi-icone-wrap">${gi(e['DESCRIÇÃO DO EPI'])}</div>
       <div class="epi-est-info">
-        <div class="epi-est-nome">${e['DESCRIÇÃO DO EPI']}</div>
-        <div class="epi-est-ca">CA ${e['Nº CA']||'—'} · ${e['UNIDADE']||'un'}</div>
+        <div class="epi-est-nome">${esc(e['DESCRIÇÃO DO EPI'])}</div>
+        <div class="epi-est-ca">CA ${esc(e['Nº CA']||'—')} · ${esc(e['UNIDADE']||'un')}</div>
       </div>
       <div class="epi-est-right">
         <span class="epi-est-qty">${e['ESTOQUE ATUAL']}</span>
@@ -765,8 +822,8 @@ function filtrarEpiBusca(q) {
   const itens = estoque.filter(e => parseInt(e['ESTOQUE ATUAL']) > 0 && (!q || e['DESCRIÇÃO DO EPI'].toLowerCase().includes(q.toLowerCase())))
   lista.innerHTML = itens.map(e => `
     <div onclick="adicionarItemEpiBusca('${e['CÓD.']}')" style="padding:8px 10px;cursor:pointer;border-bottom:0.5px solid rgba(0,0,0,0.06);display:flex;align-items:center;justify-content:space-between">
-      <span style="font-size:12px;font-weight:500">${e['DESCRIÇÃO DO EPI']}</span>
-      <span style="font-size:11px;color:#6B7280">${e['ESTOQUE ATUAL']} ${e['UNIDADE']||'un'}</span>
+      <span style="font-size:12px;font-weight:500">${esc(e['DESCRIÇÃO DO EPI'])}</span>
+      <span style="font-size:11px;color:#6B7280">${esc(e['ESTOQUE ATUAL'])} ${esc(e['UNIDADE']||'un')}</span>
     </div>`).join('') || '<p style="padding:10px;font-size:12px;color:#9CA3AF;text-align:center">Nenhum EPI disponível</p>'
 }
 
@@ -799,7 +856,7 @@ function renderItensEpi() {
   const el = document.getElementById('epi-itens-lista')
   el.innerHTML = itensEpiSel.map(item => `
     <div class="epi-item-card">
-      <span class="epi-item-nome">${item.cod} — ${item.descricao}</span>
+      <span class="epi-item-nome">${esc(item.cod)} — ${esc(item.descricao)}</span>
       <div class="qty-ctrl">
         <button class="qty-btn" onclick="alterarQtdEpi('${item.cod}',-1)">−</button>
         <span class="qty-num">${item.quantidade}</span>
@@ -881,9 +938,19 @@ function mostrarLinkAssinaturaEpi(url, msg, waLinkCustom) {
     </div>`
 }
 
-function copiarLink() {
+async function copiarLink() {
   const inp = document.getElementById('inp-link-ass'); if (!inp) return
-  inp.select(); document.execCommand('copy'); toast('✅ Link copiado!', 'sucesso')
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(inp.value)
+    } else {
+      inp.select(); document.execCommand('copy')
+    }
+    toast('✅ Link copiado!', 'sucesso')
+  } catch(e) {
+    try { inp.select(); document.execCommand('copy'); toast('✅ Link copiado!', 'sucesso') }
+    catch(_) { toast('❌ Não foi possível copiar', 'erro') }
+  }
 }
 
 function renderEntregas(lista) {
@@ -891,14 +958,14 @@ function renderEntregas(lista) {
   if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhuma entrega</p>'; return }
   el.innerHTML = lista.map(e => {
     const func  = funcionarios.find(f => f['NOME_COMPLETO'] === e['FUNCIONÁRIO'])
-    const tel   = String(func?.['TELEFONE'] || e['TELEFONE'] || '').replace(/\D/g,'')
-    const waUrl = tel ? `https://wa.me/55${tel}` : ''
+    const tel   = telWhats(func?.['TELEFONE'] || e['TELEFONE'])
+    const waUrl = tel ? `https://wa.me/${tel}` : ''
     return `
     <div class="lista-item">
       <div class="avatar" style="background:var(--blue-bg);color:var(--blue-text)">${getIniciais(e['FUNCIONÁRIO']||'?')}</div>
       <div class="lista-item-info">
-        <div class="lista-item-nome">${e['FUNCIONÁRIO']||'—'}</div>
-        <div class="lista-item-sub">${e['DESCRIÇÃO DO EPI']||''} · ${e['DATA ENTREGA']||''} · ${e['MOTIVO ENTREGA']||''}</div>
+        <div class="lista-item-nome">${esc(e['FUNCIONÁRIO']||'—')}</div>
+        <div class="lista-item-sub">${esc(e['DESCRIÇÃO DO EPI']||'')} · ${esc(e['DATA ENTREGA']||'')} · ${esc(e['MOTIVO ENTREGA']||'')}</div>
         ${e['LINK DOC ASSINADO'] ? `<a href="${e['LINK DOC ASSINADO']}" target="_blank" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px;margin-top:2px"><i class="ti ti-file-check" style="font-size:10px"></i> Ver documento assinado</a>` : ''}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
@@ -951,10 +1018,6 @@ function mostrarModalEnvio(tipo, dadosEnvio) {
 // ── EPI ───────────────────────────────────────────────────────────
 function enviarComZapSign_epi()          { document.getElementById('modal-envio')?.remove(); enviarEpi('zapsign') }
 function enviarComAssinaturaPropria_epi(){ document.getElementById('modal-envio')?.remove(); enviarEpi('proprio') }
-
-// ── Folha ─────────────────────────────────────────────────────────
-function enviarComZapSign_folha(idx)          { document.getElementById('modal-envio')?.remove(); enviarPaginaZapSign(idx) }
-function enviarComAssinaturaPropria_folha(idx){ document.getElementById('modal-envio')?.remove(); enviarPaginaAssinaturaPropria(idx) }
 
 async function enviarPaginaAssinaturaPropria(idx, tipo) {
   const p = paginasFracionadas[idx]
@@ -1120,11 +1183,12 @@ function atualizarCompDisplay() {
 function preencherMesesFracionar() {
   const sel = document.getElementById('sel-comp-frac'); if (!sel) return
   if (sel.options.length > 1) return
-  sel.innerHTML = '<option value="">Selecione a competência...</option>'
   const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
   const ano = new Date().getFullYear(), mesAtual = new Date().getMonth()
-  for (let m = mesAtual; m >= 0; m--) sel.innerHTML += `<option value="${meses[m]}/${ano}">${meses[m]}/${ano}</option>`
-  for (let m = 11; m > mesAtual; m--) sel.innerHTML += `<option value="${meses[m]}/${ano-1}">${meses[m]}/${ano-1}</option>`
+  let opts = '<option value="">Selecione a competência...</option>'
+  for (let m = mesAtual; m >= 0; m--) opts += `<option value="${meses[m]}/${ano}">${meses[m]}/${ano}</option>`
+  for (let m = 11; m > mesAtual; m--) opts += `<option value="${meses[m]}/${ano-1}">${meses[m]}/${ano-1}</option>`
+  sel.innerHTML = opts
 }
 
 async function carregarEntregasFolha() {
@@ -1142,15 +1206,15 @@ function renderHistoricoFolha(lista) {
   const competencias = [...new Set(assinados.map(f => f['COMPETÊNCIA']))]
   const selComp = document.getElementById('sel-comp-notif')
   if (selComp && competencias.length) {
-    selComp.innerHTML = competencias.map(c => `<option value="${c}">${c}</option>`).join('')
+    selComp.innerHTML = competencias.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')
   }
 
   el.innerHTML = lista.map(f => `
     <div class="lista-item">
       <div class="avatar" style="background:var(--purple-bg);color:var(--purple-text)">${getIniciais(f['FUNCIONÁRIO']||'?')}</div>
       <div class="lista-item-info">
-        <div class="lista-item-nome">${f['FUNCIONÁRIO']}</div>
-        <div class="lista-item-sub">${f['COMPETÊNCIA']} · ${f['DATA ENVIO']}</div>
+        <div class="lista-item-nome">${esc(f['FUNCIONÁRIO'])}</div>
+        <div class="lista-item-sub">${esc(f['COMPETÊNCIA'])} · ${esc(f['DATA ENVIO'])}</div>
         ${f['LINK DOC ASSINADO'] ? `<a href="${f['LINK DOC ASSINADO']}" target="_blank" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px;margin-top:2px"><i class="ti ti-file-check" style="font-size:10px"></i> Ver assinado</a>` : ''}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
@@ -1393,8 +1457,8 @@ function renderCardIdentificado(i, func, metodo) {
     <div class="fpc-func">
       <div class="fpc-av">${getIniciais(func['NOME_COMPLETO'])}</div>
       <div>
-        <div class="fpc-nome">${func['NOME_COMPLETO']}</div>
-        <div class="fpc-sub">${func['FUNCAO']||''} · ${func['UNIDADE']||''}</div>
+        <div class="fpc-nome">${esc(func['NOME_COMPLETO'])}</div>
+        <div class="fpc-sub">${esc(func['FUNCAO']||'')} · ${esc(func['UNIDADE']||'')}</div>
         ${metodo === 'ia' || metodo === 'auto' ? `<div class="fpc-auto"><i class="ti ti-robot" style="font-size:9px"></i> Identificado pela IA</div>` : metodo === 'cache' ? `<div class="fpc-auto"><i class="ti ti-history" style="font-size:9px"></i> Mapeamento salvo — confirme</div>` : '<div class="fpc-manual-tag">Selecionado manualmente</div>'}
       </div>
     </div>`
@@ -1410,7 +1474,7 @@ function renderCardManual(i) {
   document.getElementById('fpc-func-' + i).innerHTML = `
     <select class="frac-select-manual" onchange="selecionarFuncManual(${i}, this.value)">
       <option value="">Selecione o funcionário...</option>
-      ${funcionarios.map(f => `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>`).join('')}
+      ${funcionarios.map(f => `<option value="${esc(f['ID'])}">${esc(f['NOME_COMPLETO'])}</option>`).join('')}
     </select>`
 }
 
@@ -1476,8 +1540,8 @@ async function enviarPaginaZapSign(idx) {
       let links = `<span class="btn-enviado-frac"><i class="ti ti-check"></i></span>`
       if (res.data.sign_url) {
         links += `<a href="${res.data.sign_url}" target="_blank" class="btn-link-frac"><i class="ti ti-external-link"></i> Link</a>`
-        const tel = String(p.telefone||'').replace(/\D/g,'')
-        const waUrl = `https://wa.me/55${tel}?text=${encodeURIComponent('Olá '+p.nome.split(' ')[0]+', assine seu holerite: '+res.data.sign_url)}`
+        const tel = telWhats(p.telefone)
+        const waUrl = `https://wa.me/${tel}?text=${encodeURIComponent('Olá '+p.nome.split(' ')[0]+', assine seu holerite: '+res.data.sign_url)}`
         links += `<a href="${waUrl}" target="_blank" class="btn-wa-frac"><i class="ti ti-brand-whatsapp"></i></a>`
       }
       actionEl.innerHTML = `<div class="fpc-links">${links}</div>`
@@ -1587,15 +1651,14 @@ function preencherSelectsOcultos() {
   popularSelectPgto()
   const selFunc = document.getElementById('sel-func-epi-hidden')
   if (selFunc) {
-    selFunc.innerHTML = '<option value="">Selecione...</option>'
-    funcionarios.forEach(f => { selFunc.innerHTML += `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>` })
+    selFunc.innerHTML = '<option value="">Selecione...</option>' +
+      funcionarios.map(f => `<option value="${esc(f['ID'])}">${esc(f['NOME_COMPLETO'])}</option>`).join('')
   }
   const selEpi = document.getElementById('sel-epi-hidden')
   if (selEpi && estoque.length) {
-    selEpi.innerHTML = '<option value="">Selecione...</option>'
-    estoque.filter(e => parseInt(e['ESTOQUE ATUAL']) > 0).forEach(e => {
-      selEpi.innerHTML += `<option value="${e['CÓD.']}">${e['CÓD.']} — ${e['DESCRIÇÃO DO EPI']}</option>`
-    })
+    selEpi.innerHTML = '<option value="">Selecione...</option>' +
+      estoque.filter(e => parseInt(e['ESTOQUE ATUAL']) > 0)
+        .map(e => `<option value="${esc(e['CÓD.'])}">${esc(e['CÓD.'])} — ${esc(e['DESCRIÇÃO DO EPI'])}</option>`).join('')
   }
 }
 
@@ -1604,6 +1667,14 @@ function arrayBufferToBase64(buffer) {
   let binary = ''; const bytes = new Uint8Array(buffer)
   for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
   return btoa(binary)
+}
+
+// Escapa texto para inserção segura em innerHTML (evita XSS/quebra de layout
+// quando campos livres como Observações contêm < > & " ')
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ))
 }
 
 // FIX #2: badge-cinza adicionado ao mapa
@@ -1651,6 +1722,16 @@ function formatarValor(v) {
   return parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + parts[1]
 }
 
+// Converte valores em string ("1.234,56", "R$ 1.234,56", "1234.56") para número.
+// Mesma lógica de parsing de formatarValor — evita que o separador de milhar quebre a soma.
+function parseValorNum(v) {
+  if (typeof v === 'number') return v
+  const s = String(v == null ? '' : v).trim().replace(/R\$\s*/g, '')
+  if (!s) return 0
+  const n = s.indexOf(',') === -1 ? parseFloat(s) : parseFloat(s.replace(/\./g, '').replace(',', '.'))
+  return isNaN(n) ? 0 : n
+}
+
 function normalizarComp(comp) {
   const s = String(comp||'').trim()
   const m = s.match(/([A-Z][a-z]{2})\s+\d{2}\s+(\d{4})/)
@@ -1673,7 +1754,9 @@ async function iniciarPagamento() {
   const selAno = document.getElementById('sel-ano-pgto')
   if (selAno && !selAno.options.length) {
     const ano = new Date().getFullYear()
-    for (let a = ano; a >= ano-3; a--) selAno.innerHTML += `<option value="${a}">${a}</option>`
+    let opts = ''
+    for (let a = ano; a >= ano-3; a--) opts += `<option value="${a}">${a}</option>`
+    selAno.innerHTML = opts
   }
   const inpData = document.getElementById('inp-data-adiant')
   if (inpData && !inpData.value) inpData.value = new Date().toISOString().split('T')[0]
@@ -1682,10 +1765,8 @@ async function iniciarPagamento() {
 function popularSelectPgto() {
   const sel = document.getElementById('sel-func-pgto')
   if (!sel) return
-  sel.innerHTML = '<option value="">Selecione...</option>'
-  funcionarios.forEach(f => {
-    sel.innerHTML += `<option value="${f['ID']}">${f['NOME_COMPLETO']}</option>`
-  })
+  sel.innerHTML = '<option value="">Selecione...</option>' +
+    funcionarios.map(f => `<option value="${esc(f['ID'])}">${esc(f['NOME_COMPLETO'])}</option>`).join('')
 }
 
 function selecionarFuncPgto(funcId) {
@@ -1760,7 +1841,7 @@ function renderAdiantamentos(lista) {
     <div class="lista-item">
       <div class="lista-item-info">
         <div class="lista-item-nome">R$ ${formatarValor(a['VALOR'])}</div>
-        <div class="lista-item-sub">${a['DATA_PAGTO']} · ${a['FORMA_PAGTO']}${a['OBSERVACOES']?' · '+a['OBSERVACOES']:''}</div>
+        <div class="lista-item-sub">${esc(a['DATA_PAGTO'])} · ${esc(a['FORMA_PAGTO'])}${a['OBSERVACOES']?' · '+esc(a['OBSERVACOES']):''}</div>
       </div>
       <span class="badge badge-verde">Pago</span>
     </div>`).join('')
@@ -1893,8 +1974,8 @@ async function gerarExtrato() {
     return
   }
 
-  const totalSal   = salarios.reduce((s, p) => s + (parseFloat(String(p['VALOR_LIQUIDO']||0).replace(',','.')) || 0), 0)
-  const totalAdiant = adiantamentos.reduce((s, a) => s + (parseFloat(String(a['VALOR']||0).replace(',','.')) || 0), 0)
+  const totalSal   = salarios.reduce((s, p) => s + parseValorNum(p['VALOR_LIQUIDO']), 0)
+  const totalAdiant = adiantamentos.reduce((s, a) => s + parseValorNum(a['VALOR']), 0)
   const totalGeral = totalSal + totalAdiant
 
   lista.innerHTML = itens.map(it => `
@@ -1943,8 +2024,8 @@ async function carregarNotifPendentes() {
     <div style="background:#FFFBF5;border:0.5px solid rgba(133,79,11,0.2);border-radius:10px;padding:10px;margin-bottom:6px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <div>
-          <div style="font-size:13px;font-weight:600">${p['NOME_FUNC']}</div>
-          <div style="font-size:10px;color:var(--text-secondary)">${normalizarComp(p['COMPETENCIA']||'')}${p['VALOR_LIQUIDO']?' · R$ '+formatarValor(p['VALOR_LIQUIDO']):''}</div>
+          <div style="font-size:13px;font-weight:600">${esc(p['NOME_FUNC'])}</div>
+          <div style="font-size:10px;color:var(--text-secondary)">${esc(normalizarComp(p['COMPETENCIA']||''))}${p['VALOR_LIQUIDO']?' · R$ '+formatarValor(p['VALOR_LIQUIDO']):''}</div>
         </div>
         <span class="badge ba">Aguardando</span>
       </div>
