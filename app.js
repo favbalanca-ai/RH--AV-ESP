@@ -241,7 +241,7 @@ function renderFichaGeral(func) {
     </div>
     <div style="display:flex;gap:8px">
       <button onclick="editarFuncionario('${func['ID']}')" class="btn-primario" style="flex:1;font-size:12px"><i class="ti ti-pencil"></i> Editar</button>
-      <a href="https://wa.me/55${String(func['TELEFONE']||'').replace(/\D/g,'')}" target="_blank" style="flex:1;background:#22C55E;color:#fff;border-radius:var(--radius-md);padding:12px;font-size:12px;font-weight:700;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-brand-whatsapp"></i> WhatsApp</a>
+      <a href="https://wa.me/${telWhats(func['TELEFONE'])}" target="_blank" style="flex:1;background:#22C55E;color:#fff;border-radius:var(--radius-md);padding:12px;font-size:12px;font-weight:700;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-brand-whatsapp"></i> WhatsApp</a>
     </div>`
 }
 async function renderFichaExames() {
@@ -473,6 +473,15 @@ function getIniciais(nome) {
   const p = s.split(' ').filter(x => x.length > 1)
   if (p.length >= 2) return (p[0][0] + p[p.length-1][0]).toUpperCase()
   return (s[0] || '?').toUpperCase()
+}
+
+// Normaliza telefone BR para link de WhatsApp: retorna '55'+DDD+numero
+// sem duplicar o 55 (evita wa.me/5555... quando o telefone já vem com país).
+// Retorna '' se o número for curto demais.
+function telWhats(raw) {
+  var t = String(raw == null ? '' : raw).replace(/\D/g, '')
+  if (t.length >= 12 && t.substring(0, 2) === '55') t = t.substring(2)
+  return t.length >= 10 ? '55' + t : ''
 }
 
 
@@ -880,8 +889,8 @@ function renderEntregas(lista) {
   if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhuma entrega</p>'; return }
   el.innerHTML = lista.map(e => {
     const func  = funcionarios.find(f => f['NOME_COMPLETO'] === e['FUNCIONÁRIO'])
-    const tel   = String(func?.['TELEFONE'] || e['TELEFONE'] || '').replace(/\D/g,'')
-    const waUrl = tel ? `https://wa.me/55${tel}` : ''
+    const tel   = telWhats(func?.['TELEFONE'] || e['TELEFONE'])
+    const waUrl = tel ? `https://wa.me/${tel}` : ''
     return `
     <div class="lista-item">
       <div class="avatar" style="background:var(--blue-bg);color:var(--blue-text)">${getIniciais(e['FUNCIONÁRIO']||'?')}</div>
@@ -1462,8 +1471,8 @@ async function enviarPaginaZapSign(idx) {
       let links = `<span class="btn-enviado-frac"><i class="ti ti-check"></i></span>`
       if (res.data.sign_url) {
         links += `<a href="${res.data.sign_url}" target="_blank" class="btn-link-frac"><i class="ti ti-external-link"></i> Link</a>`
-        const tel = String(p.telefone||'').replace(/\D/g,'')
-        const waUrl = `https://wa.me/55${tel}?text=${encodeURIComponent('Olá '+p.nome.split(' ')[0]+', assine seu holerite: '+res.data.sign_url)}`
+        const tel = telWhats(p.telefone)
+        const waUrl = `https://wa.me/${tel}?text=${encodeURIComponent('Olá '+p.nome.split(' ')[0]+', assine seu holerite: '+res.data.sign_url)}`
         links += `<a href="${waUrl}" target="_blank" class="btn-wa-frac"><i class="ti ti-brand-whatsapp"></i></a>`
       }
       actionEl.innerHTML = `<div class="fpc-links">${links}</div>`
