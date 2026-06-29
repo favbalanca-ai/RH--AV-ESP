@@ -26,7 +26,8 @@
   --radius-md:     12px;
   --radius-lg:     16px;
   --radius-xl:     20px;
-  --shadow-card:   0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-card:   0 1px 2px rgba(0,0,0,0.04), 0 6px 16px rgba(0,0,0,0.05);
+  --shadow-pop:    0 10px 30px rgba(0,0,0,0.13);
   --transition:    0.18s ease;
 }
 
@@ -61,6 +62,10 @@ html, body {
   color: var(--text-primary);
   min-height: 100vh;
   -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
+  overflow-x: hidden;
   transition: background var(--transition), color var(--transition);
 }
 
@@ -96,11 +101,11 @@ html, body {
 }
 
 /* ── APP LAYOUT ────────────────────────────────────────────────── */
-#tela-app { display: flex; flex-direction: column; min-height: 100vh; max-width: 480px; margin: 0 auto; background: var(--surface); }
+#tela-app { display: flex; flex-direction: column; min-height: 100vh; max-width: 480px; margin: 0 auto; background: var(--surface); overflow-x: hidden; }
 
 .app-header {
-  background: var(--verde);
-  padding: 12px 16px 10px;
+  background: linear-gradient(135deg, #226e34 0%, var(--verde) 55%, #15491f 100%);
+  padding: 14px 16px 12px;
   display: flex; justify-content: space-between; align-items: center;
   position: sticky; top: 0; z-index: 100;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
@@ -178,15 +183,19 @@ html, body {
   box-shadow: 0 -2px 10px rgba(0,0,0,0.06);
 }
 .nav-btn {
-  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px;
-  padding: 4px 1px; border: none; background: none; cursor: pointer;
+  flex: 1; position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 1px 4px; border: none; background: none; cursor: pointer;
   border-radius: var(--radius-sm); transition: all var(--transition); color: var(--text-hint);
   min-width: 0; font-family: inherit;
 }
-.nav-btn i { font-size: 20px; }
-.nav-btn .nav-label { font-size: 8px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.nav-btn i { font-size: 20px; position: relative; z-index: 1; transition: transform var(--transition); }
+.nav-btn .nav-label { font-size: 9px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; position: relative; z-index: 1; }
 .nav-btn.ativo { color: var(--verde); }
-.nav-btn.ativo i { font-size: 20px; }
+.nav-btn.ativo i { transform: translateY(-1px) scale(1.05); }
+.nav-btn.ativo::before {
+  content: ''; position: absolute; top: 3px; left: 50%; transform: translateX(-50%);
+  width: 48px; height: 26px; background: var(--verde-claro); border-radius: 13px; z-index: 0;
+}
 
 /* ── BADGE PENDENTE NAV ──────────────────────────────────────────── */
 .nav-btn-wrap { position: relative; flex: 1; display: flex; justify-content: center; }
@@ -226,14 +235,20 @@ html, body {
   background: var(--card-bg);
   border-radius: var(--radius-lg);
   border: 0.5px solid var(--border);
-  padding: 13px 14px;
+  padding: 15px 14px 13px;
   box-shadow: var(--shadow-card);
-  cursor: pointer; transition: transform var(--transition), box-shadow var(--transition);
+  cursor: pointer; position: relative; overflow: hidden;
+  transition: transform var(--transition), box-shadow var(--transition);
 }
+.card-stat::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--verde); }
+.card-stat.vermelho::before { background: var(--red-text); }
+.card-stat.amarelo::before  { background: var(--amber-text); }
+.card-stat.verde::before    { background: var(--verde-text); }
 .card-stat:active { transform: scale(0.97); }
-.stat-icone { font-size: 22px; margin-bottom: 6px; display: block; }
-.stat-num { font-size: 30px; font-weight: 700; line-height: 1; display: block; color: var(--text-primary); }
-.stat-label { font-size: 11px; color: var(--text-secondary); margin-top: 3px; display: block; }
+.card-stat:hover  { box-shadow: var(--shadow-pop); }
+.stat-icone { font-size: 20px; margin-bottom: 4px; display: block; opacity: 0.9; }
+.stat-num { font-size: 28px; font-weight: 800; line-height: 1; display: block; color: var(--text-primary); letter-spacing: -0.02em; }
+.stat-label { font-size: 11px; color: var(--text-secondary); margin-top: 4px; display: block; }
 .card-stat.vermelho .stat-num { color: var(--red-text); }
 .card-stat.amarelo  .stat-num { color: var(--amber-text); }
 .card-stat.verde    .stat-num { color: var(--verde-text); }
@@ -264,15 +279,17 @@ html, body {
 /* ── AÇÕES RÁPIDAS ──────────────────────────────────────────────── */
 .acoes-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .btn-acao {
-  background: var(--surface);
+  background: var(--card-bg);
   border: 0.5px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 13px 12px;
+  padding: 11px 12px;
   cursor: pointer;
-  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  display: flex; flex-direction: row; align-items: center; gap: 10px;
   text-align: left; transition: all var(--transition);
+  box-shadow: var(--shadow-card);
 }
 .btn-acao:active { transform: scale(0.96); background: var(--verde-claro); border-color: rgba(26,92,42,0.2); }
+.btn-acao:hover { box-shadow: var(--shadow-pop); }
 .acao-icon {
   width: 36px; height: 36px;
   border-radius: 10px;
@@ -308,13 +325,14 @@ html, body {
 .lista-item {
   background: var(--card-bg);
   border: 0.5px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 11px 12px;
+  border-radius: var(--radius-lg);
+  padding: 12px;
   display: flex; align-items: center; gap: 10px;
   transition: all var(--transition);
   box-shadow: var(--shadow-card);
 }
 .lista-item:active { transform: scale(0.98); }
+.lista-item:hover { box-shadow: var(--shadow-pop); }
 .lista-item-info { flex: 1; min-width: 0; }
 .lista-item-nome { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lista-item-sub  { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
@@ -412,8 +430,8 @@ html, body {
 .campo-grupo label { font-size: 11px; font-weight: 600; color: var(--text-secondary); }
 .campo-grupo input, .campo-grupo select, .campo-grupo textarea {
   border: 0.5px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 9px 11px;
+  border-radius: var(--radius-md);
+  padding: 11px 12px;
   font-size: 13px; font-family: inherit;
   color: var(--text-primary);
   background: var(--card-bg);
@@ -431,17 +449,18 @@ html, body {
 
 /* ── BOTÕES ─────────────────────────────────────────────────────── */
 .btn-primario {
-  background: var(--verde);
+  background: linear-gradient(180deg, #237036 0%, var(--verde) 100%);
   color: #fff; border: none;
   border-radius: var(--radius-md);
-  padding: 12px 16px;
+  padding: 13px 16px;
   font-size: 13px; font-weight: 600;
   cursor: pointer; font-family: inherit;
   display: flex; align-items: center; justify-content: center; gap: 6px;
   transition: all var(--transition);
   width: auto;
+  box-shadow: 0 2px 10px rgba(26,92,42,0.28);
 }
-.btn-primario:active { transform: scale(0.97); }
+.btn-primario:active { transform: scale(0.97); box-shadow: 0 1px 5px rgba(26,92,42,0.22); }
 .btn-primario:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-primario.w-full { width: 100%; }
 .btn-primario.mt-2 { margin-top: 8px; }
