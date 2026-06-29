@@ -460,5 +460,13 @@
 </div>
 
 <script src="app.js?v=1781055442"></script>
+<script>
+  // Registra o Service Worker (necessário para Web Share Target e cache offline)
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(err => console.error('SW falhou:', err))
+    })
+  }
+</script>
 </body>
 </html>

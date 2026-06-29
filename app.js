@@ -407,11 +407,12 @@ async function chamarGAS(dados) {
 
 // ─── DASHBOARD ────────────────────────────────────────────────────
 async function carregarDashboard() {
-  const [resEx, resEst, resEpi, resFolha] = await Promise.all([
+  const [resEx, resEst, resEpi, resFolha, resPgto] = await Promise.all([
     chamarGAS({ acao: 'listar_exames' }),
     chamarGAS({ acao: 'listar_epi_estoque' }),
     chamarGAS({ acao: 'listar_epi_entregas' }),
     chamarGAS({ acao: 'listar_folhas' }),
+    chamarGAS({ acao: 'listar_pagamentos', dados: { status: 'Aguardando Pagamento' } }),
   ])
 
   document.getElementById('num-funcs').textContent = funcionarios.length
@@ -436,8 +437,10 @@ async function carregarDashboard() {
   const pendentesFolha = (resFolha && resFolha.ok) ? resFolha.data.filter(f => f['STATUS']    === 'Pendente' && f['ZAPSIGN_DOC']) : []
   folhasPendentes = pendentesFolha.length
 
+  const pagtosPendentes = (resPgto && resPgto.ok && Array.isArray(resPgto.data)) ? resPgto.data.length : 0
+
   // Agora passa dados reais para renderPendencias
-  renderPendencias({ examesVencidos, examesAVencer, epiRepor, folhasPendentes, pagtosPendentes: 0 })
+  renderPendencias({ examesVencidos, examesAVencer, epiRepor, folhasPendentes, pagtosPendentes })
   renderLembretes(pendentesEpi, pendentesFolha)
 }
 
@@ -573,6 +576,9 @@ function editarFuncionario(funcId) {
       'telefone':             func['TELEFONE'],
       'email':                func['EMAIL'],
       'perfil_sst':           func['PERFIL_SST'],
+      'empregador':           func['EMPREGADOR'],
+      'opera_maquina':        func['OPERA_MAQUINA'],
+      'aplica_defensivo':     func['APLICA_DEFENSIVO'],
       'tam_camisa':           func['TAM_CAMISA'],
       'tam_bota':             func['TAM_BOTA'],
       'whatsapp_empregador':  func['WHATSAPP_EMPREGADOR'],
@@ -581,6 +587,7 @@ function editarFuncionario(funcId) {
       'conta':                func['CONTA'],
       'pix':                  func['PIX'],
       'salario_base':         func['SALARIO_BASE'],
+      'comissao_anual':       func['COMISSAO_ANUAL'],
       'observacoes':          func['OBSERVACOES'],
     }
 
@@ -1651,6 +1658,16 @@ function formatarValor(v) {
   return parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + parts[1]
 }
 
+// Converte valores em string ("1.234,56", "R$ 1.234,56", "1234.56") para número.
+// Mesma lógica de parsing de formatarValor — evita que o separador de milhar quebre a soma.
+function parseValorNum(v) {
+  if (typeof v === 'number') return v
+  const s = String(v == null ? '' : v).trim().replace(/R\$\s*/g, '')
+  if (!s) return 0
+  const n = s.indexOf(',') === -1 ? parseFloat(s) : parseFloat(s.replace(/\./g, '').replace(',', '.'))
+  return isNaN(n) ? 0 : n
+}
+
 function normalizarComp(comp) {
   const s = String(comp||'').trim()
   const m = s.match(/([A-Z][a-z]{2})\s+\d{2}\s+(\d{4})/)
@@ -1893,8 +1910,8 @@ async function gerarExtrato() {
     return
   }
 
-  const totalSal   = salarios.reduce((s, p) => s + (parseFloat(String(p['VALOR_LIQUIDO']||0).replace(',','.')) || 0), 0)
-  const totalAdiant = adiantamentos.reduce((s, a) => s + (parseFloat(String(a['VALOR']||0).replace(',','.')) || 0), 0)
+  const totalSal   = salarios.reduce((s, p) => s + parseValorNum(p['VALOR_LIQUIDO']), 0)
+  const totalAdiant = adiantamentos.reduce((s, a) => s + parseValorNum(a['VALOR']), 0)
   const totalGeral = totalSal + totalAdiant
 
   lista.innerHTML = itens.map(it => `
