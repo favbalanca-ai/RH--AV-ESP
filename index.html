@@ -45,6 +45,7 @@
     <div class="header-actions">
       <button onclick="toggleBusca()" id="btn-busca" class="btn-header" title="Buscar"><i class="ti ti-search" aria-hidden="true"></i></button>
       <button onclick="sincronizarManual()" id="btn-sync" class="btn-header" title="Sincronizar"><i class="ti ti-refresh" aria-hidden="true"></i></button>
+      <button onclick="irPara('diagnostico')" id="btn-diag" class="btn-header" title="Diagnóstico"><i class="ti ti-activity" aria-hidden="true"></i></button>
       <button onclick="toggleTema()" id="btn-tema" class="btn-header" title="Tema"><i class="ti ti-moon" aria-hidden="true"></i></button>
       <button onclick="logout()" class="btn-sair">Sair</button>
     </div>
@@ -444,6 +445,30 @@
           <div class="campo-grupo"><label>Ação</label><input type="text" id="inp-log-busca" placeholder="ex: PAGAMENTO" oninput="filtrarLog()"></div>
         </div>
         <div id="lista-log"></div>
+      </div>
+    </div>
+
+    <!-- DIAGNÓSTICO / HISTÓRICO DE ERROS -->
+    <div id="pg-diagnostico" class="pagina">
+      <div class="card mb-3">
+        <div class="card-titulo"><i class="ti ti-activity" aria-hidden="true"></i> Diagnóstico do sistema</div>
+        <div id="diag-status"></div>
+        <button onclick="testarConexao()" class="btn-primario w-full" style="margin-top:10px">
+          <i class="ti ti-plug-connected" aria-hidden="true"></i> Testar conexão
+        </button>
+        <div id="diag-conexao" style="display:none;margin-top:8px;font-size:12px;text-align:center"></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div class="card-titulo" style="margin:0"><i class="ti ti-bug" aria-hidden="true"></i> Histórico de erros</div>
+          <button onclick="limparErrosLocais()" style="background:var(--surface);border:0.5px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:600;color:var(--text-secondary);cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px">
+            <i class="ti ti-trash" style="font-size:12px" aria-hidden="true"></i> Limpar
+          </button>
+        </div>
+        <div style="font-size:11px;font-weight:700;color:var(--text-secondary);margin-bottom:4px">No app (este aparelho)</div>
+        <div id="diag-erros-locais"></div>
+        <div style="font-size:11px;font-weight:700;color:var(--text-secondary);margin:14px 0 4px;border-top:0.5px solid var(--border);padding-top:12px">No servidor</div>
+        <div id="diag-erros-backend"></div>
       </div>
     </div>
 

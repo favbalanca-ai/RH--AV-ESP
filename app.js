@@ -1,10 +1,25 @@
-// Captura erros JS não tratados e registra no console (sem expor detalhes crus ao usuário)
+// ── Histórico de erros do app (guardado localmente p/ a aba Diagnóstico) ──
+const ERR_LOG_KEY = 'sst_err_log'
+function registrarErroLocal(tipo, msg, extra) {
+  try {
+    const lista = JSON.parse(localStorage.getItem(ERR_LOG_KEY) || '[]')
+    lista.unshift({ quando: new Date().toLocaleString('pt-BR'), tipo, msg: String(msg || '').slice(0, 300), extra: String(extra || '').slice(0, 200) })
+    localStorage.setItem(ERR_LOG_KEY, JSON.stringify(lista.slice(0, 50)))
+  } catch (e) {}
+}
+function lerErrosLocais() { try { return JSON.parse(localStorage.getItem(ERR_LOG_KEY) || '[]') } catch (e) { return [] } }
+function limparErrosLocais() { try { localStorage.removeItem(ERR_LOG_KEY) } catch (e) {} renderDiagnostico() }
+
+// Captura erros JS não tratados: console + histórico local (sem expor ao usuário)
 window.onerror = function(msg, src, linha, col, err) {
+  registrarErroLocal('JS', msg, src ? src.split('/').pop() + ':' + linha : '')
   console.error('ERRO GLOBAL:', msg, src, linha, col, err)
   return false
 }
 window.addEventListener('unhandledrejection', e => {
-  console.error('PROMISE REJEITADA:', e.reason)
+  const r = e.reason
+  registrarErroLocal('Promise', (r && r.message) || String(r), (r && r.stack ? String(r.stack).split('\n')[1] : '') || '')
+  console.error('PROMISE REJEITADA:', r)
 })
 
 let motivoEpiSelecionado = 'Admissional'
@@ -339,6 +354,7 @@ const TITULOS = {
   'exames':'Exames','epi':'EPI','fracionar':'Folha de Pagamento',
   'pagamento':'Controle de Pagamento',
   'log':'Log de Auditoria',
+  'diagnostico':'Diagnóstico',
 }
 
 function irPara(pg) {
@@ -354,6 +370,58 @@ function irPara(pg) {
   if (pg === 'fracionar')  { preencherMesesFracionar(); carregarEntregasFolha() }
   if (pg === 'pagamento')  iniciarPagamento()
   if (pg === 'log')        carregarLog()
+  if (pg === 'diagnostico') renderDiagnostico()
+}
+
+// ─── DIAGNÓSTICO / HISTÓRICO DE ERROS ────────────────────────────
+function diagRow(k, v) {
+  return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--border);font-size:12px"><span style="color:var(--text-secondary)">${esc(k)}</span>${v}</div>`
+}
+function renderListaErros(el, lista, vazio) {
+  if (!lista.length) { el.innerHTML = `<p class="lista-vazia">${esc(vazio)}</p>`; return }
+  el.innerHTML = lista.map(e => `
+    <div class="log-item">
+      <div class="log-acao" style="color:var(--red-text)">${esc(e.tipo || 'Erro')}${e.extra ? ' · ' + esc(e.extra) : ''}</div>
+      <div class="log-detalhe">${esc(e.msg || '')}</div>
+      <div class="log-meta">${esc(e.quando || '')}</div>
+    </div>`).join('')
+}
+function renderDiagnostico() {
+  const st = document.getElementById('diag-status')
+  if (st) {
+    const online = navigator.onLine
+    let host = '—'; try { host = new URL(GAS_URL).host } catch (e) {}
+    st.innerHTML =
+      diagRow('Conexão', `<span class="badge ${online ? 'badge-verde' : 'badge-vermelho'}">${online ? 'Online' : 'Offline'}</span>`) +
+      diagRow('Backend', `<span style="font-size:11px;color:var(--text-secondary)">${esc(host)}</span>`) +
+      diagRow('Usuário', `<span style="font-size:11px;color:var(--text-secondary)">${esc(USUARIO || '—')}</span>`)
+  }
+  const elL = document.getElementById('diag-erros-locais')
+  if (elL) renderListaErros(elL, lerErrosLocais(), 'Nenhum erro registrado no app 🎉')
+  carregarErrosBackend()
+}
+async function testarConexao() {
+  const el = document.getElementById('diag-conexao')
+  if (el) { el.style.display = 'block'; el.innerHTML = '⏳ Testando...' }
+  const t0 = Date.now()
+  const res = await chamarGAS({ acao: 'listar_funcionarios' }, { timeoutMs: 20000 })
+  const ms = Date.now() - t0
+  if (el) {
+    if (res && res.ok) el.innerHTML = `<span style="color:var(--verde-text);font-weight:700">✅ Backend respondeu</span> · ${ms} ms`
+    else el.innerHTML = `<span style="color:var(--red-text);font-weight:700">❌ Falhou</span> · ${esc((res && res.erro) || 'erro')} · ${ms} ms`
+  }
+  const elL = document.getElementById('diag-erros-locais')
+  if (elL) renderListaErros(elL, lerErrosLocais(), 'Nenhum erro registrado no app 🎉')
+}
+async function carregarErrosBackend() {
+  const el = document.getElementById('diag-erros-backend'); if (!el) return
+  el.innerHTML = '<p class="lista-vazia">Carregando...</p>'
+  const res = await chamarGAS({ acao: 'listar_log' })
+  const lista = (res && res.ok && Array.isArray(res.data) ? res.data : [])
+    .filter(l => String(l['ACAO'] || '').toUpperCase().includes('ERRO'))
+    .slice(0, 40)
+    .map(l => ({ tipo: l['ACAO'], extra: l['USUARIO'], msg: l['DETALHES'], quando: l['DATA_HORA'] }))
+  renderListaErros(el, lista, 'Nenhum erro no servidor')
 }
 
 async function chamarGAS(dados, { timeoutMs = 120000 } = {}) {
@@ -365,10 +433,11 @@ async function chamarGAS(dados, { timeoutMs = 120000 } = {}) {
       body: JSON.stringify({ ...dados, usuario: dados.usuario || USUARIO, senha: dados.senha || SENHA_ADM }),
       signal: ctrl.signal,
     })
-    if (!res.ok) return { ok: false, erro: 'Erro HTTP ' + res.status }
+    if (!res.ok) { registrarErroLocal('HTTP', 'HTTP ' + res.status, dados.acao || ''); return { ok: false, erro: 'Erro HTTP ' + res.status } }
     return await res.json()
   } catch(e) {
-    if (e.name === 'AbortError') return { ok: false, erro: 'Tempo esgotado. Verifique sua conexão e tente novamente.' }
+    if (e.name === 'AbortError') { registrarErroLocal('Timeout', 'Tempo esgotado na requisição', dados.acao || ''); return { ok: false, erro: 'Tempo esgotado. Verifique sua conexão e tente novamente.' } }
+    registrarErroLocal('Conexão', e.message, dados.acao || '')
     return { ok: false, erro: 'Erro de conexão: ' + e.message }
   } finally {
     clearTimeout(timer)
