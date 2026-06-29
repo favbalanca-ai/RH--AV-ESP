@@ -650,3 +650,33 @@ html, body {
 .log-acao { font-weight: 600; color: var(--text-primary); }
 .log-detalhe { color: var(--text-secondary); margin-top: 2px; }
 .log-meta { color: var(--text-hint); font-size: 10px; margin-top: 1px; }
+
+/* ── DESKTOP / WEB (telas largas) ───────────────────────────────────
+   App é mobile-first (coluna 480px). Em telas largas, emoldura a coluna
+   com um backdrop e sombras para parecer um app, não uma faixa solta. */
+@media (min-width: 520px) {
+  body {
+    background:
+      radial-gradient(90% 60% at 50% -5%, rgba(26,92,42,0.08), transparent 70%),
+      linear-gradient(160deg, #e9efe9 0%, #dde3dd 100%);
+  }
+  #tela-app {
+    box-shadow: 0 0 0 0.5px var(--border), 0 18px 60px rgba(0,0,0,0.14);
+  }
+  .nav-bottom {
+    border-left: 0.5px solid var(--border);
+    border-right: 0.5px solid var(--border);
+  }
+  /* Telas muito largas: limita a busca/resultados à coluna */
+  #busca-resultados { max-width: 456px; margin: 0 auto; left: 0; right: 0; }
+}
+@media (min-width: 520px) {
+  [data-tema="escuro"] body {
+    background:
+      radial-gradient(90% 60% at 50% -5%, rgba(46,125,50,0.15), transparent 70%),
+      linear-gradient(160deg, #0c0c0c 0%, #161616 100%);
+  }
+  [data-tema="escuro"] #tela-app {
+    box-shadow: 0 0 0 0.5px rgba(255,255,255,0.06), 0 18px 60px rgba(0,0,0,0.5);
+  }
+}
