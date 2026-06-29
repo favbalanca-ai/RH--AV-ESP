@@ -312,7 +312,7 @@ async function carregarLog() {
   const sel = document.getElementById('sel-log-usuario')
   if (sel) {
     const usuarios = [...new Set(logCache.map(l => l['USUARIO']).filter(Boolean))]
-    sel.innerHTML = '<option value="">Todos</option>' + usuarios.map(u=>`<option>${u}</option>`).join('')
+    sel.innerHTML = '<option value="">Todos</option>' + usuarios.map(u=>`<option>${esc(u)}</option>`).join('')
     sel.onchange = filtrarLog
   }
 }
@@ -356,14 +356,23 @@ function irPara(pg) {
   if (pg === 'log')        carregarLog()
 }
 
-async function chamarGAS(dados) {
+async function chamarGAS(dados, { timeoutMs = 120000 } = {}) {
+  const ctrl  = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     const res = await fetch(GAS_URL, {
       method: 'POST',
       body: JSON.stringify({ ...dados, usuario: dados.usuario || USUARIO, senha: dados.senha || SENHA_ADM }),
+      signal: ctrl.signal,
     })
+    if (!res.ok) return { ok: false, erro: 'Erro HTTP ' + res.status }
     return await res.json()
-  } catch(e) { return { ok: false, erro: 'Erro de conexão: ' + e.message } }
+  } catch(e) {
+    if (e.name === 'AbortError') return { ok: false, erro: 'Tempo esgotado. Verifique sua conexão e tente novamente.' }
+    return { ok: false, erro: 'Erro de conexão: ' + e.message }
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────
@@ -456,12 +465,14 @@ async function carregarFuncionarios() {
 }
 
 function filtrarFuncionarios(q) {
-  renderFuncionarios(q ? funcionarios.filter(f => f['NOME_COMPLETO'].toLowerCase().includes(q.toLowerCase())) : funcionarios)
+  renderFuncionarios(q ? funcionarios.filter(f => (f['NOME_COMPLETO']||'').toLowerCase().includes(q.toLowerCase())) : funcionarios)
 }
 
 function getIniciais(nome) {
-  const p = String(nome).trim().split(' ').filter(x => x.length > 1)
-  return p.length >= 2 ? (p[0][0] + p[p.length-1][0]).toUpperCase() : (nome[0]||'?').toUpperCase()
+  const s = String(nome == null ? '' : nome).trim()
+  const p = s.split(' ').filter(x => x.length > 1)
+  if (p.length >= 2) return (p[0][0] + p[p.length-1][0]).toUpperCase()
+  return (s[0] || '?').toUpperCase()
 }
 
 
@@ -849,9 +860,19 @@ function mostrarLinkAssinaturaEpi(url, msg, waLinkCustom) {
     </div>`
 }
 
-function copiarLink() {
+async function copiarLink() {
   const inp = document.getElementById('inp-link-ass'); if (!inp) return
-  inp.select(); document.execCommand('copy'); toast('✅ Link copiado!', 'sucesso')
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(inp.value)
+    } else {
+      inp.select(); document.execCommand('copy')
+    }
+    toast('✅ Link copiado!', 'sucesso')
+  } catch(e) {
+    try { inp.select(); document.execCommand('copy'); toast('✅ Link copiado!', 'sucesso') }
+    catch(_) { toast('❌ Não foi possível copiar', 'erro') }
+  }
 }
 
 function renderEntregas(lista) {
@@ -1084,11 +1105,12 @@ function atualizarCompDisplay() {
 function preencherMesesFracionar() {
   const sel = document.getElementById('sel-comp-frac'); if (!sel) return
   if (sel.options.length > 1) return
-  sel.innerHTML = '<option value="">Selecione a competência...</option>'
   const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
   const ano = new Date().getFullYear(), mesAtual = new Date().getMonth()
-  for (let m = mesAtual; m >= 0; m--) sel.innerHTML += `<option value="${meses[m]}/${ano}">${meses[m]}/${ano}</option>`
-  for (let m = 11; m > mesAtual; m--) sel.innerHTML += `<option value="${meses[m]}/${ano-1}">${meses[m]}/${ano-1}</option>`
+  let opts = '<option value="">Selecione a competência...</option>'
+  for (let m = mesAtual; m >= 0; m--) opts += `<option value="${meses[m]}/${ano}">${meses[m]}/${ano}</option>`
+  for (let m = 11; m > mesAtual; m--) opts += `<option value="${meses[m]}/${ano-1}">${meses[m]}/${ano-1}</option>`
+  sel.innerHTML = opts
 }
 
 async function carregarEntregasFolha() {
@@ -1551,15 +1573,14 @@ function preencherSelectsOcultos() {
   popularSelectPgto()
   const selFunc = document.getElementById('sel-func-epi-hidden')
   if (selFunc) {
-    selFunc.innerHTML = '<option value="">Selecione...</option>'
-    funcionarios.forEach(f => { selFunc.innerHTML += `<option value="${esc(f['ID'])}">${esc(f['NOME_COMPLETO'])}</option>` })
+    selFunc.innerHTML = '<option value="">Selecione...</option>' +
+      funcionarios.map(f => `<option value="${esc(f['ID'])}">${esc(f['NOME_COMPLETO'])}</option>`).join('')
   }
   const selEpi = document.getElementById('sel-epi-hidden')
   if (selEpi && estoque.length) {
-    selEpi.innerHTML = '<option value="">Selecione...</option>'
-    estoque.filter(e => parseInt(e['ESTOQUE ATUAL']) > 0).forEach(e => {
-      selEpi.innerHTML += `<option value="${esc(e['CÓD.'])}">${esc(e['CÓD.'])} — ${esc(e['DESCRIÇÃO DO EPI'])}</option>`
-    })
+    selEpi.innerHTML = '<option value="">Selecione...</option>' +
+      estoque.filter(e => parseInt(e['ESTOQUE ATUAL']) > 0)
+        .map(e => `<option value="${esc(e['CÓD.'])}">${esc(e['CÓD.'])} — ${esc(e['DESCRIÇÃO DO EPI'])}</option>`).join('')
   }
 }
 
@@ -1655,7 +1676,9 @@ async function iniciarPagamento() {
   const selAno = document.getElementById('sel-ano-pgto')
   if (selAno && !selAno.options.length) {
     const ano = new Date().getFullYear()
-    for (let a = ano; a >= ano-3; a--) selAno.innerHTML += `<option value="${a}">${a}</option>`
+    let opts = ''
+    for (let a = ano; a >= ano-3; a--) opts += `<option value="${a}">${a}</option>`
+    selAno.innerHTML = opts
   }
   const inpData = document.getElementById('inp-data-adiant')
   if (inpData && !inpData.value) inpData.value = new Date().toISOString().split('T')[0]
@@ -1664,10 +1687,8 @@ async function iniciarPagamento() {
 function popularSelectPgto() {
   const sel = document.getElementById('sel-func-pgto')
   if (!sel) return
-  sel.innerHTML = '<option value="">Selecione...</option>'
-  funcionarios.forEach(f => {
-    sel.innerHTML += `<option value="${esc(f['ID'])}">${esc(f['NOME_COMPLETO'])}</option>`
-  })
+  sel.innerHTML = '<option value="">Selecione...</option>' +
+    funcionarios.map(f => `<option value="${esc(f['ID'])}">${esc(f['NOME_COMPLETO'])}</option>`).join('')
 }
 
 function selecionarFuncPgto(funcId) {
