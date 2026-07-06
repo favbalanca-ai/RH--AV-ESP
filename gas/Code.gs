@@ -737,19 +737,25 @@ function diagnosticarDocumentoZapSign() {
   return { status: data.status, tem_pdf: !!data.signed_file }
 }
 
-// ─── Reenviar link ZapSign para signatário ───────────────────────
+// ─── Reenviar notificação de assinatura (WhatsApp/e-mail) ─────────
+// FIX: endpoint antigo '/signers/{token}/request-signature-reminder/' não
+// existe (dava 404). O correto é reenviar pelo TOKEN DO DOCUMENTO:
+// POST /docs/{doc_token}/resend-notifications-bulk/
 function reenviarZapSignGAS(dados) {
-  const signerToken = dados.signer_token
-  if (!signerToken) throw new Error('signer_token não informado')
-  const res = UrlFetchApp.fetch(CONFIG.ZAPSIGN_URL + '/signers/' + signerToken + '/request-signature-reminder/', {
+  var docToken = dados.doc_token || dados.signer_token
+  if (!docToken) throw new Error('doc_token não informado')
+  var res = UrlFetchApp.fetch(CONFIG.ZAPSIGN_URL + '/docs/' + docToken + '/resend-notifications-bulk/', {
     method: 'post',
+    contentType: 'application/json',
     headers: { Authorization: 'Bearer ' + CONFIG.ZAPSIGN_TOKEN },
+    payload: '{}',
     muteHttpExceptions: true,
   })
-  if (res.getResponseCode() !== 200 && res.getResponseCode() !== 201) {
-    throw new Error('ZapSign erro: ' + res.getContentText())
+  var code = res.getResponseCode()
+  if (code !== 200 && code !== 201) {
+    throw new Error('ZapSign (HTTP ' + code + '): ' + res.getContentText())
   }
-  return { ok: true, mensagem: 'Link reenviado com sucesso' }
+  return { ok: true, mensagem: 'Lembrete reenviado com sucesso' }
 }
 
 // ═══════════════════════════════════════════════════════════════════

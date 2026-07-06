@@ -486,8 +486,8 @@ async function carregarDashboard() {
 function renderLembretes(pendentesEpi, pendentesFolha) {
   const el = document.getElementById('lembretes-wrap'); if (!el) return
   const todos = [
-    ...pendentesEpi.map(e => ({ tipo:'EPI', nome:e['FUNCIONÁRIO'], descricao:e['DESCRIÇÃO DO EPI'], data:e['DATA ENTREGA'], signerToken:(e['OBSERVAÇÕES']||'').replace('Signer: ','') })),
-    ...pendentesFolha.map(f => ({ tipo:'Folha', nome:f['FUNCIONÁRIO'], descricao:f['COMPETÊNCIA'], data:f['DATA ENVIO'], signerToken:(f['OBSERVAÇÕES']||'').replace('Signer: ','') })),
+    ...pendentesEpi.map(e => ({ tipo:'EPI', nome:e['FUNCIONÁRIO'], descricao:e['DESCRIÇÃO DO EPI'], data:e['DATA ENTREGA'], docToken:e['ZAPSIGN_DOC'] })),
+    ...pendentesFolha.map(f => ({ tipo:'Folha', nome:f['FUNCIONÁRIO'], descricao:f['COMPETÊNCIA'], data:f['DATA ENVIO'], docToken:f['ZAPSIGN_DOC'] })),
   ]
   if (!todos.length) { el.style.display = 'none'; return }
   el.style.display = 'block'
@@ -507,7 +507,7 @@ function renderLembretes(pendentesEpi, pendentesFolha) {
         </div>
         <div style="display:flex;gap:5px;flex-shrink:0">
           ${tel ? `<a href="https://wa.me/${tel}?text=${encodeURIComponent('Olá '+item.nome.split(' ')[0]+', seu documento aguarda assinatura. Por favor acesse o link que enviamos no WhatsApp.')}" target="_blank" style="background:#22C55E;color:#fff;border:none;border-radius:7px;padding:6px 9px;font-size:13px;text-decoration:none;display:flex;align-items:center"><i class="ti ti-brand-whatsapp"></i></a>` : ''}
-          <button onclick="reenviarZapSign('${item.signerToken}','${item.nome}')" style="background:var(--blue-bg);color:var(--blue-text);border:none;border-radius:7px;padding:6px 9px;font-size:13px;cursor:pointer;display:flex;align-items:center" title="Reenviar via ZapSign"><i class="ti ti-send"></i></button>
+          <button onclick="reenviarZapSign('${item.docToken}','${item.nome}')" style="background:var(--blue-bg);color:var(--blue-text);border:none;border-radius:7px;padding:6px 9px;font-size:13px;cursor:pointer;display:flex;align-items:center" title="Reenviar via ZapSign"><i class="ti ti-send"></i></button>
         </div>
       </div>`
     }).join('')}
@@ -515,10 +515,10 @@ function renderLembretes(pendentesEpi, pendentesFolha) {
   </div>`
 }
 
-async function reenviarZapSign(signerToken, nome) {
-  if (!signerToken || signerToken === 'undefined') return toast('❌ Token indisponível', 'erro')
+async function reenviarZapSign(docToken, nome) {
+  if (!docToken || docToken === 'undefined') return toast('❌ Documento indisponível', 'erro')
   mostrarLoading('Reenviando para ' + nome.split(' ')[0] + '...')
-  const res = await chamarGAS({ acao: 'reenviar_zapsign', dados: { signer_token: signerToken } })
+  const res = await chamarGAS({ acao: 'reenviar_zapsign', dados: { doc_token: docToken } })
   esconderLoading()
   if (res && res.ok) toast('✅ Reenviado para ' + nome.split(' ')[0] + '!', 'sucesso')
   else toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
