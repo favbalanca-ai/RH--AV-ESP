@@ -393,9 +393,28 @@ async function carregarCalendario() {
   esconderLoading()
   feriasCache = (res && res.ok && Array.isArray(res.data)) ? res.data : []
   const hoje = new Date(); calMes = hoje.getMonth(); calAno = hoje.getFullYear()
+  const sel = document.getElementById('cal-unidade')
+  if (sel) {
+    const unidades = [...new Set(funcionarios.map(f => f['UNIDADE']).filter(Boolean))]
+    const atual = sel.value
+    sel.innerHTML = '<option value="">Todas as unidades</option>' + unidades.map(u => `<option${u === atual ? ' selected' : ''}>${esc(u)}</option>`).join('')
+  }
   renderCalendario()
 }
+let calUnidade = ''
+function filtrarCal() {
+  calUnidade = document.getElementById('cal-unidade')?.value || ''
+  renderCalendario()
+}
+function feriasFiltradas() {
+  if (!calUnidade) return feriasCache
+  return feriasCache.filter(f => {
+    const func = funcionarios.find(x => String(x['ID']) === String(f['ID_FUNC']))
+    return func && func['UNIDADE'] === calUnidade
+  })
+}
 function mudarMesCal(delta) {
+  if (calView === 'ano') { calAno += delta; renderCalendario(); return }
   calMes += delta
   if (calMes < 0) { calMes = 11; calAno-- }
   if (calMes > 11) { calMes = 0; calAno++ }
@@ -406,9 +425,9 @@ function renderCalendario() {
   const lbl = document.getElementById('cal-mes-label')
   const lista = document.getElementById('cal-lista')
   if (!grid || !lbl) return
-  lbl.textContent = MESES[calMes] + ' ' + calAno
+  lbl.textContent = calView === 'ano' ? String(calAno) : (MESES[calMes] + ' ' + calAno)
 
-  const periodos = feriasCache.map(f => ({
+  const periodos = feriasFiltradas().map(f => ({
     nome: f['NOME_FUNC'] || '', status: f['STATUS'] || 'Pendente', token: f['REF_TOKEN'] || '',
     ini: parseDataCal(f['INICIO']), fim: parseDataCal(f['FIM'] || f['INICIO'])
   })).filter(p => p.ini)
@@ -443,24 +462,49 @@ function renderCalendario() {
       </div>`).join('')
   }
   renderGantt()
+  renderAno()
 }
 
 let calView = 'grid'
 function setCalView(v) {
   calView = v
-  const g = document.getElementById('cal-grid'), gantt = document.getElementById('cal-gantt')
-  const tg = document.getElementById('cal-tab-grid'), tga = document.getElementById('cal-tab-gantt')
+  const g = document.getElementById('cal-grid'), gantt = document.getElementById('cal-gantt'), ano = document.getElementById('cal-ano')
   if (g)     g.style.display = v === 'grid' ? 'grid' : 'none'
   if (gantt) gantt.style.display = v === 'gantt' ? 'block' : 'none'
-  if (tg)  tg.classList.toggle('ativo', v === 'grid')
-  if (tga) tga.classList.toggle('ativo', v === 'gantt')
+  if (ano)   ano.style.display = v === 'ano' ? 'block' : 'none'
+  ;[['cal-tab-grid', 'grid'], ['cal-tab-gantt', 'gantt'], ['cal-tab-ano', 'ano']].forEach(([id, val]) => {
+    const b = document.getElementById(id); if (b) b.classList.toggle('ativo', v === val)
+  })
+  renderCalendario()
+}
+
+function renderAno() {
+  const el = document.getElementById('cal-ano'); if (!el) return
+  const anoIni = new Date(calAno, 0, 1), anoFim = new Date(calAno, 11, 31)
+  const diasAno = ((calAno % 4 === 0 && calAno % 100 !== 0) || calAno % 400 === 0) ? 366 : 365
+  const pct = d => Math.max(0, Math.min(diasAno, (( (d < anoIni ? anoIni : d) - anoIni) / 86400000))) / diasAno * 100
+  const meses3 = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
+  const header = '<div class="ano-row"><div class="ano-nome"></div><div class="ano-track ano-header">' + meses3.map(m => `<span>${m}</span>`).join('') + '</div></div>'
+  const regs = feriasFiltradas().map(f => ({ nome: f['NOME_FUNC'] || '?', status: f['STATUS'] || 'Pendente', token: f['REF_TOKEN'] || '', ini: parseDataCal(f['INICIO']), fim: parseDataCal(f['FIM'] || f['INICIO']) }))
+    .filter(r => r.ini && r.fim && r.fim >= anoIni && r.ini <= anoFim)
+    .sort((a, b) => a.ini - b.ini)
+  if (!regs.length) { el.innerHTML = header + '<p class="lista-vazia">Nenhuma férias em ' + calAno + '</p>'; return }
+  el.innerHTML = header + regs.map(r => {
+    const left = pct(r.ini)
+    const width = Math.max(1.5, Math.min(100 - left, pct(r.fim) - left + (100 / diasAno)))
+    const cor = r.status === 'Assinado' ? 'var(--verde)' : 'var(--amber-text)'
+    return `<div class="ano-row" onclick="editarFerias('${esc(r.token)}')">
+      <div class="ano-nome">${esc(r.nome)}</div>
+      <div class="ano-track"><div class="ano-bar" style="left:${left}%;width:${width}%;background:${cor}"></div></div>
+    </div>`
+  }).join('')
 }
 
 function renderGantt() {
   const el = document.getElementById('cal-gantt'); if (!el) return
   const diasNoMes = new Date(calAno, calMes + 1, 0).getDate()
   const mIni = new Date(calAno, calMes, 1), mFim = new Date(calAno, calMes + 1, 0)
-  const regs = feriasCache.map(f => ({ token: f['REF_TOKEN'] || '', nome: f['NOME_FUNC'] || '?', status: f['STATUS'] || 'Pendente', ini: parseDataCal(f['INICIO']), fim: parseDataCal(f['FIM'] || f['INICIO']) }))
+  const regs = feriasFiltradas().map(f => ({ token: f['REF_TOKEN'] || '', nome: f['NOME_FUNC'] || '?', status: f['STATUS'] || 'Pendente', ini: parseDataCal(f['INICIO']), fim: parseDataCal(f['FIM'] || f['INICIO']) }))
   const noMes = regs.filter(r => r.ini && r.fim && r.fim >= mIni && r.ini <= mFim).sort((a, b) => a.ini - b.ini)
   const semDatas = regs.filter(r => !r.ini)
   let html = ''
