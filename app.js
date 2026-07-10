@@ -2024,23 +2024,23 @@ async function carregarResumoPgto() {
   const cor = pct >= 100 ? 'var(--verde)' : pct >= 50 ? 'var(--amber-text)' : 'var(--blue-text)'
 
   document.getElementById('comissao-resumo-body').innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;font-size:12px">
-        <span style="color:var(--text-secondary)">Total anual</span>
-        <span style="font-weight:600">R$ ${formatarValor(d.valor_anual)}</span>
+    <div style="text-align:center;margin-bottom:12px">
+      <div style="font-size:11px;color:var(--text-secondary);font-weight:600">Saldo a pagar</div>
+      <div style="font-size:26px;font-weight:800;letter-spacing:-0.02em;color:${d.saldo>0?'var(--amber-text)':'var(--verde-text)'}">R$ ${formatarValor(d.saldo)}</div>
+    </div>
+    <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;height:10px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:${cor};border-radius:6px;transition:width .3s"></div>
+    </div>
+    <div style="font-size:10px;color:var(--text-secondary);text-align:center;margin:6px 0 12px">${pct}% pago de R$ ${formatarValor(d.valor_anual)}</div>
+    <div style="display:flex;gap:8px">
+      <div style="flex:1;background:var(--surface);border-radius:12px;padding:11px;text-align:center">
+        <div style="font-size:10px;color:var(--text-secondary);margin-bottom:2px">Total anual</div>
+        <div style="font-size:14px;font-weight:700">R$ ${formatarValor(d.valor_anual)}</div>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:12px">
-        <span style="color:var(--text-secondary)">Total pago</span>
-        <span style="font-weight:600;color:var(--verde-text)">R$ ${formatarValor(d.total_pago)}</span>
+      <div style="flex:1;background:var(--verde-claro);border-radius:12px;padding:11px;text-align:center">
+        <div style="font-size:10px;color:var(--verde-text);margin-bottom:2px">Total pago</div>
+        <div style="font-size:14px;font-weight:700;color:var(--verde-text)">R$ ${formatarValor(d.total_pago)}</div>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:12px">
-        <span style="color:var(--text-secondary)">Saldo</span>
-        <span style="font-weight:700;color:${d.saldo>0?'var(--amber-text)':'var(--verde-text)'}">R$ ${formatarValor(d.saldo)}</span>
-      </div>
-      <div style="background:var(--border);border-radius:4px;height:7px;margin-top:3px;overflow:hidden">
-        <div style="height:100%;width:${pct}%;background:${cor};border-radius:4px"></div>
-      </div>
-      <div style="font-size:10px;color:var(--text-secondary);text-align:right">${pct}% pago</div>
     </div>`
 
   renderAdiantamentos(d.adiantamentos || [])
@@ -2236,19 +2236,17 @@ async function carregarNotifPendentes() {
   if (!res || !res.ok || !res.data?.length) { card.style.display = 'none'; return }
   card.style.display = 'block'
   el.innerHTML = res.data.map(p => `
-    <div style="background:#FFFBF5;border:0.5px solid rgba(133,79,11,0.2);border-radius:10px;padding:10px;margin-bottom:6px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <div>
-          <div style="font-size:13px;font-weight:600">${esc(p['NOME_FUNC'])}</div>
-          <div style="font-size:10px;color:var(--text-secondary)">${esc(normalizarComp(p['COMPETENCIA']||''))}${p['VALOR_LIQUIDO']?' · R$ '+formatarValor(p['VALOR_LIQUIDO']):''}</div>
-        </div>
-        <span class="badge ba">Aguardando</span>
+    <div style="background:var(--amber-bg);border:0.5px solid rgba(133,79,11,0.2);border-radius:var(--radius-md);padding:10px;margin-bottom:6px;display:flex;align-items:center;gap:10px">
+      <div class="avatar" style="background:rgba(133,79,11,0.15);color:var(--amber-text)">${getIniciais(p['NOME_FUNC']||'?')}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p['NOME_FUNC'])}</div>
+        <div style="font-size:10px;color:var(--amber-text)">${esc(normalizarComp(p['COMPETENCIA']||''))}${p['VALOR_LIQUIDO']?' · R$ '+formatarValor(p['VALOR_LIQUIDO']):''}</div>
       </div>
       ${p['WA_LINK_EMPREGADOR']
-        ? `<a href="${p['WA_LINK_EMPREGADOR']}" target="_blank"
-             style="background:#22C55E;color:#fff;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px;margin-top:4px">
-             <i class="ti ti-brand-whatsapp"></i> Reenviar
+        ? `<a href="${p['WA_LINK_EMPREGADOR']}" target="_blank" title="Reenviar"
+             style="background:#22C55E;color:#fff;border-radius:8px;padding:7px 9px;font-size:13px;text-decoration:none;display:flex;align-items:center;flex-shrink:0">
+             <i class="ti ti-brand-whatsapp"></i>
            </a>`
-        : ''}
+        : '<span class="badge ba" style="flex-shrink:0">Aguardando</span>'}
     </div>`).join('')
 }
