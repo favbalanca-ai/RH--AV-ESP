@@ -107,6 +107,7 @@
     <div id="pg-lista-func" class="pagina">
       <button class="btn-primario w-full mb-3" onclick="irPara('novo-func')"><i class="ti ti-user-plus" aria-hidden="true"></i> Novo Funcionário</button>
       <div class="search-bar"><i class="ti ti-search" aria-hidden="true"></i><input type="text" id="busca-func" placeholder="Buscar funcionário..." oninput="filtrarFuncionarios(this.value)"></div>
+      <div id="func-count" class="contador-pagina"></div>
       <div id="lista-funcionarios" class="lista"></div>
     </div>
 
@@ -137,6 +138,7 @@
     <div id="pg-novo-func" class="pagina">
       <div class="card">
         <form id="form-funcionario" class="formulario">
+          <div class="form-secao"><i class="ti ti-user" aria-hidden="true"></i> Dados pessoais</div>
           <div class="campo-grupo"><label>Nome Completo *</label><input type="text" name="nome_completo" required placeholder="Nome como na CTPS"></div>
           <div class="campo-grupo"><label>Nome Curto</label><input type="text" name="nome_curto" placeholder="Como chamam"></div>
           <div class="dois-col">
@@ -147,6 +149,7 @@
             <div class="campo-grupo"><label>Data Nascimento</label><input type="date" name="data_nascimento"></div>
             <div class="campo-grupo"><label>WhatsApp *</label><input type="tel" name="telefone" required placeholder="(62) 99999-9999"></div>
           </div>
+          <div class="form-secao"><i class="ti ti-briefcase" aria-hidden="true"></i> Trabalho &amp; SST</div>
           <div class="campo-grupo"><label>Unidade *</label>
             <select name="unidade" required><option value="">Selecione...</option><option>Fazenda Água Viva</option><option>Fazenda Roncador</option><option>Fazenda Espora</option></select>
           </div>
@@ -177,9 +180,7 @@
             <div class="campo-grupo"><label>Tam. Camisa</label><input type="text" name="tam_camisa" placeholder="P, M, G..."></div>
             <div class="campo-grupo"><label>Tam. Bota</label><input type="text" name="tam_bota" placeholder="38, 39..."></div>
           </div>
-          <div style="font-size:11px;font-weight:700;color:var(--verde);border-top:0.5px solid var(--border);padding-top:10px;margin:4px 0 8px">
-            💰 Dados de Pagamento
-          </div>
+          <div class="form-secao"><i class="ti ti-cash" aria-hidden="true"></i> Dados de pagamento</div>
           <div class="campo-grupo"><label>WhatsApp Empregador</label><input type="tel" name="whatsapp_empregador" placeholder="(61) 99999-9999"></div>
           <div class="dois-col">
             <div class="campo-grupo"><label>Banco</label><input type="text" name="banco" placeholder="ex: Banco do Brasil"></div>
@@ -204,15 +205,14 @@
     <!-- EXAMES -->
     <div id="pg-exames" class="pagina">
       <div class="search-bar"><i class="ti ti-search" aria-hidden="true"></i><input type="text" id="busca-exame" placeholder="Buscar funcionário..." oninput="filtrarExames(this.value)"></div>
-      <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
-        <select id="filtro-status-exame" onchange="filtrarExames()" style="flex:1;border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;font-family:inherit;background:var(--card-bg);color:var(--text-primary);outline:none">
-          <option value="">Todos os status</option>
-          <option value="✅ OK">OK</option>
-          <option value="⚠️ A VENCER">A vencer</option>
-          <option value="❌ VENCIDO">Vencido</option>
-          <option value="⏳ PENDENTE">Pendente</option>
-        </select>
+      <div id="filtro-exames" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+        <button class="motivo-chip ativo" onclick="setFiltroExame(this,'')">Todos</button>
+        <button class="motivo-chip" onclick="setFiltroExame(this,'VIGENTE')">Vigentes</button>
+        <button class="motivo-chip" onclick="setFiltroExame(this,'A VENCER')">A vencer</button>
+        <button class="motivo-chip" onclick="setFiltroExame(this,'VENCIDO')">Vencidos</button>
+        <button class="motivo-chip" onclick="setFiltroExame(this,'PENDENTE')">Pendentes</button>
       </div>
+      <div id="exame-count" class="contador-pagina"></div>
       <div id="lista-exames" class="lista"></div>
     </div>
 
@@ -522,7 +522,7 @@
   </nav>
 </div>
 
-<script src="app.js?v=20260629g"></script>
+<script src="app.js?v=20260629h"></script>
 <script>
   // Registra o Service Worker (necessário para Web Share Target e cache offline)
   if ('serviceWorker' in navigator) {
