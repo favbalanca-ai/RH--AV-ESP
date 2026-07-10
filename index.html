@@ -488,14 +488,19 @@
           <div id="cal-mes-label" style="font-size:15px;font-weight:700"></div>
           <button onclick="mudarMesCal(1)" class="cal-nav-btn"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
         </div>
+        <div style="display:flex;gap:6px;margin-bottom:12px">
+          <button id="cal-tab-grid" onclick="setCalView('grid')" class="cal-tab ativo"><i class="ti ti-calendar-month" aria-hidden="true"></i> Calendário</button>
+          <button id="cal-tab-gantt" onclick="setCalView('gantt')" class="cal-tab"><i class="ti ti-timeline" aria-hidden="true"></i> Linha do tempo</button>
+        </div>
         <div id="cal-grid" class="cal-grid"></div>
+        <div id="cal-gantt" style="display:none"></div>
         <div style="display:flex;gap:14px;justify-content:center;margin-top:10px;font-size:10px;color:var(--text-secondary)">
           <span style="display:flex;align-items:center;gap:4px"><i class="cal-dot"></i> Assinadas</span>
           <span style="display:flex;align-items:center;gap:4px"><i class="cal-dot pend"></i> Pendentes</span>
         </div>
       </div>
       <div class="card">
-        <div class="card-titulo"><i class="ti ti-beach" aria-hidden="true"></i> Férias do mês</div>
+        <div class="card-titulo"><i class="ti ti-beach" aria-hidden="true"></i> Férias do mês <span style="font-size:10px;font-weight:400;color:var(--text-hint);margin-left:auto">toque p/ ajustar</span></div>
         <div id="cal-lista" class="lista"></div>
       </div>
     </div>
@@ -512,7 +517,7 @@
   </nav>
 </div>
 
-<script src="app.js?v=20260629e"></script>
+<script src="app.js?v=20260629f"></script>
 <script>
   // Registra o Service Worker (necessário para Web Share Target e cache offline)
   if ('serviceWorker' in navigator) {
