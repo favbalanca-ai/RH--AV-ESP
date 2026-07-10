@@ -780,6 +780,8 @@ function abrirEpiRapido(funcId) {
 
 function renderFuncionarios(lista) {
   const el = document.getElementById('lista-funcionarios')
+  const cnt = document.getElementById('func-count')
+  if (cnt) cnt.textContent = lista.length + ' funcionário(s)'
   if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum funcionário</p>'; return }
   el.innerHTML = lista.map(f => `
     <div class="lista-item">
@@ -896,12 +898,21 @@ async function carregarExames() {
   filtrarExames()
 }
 
+let filtroExameStatus = ''
+function setFiltroExame(btn, val) {
+  filtroExameStatus = val
+  document.querySelectorAll('#filtro-exames .motivo-chip').forEach(b => b.classList.remove('ativo'))
+  btn.classList.add('ativo')
+  filtrarExames()
+}
 function filtrarExames(busca) {
-  const filtroStatus = document.getElementById('filtro-status-exame')?.value || ''
+  const filtroStatus = filtroExameStatus
   const q = typeof busca === 'string' ? busca.toLowerCase() : (document.getElementById('busca-exame')?.value || '').toLowerCase()
   let lista = todosExames
-  if (filtroStatus) lista = lista.filter(e => (e['STATUS EXAME']||'').includes(filtroStatus.replace(/[✅⚠️❌⏳]\s*/,'')))
+  if (filtroStatus) lista = lista.filter(e => (e['STATUS EXAME']||'').toUpperCase().includes(filtroStatus.toUpperCase()))
   if (q) lista = lista.filter(e => (e['FUNCIONÁRIO']||'').toLowerCase().includes(q))
+  const cnt = document.getElementById('exame-count')
+  if (cnt) cnt.textContent = lista.length + ' exame(s)'
   const el = document.getElementById('lista-exames')
   if (!el) return
   if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum exame encontrado</p>'; return }
