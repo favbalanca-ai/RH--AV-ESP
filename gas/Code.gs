@@ -87,6 +87,7 @@ function doPost(e) {
       case 'gerar_relatorio_pagamentos': return respOk(gerarRelatorioPagamentos(body.dados))
       case 'liquidar_salario':              return respOk(liquidarSalario(body.dados, usuario))
       case 'listar_log':                 return respOk(listarLog(body.dados))
+      case 'listar_ferias':              return respOk(listarFerias())
       case 'listar_pagamentos_func':        return respOk(listarPagamentos(body.dados))
       case 'listar_pagamentos':           return respOk(listarPagamentos(body.dados))
       case 'confirmar_notificacao':       return respOk(confirmarNotificacao(body.dados, usuario))
@@ -340,6 +341,7 @@ function webhookZapSign(body) {
         }
       } catch(ePagto) { Logger.log('Erro link pagamento ZapSign: ' + ePagto.message) }
     } catch(e) { logAcao('WEBHOOK', 'DRIVE_OPCIONAL', e.message) }
+    if ((folha['TIPO'] || '') === 'Ferias') confirmarFeriasAssinada(docToken)
     logAcao('WEBHOOK', 'ASSINATURA_FOLHA', 'Doc: ' + docToken)
     return { ok: true, tipo: 'folha' }
   }
@@ -497,6 +499,7 @@ function sincronizarPendentes() {
             const subF = tipoF === 'Ferias' ? 'FERIAS' : 'FOLHA_PAGAMENTO'
             const link = salvarPdfNoDrive(folha['ID FUNC.'], folha['FUNCIONÁRIO'], subF, tipoF + '_' + comp + '_' + token.substring(0,8) + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(token))
             atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', token, { 'LINK DOC ASSINADO': link })
+            if (tipoF === 'Ferias') confirmarFeriasAssinada(token)
           } catch(de) {}
           atualizados++
         } else if (status === 'refused') {
@@ -599,6 +602,7 @@ function processarPaginaFolha(dados, usuario) {
     } catch(e) { logAcao(usuario, 'ERRO_ZAPSIGN', e.message); throw e }
   }
   adicionarLinha(CONFIG.ABAS.FOLHA, [func['ID'], func['NOME_COMPLETO'], comp, hoje, zapToken ? 'Pendente' : 'Salvo', '', zapToken, linkDrive, '', zapSignerToken ? 'Signer: ' + zapSignerToken : 'Fracionado', dados.valor_liquido || '', tipo])
+  if (tipo === 'Ferias' && zapToken) registrarFeriasPendente(func['ID'], func['NOME_COMPLETO'], dados.ferias_inicio, dados.ferias_fim, comp, zapToken)
   logAcao(usuario, 'FOLHA_INDIVIDUAL', 'Func ' + func['ID'] + ' | ' + comp)
   return { func_id: func['ID'], nome: func['NOME_COMPLETO'], link_drive: linkDrive, zapsign: zapToken, sign_url: zapSignUrl }
 }
@@ -659,7 +663,7 @@ function identificarDocumentoComIA(dados) {
   var pdfBase64 = dados.pdf_base64
   if (!pdfBase64) throw new Error('PDF não fornecido')
 
-  var prompt = 'Analise este holerite/folha de pagamento brasileiro e extraia em JSON puro (sem markdown): nome_funcionario (nome completo do trabalhador, nao do empregador), codigo_funcionario (numero matricula), tipo_documento (Folha para holerite ou contracheque, Ponto para folha de ponto, EPI para recibo EPI), competencia (mes e ano referencia ex: Abril/2026), empregador (razao social ou nome do empregador), valor_liquido (valor liquido a receber pelo funcionario — procure por: Valor Liquido, Liquido, Valor a Receber, Net Pay — retorne apenas o numero decimal ex: 3565.07 sem R$ ou ponto de milhar). Retorne APENAS o JSON sem nenhum texto antes ou depois. Exemplo: {"nome_funcionario":"Joao Silva","codigo_funcionario":"27","tipo_documento":"Folha","competencia":"Abril/2026","empregador":"Fazenda","valor_liquido":3565.07}'
+  var prompt = 'Analise este documento brasileiro (holerite/folha/ferias) e extraia em JSON puro (sem markdown): nome_funcionario (nome completo do trabalhador, nao do empregador), codigo_funcionario (numero matricula), tipo_documento (Folha para holerite ou contracheque, Ponto para folha de ponto, Ferias para aviso ou recibo de ferias, EPI para recibo EPI), competencia (mes e ano referencia ex: Abril/2026), empregador (razao social ou nome do empregador), valor_liquido (valor liquido a receber pelo funcionario — procure por: Valor Liquido, Liquido, Valor a Receber, Net Pay — retorne apenas o numero decimal ex: 3565.07 sem R$ ou ponto de milhar), ferias_inicio e ferias_fim (SE for documento de ferias, as datas de inicio e fim do periodo de gozo das ferias no formato YYYY-MM-DD; caso contrario null). Retorne APENAS o JSON sem nenhum texto antes ou depois. Exemplo: {"nome_funcionario":"Joao Silva","codigo_funcionario":"27","tipo_documento":"Ferias","competencia":"Julho/2026","empregador":"Fazenda","valor_liquido":3565.07,"ferias_inicio":"2026-07-05","ferias_fim":"2026-07-24"}'
 
   var payload = {
     model: 'claude-sonnet-4-6', // FIX: 'claude-opus-4-6' não é um ID válido
@@ -731,6 +735,8 @@ function identificarDocumentoComIA(dados) {
     competencia:    resultado.competencia        || '',
     empregador:     resultado.empregador         || '',
     valor_liquido:  resultado.valor_liquido      || null,
+    ferias_inicio:  resultado.ferias_inicio      || null,
+    ferias_fim:     resultado.ferias_fim         || null,
     ia_confianca:   func ? 'alto' : 'baixo',
   }
 }
@@ -976,6 +982,8 @@ function confirmarAssinatura(token, assinaturaBase64, pdfAssinadoExterno) {
     }
   } catch(e) { Logger.log('Erro ao atualizar status: ' + e.message) }
 
+  if (tipo === 'Ferias') confirmarFeriasAssinada(token)
+
   logAcao('SISTEMA', 'ASSINATURA_PROPRIA', 'Token: ' + token + ' | Func: ' + funcNome + ' | Drive: ' + linkDrive)
 
   // Notificação automática ao empregador com link de confirmação de pagamento
@@ -1192,6 +1200,8 @@ function processarPaginaProprio(dados, usuario) {
     func_cpf:     func['CPF']     || '',
     valor_liquido: dados.valor_liquido || null,
   }, usuario)
+
+  if (tipo === 'Ferias') registrarFeriasPendente(func['ID'], func['NOME_COMPLETO'], dados.ferias_inicio, dados.ferias_fim, comp, linkData.token)
 
   logAcao(usuario, 'PROC_PAGINA_PROPRIO',
     'Func ' + func['ID'] + ' | ' + tipo + ' ' + comp + ' | Token: ' + linkData.token)
@@ -2137,6 +2147,107 @@ function confirmarPagamentoEmpregador(dados) {
 
 function liquidarSalario(dados, usuario) {
   return gerarLinkConfirmacaoPagamento(dados, usuario)
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FÉRIAS — Calendário + Google Calendar
+// ═══════════════════════════════════════════════════════════════════
+var ABA_FERIAS = 'FERIAS'
+
+function inicializarAbaFerias() {
+  var ss = SpreadsheetApp.openById(CONFIG.SHEET_ID)
+  if (!ss.getSheetByName(ABA_FERIAS)) {
+    var s = ss.insertSheet(ABA_FERIAS)
+    s.appendRow(['ID_FUNC','NOME_FUNC','INICIO','FIM','COMPETENCIA','DATA_ENVIO','STATUS','REF_TOKEN','EVENTO_ID'])
+    s.setFrozenRows(1)
+  }
+  return 'OK'
+}
+
+// Aceita 'YYYY-MM-DD' ou 'dd/mm/yyyy'
+function parseDataFlex(s) {
+  if (!s) return null
+  s = String(s).trim()
+  var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]))
+  var b = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+  if (b) return new Date(parseInt(b[3]), parseInt(b[2]) - 1, parseInt(b[1]))
+  var d = new Date(s)
+  return isNaN(d) ? null : d
+}
+
+// Registra um período de férias como Pendente (ao enviar a Folha de Férias)
+function registrarFeriasPendente(funcId, nome, inicio, fim, competencia, refToken) {
+  if (!inicio && !fim) return
+  inicializarAbaFerias()
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_FERIAS)
+  var hoje  = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy')
+  sheet.appendRow([funcId, nome, inicio || '', fim || '', competencia || '', hoje, 'Pendente', refToken || '', ''])
+}
+
+// Marca as férias como Assinadas e cria o evento no Google Calendar
+function confirmarFeriasAssinada(refToken) {
+  try {
+    var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_FERIAS)
+    if (!sheet) return
+    var vals = sheet.getDataRange().getValues()
+    var hdrs = vals[0]
+    var iTok = hdrs.indexOf('REF_TOKEN'), iStatus = hdrs.indexOf('STATUS'), iEvt = hdrs.indexOf('EVENTO_ID')
+    var iNome = hdrs.indexOf('NOME_FUNC'), iIni = hdrs.indexOf('INICIO'), iFim = hdrs.indexOf('FIM')
+    for (var i = 1; i < vals.length; i++) {
+      if (String(vals[i][iTok]) === String(refToken) && refToken) {
+        if (vals[i][iStatus] === 'Assinado') return
+        sheet.getRange(i + 1, iStatus + 1).setValue('Assinado')
+        var evtId = ''
+        try { evtId = criarEventoFerias(vals[i][iNome], vals[i][iIni], vals[i][iFim]) }
+        catch (e) { Logger.log('Erro Google Calendar: ' + e.message) }
+        if (iEvt >= 0 && evtId) sheet.getRange(i + 1, iEvt + 1).setValue(evtId)
+        return
+      }
+    }
+  } catch (e) { Logger.log('confirmarFeriasAssinada erro: ' + e.message) }
+}
+
+// Cria um evento de dia inteiro no Google Calendar para o período de férias
+function criarEventoFerias(nome, inicio, fim) {
+  var di = parseDataFlex(inicio)
+  var df = parseDataFlex(fim || inicio)
+  if (!di) return ''
+  if (!df) df = di
+  var fimExclusivo = new Date(df.getTime())
+  fimExclusivo.setDate(fimExclusivo.getDate() + 1) // all-day: fim é exclusivo
+  var cal = CalendarApp.getDefaultCalendar()
+  var evt = cal.createAllDayEvent('🌴 Férias — ' + nome, di, fimExclusivo, {
+    description: 'Período de férias assinado — Sistema SST Fazenda Água Viva'
+  })
+  return evt.getId()
+}
+
+// Lista todos os períodos de férias (para o calendário do app)
+function listarFerias() {
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_FERIAS)
+  if (!sheet) return []
+  var vals = sheet.getDataRange().getValues()
+  if (vals.length < 2) return []
+  var hdrs = vals[0]
+  return vals.slice(1).map(function (row) {
+    var o = {}
+    hdrs.forEach(function (h, i) {
+      var v = row[i]
+      if (v instanceof Date) v = Utilities.formatDate(v, 'America/Sao_Paulo', 'yyyy-MM-dd')
+      o[h] = v
+    })
+    return o
+  })
+}
+
+// Rodar UMA VEZ: autoriza o acesso ao Google Calendar (cria e apaga um evento teste)
+function testarCalendario() {
+  var cal = CalendarApp.getDefaultCalendar()
+  var hoje = new Date()
+  var evt = cal.createAllDayEvent('Teste SST (pode apagar)', hoje, new Date(hoje.getTime() + 86400000))
+  Logger.log('Evento de teste criado: ' + evt.getId())
+  return 'OK — Google Calendar autorizado'
 }
 
 // ─── Log de auditoria para o app ─────────────────────────────────

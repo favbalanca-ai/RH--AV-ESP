@@ -356,6 +356,7 @@ const TITULOS = {
   'pagamento':'Controle de Pagamento',
   'log':'Log de Auditoria',
   'diagnostico':'Diagnóstico',
+  'calendario':'Calendário de Férias',
 }
 
 function irPara(pg) {
@@ -372,6 +373,75 @@ function irPara(pg) {
   if (pg === 'pagamento')  iniciarPagamento()
   if (pg === 'log')        carregarLog()
   if (pg === 'diagnostico') renderDiagnostico()
+  if (pg === 'calendario') carregarCalendario()
+}
+
+// ─── CALENDÁRIO DE FÉRIAS ────────────────────────────────────────
+let feriasCache = []
+let calMes = new Date().getMonth(), calAno = new Date().getFullYear()
+
+function parseDataCal(s) {
+  if (!s) return null
+  s = String(s).trim()
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return new Date(+m[1], +m[2] - 1, +m[3])
+  let b = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/); if (b) return new Date(+b[3], +b[2] - 1, +b[1])
+  let d = new Date(s); return isNaN(d) ? null : d
+}
+async function carregarCalendario() {
+  mostrarLoading('Carregando férias...')
+  const res = await chamarGAS({ acao: 'listar_ferias' })
+  esconderLoading()
+  feriasCache = (res && res.ok && Array.isArray(res.data)) ? res.data : []
+  const hoje = new Date(); calMes = hoje.getMonth(); calAno = hoje.getFullYear()
+  renderCalendario()
+}
+function mudarMesCal(delta) {
+  calMes += delta
+  if (calMes < 0) { calMes = 11; calAno-- }
+  if (calMes > 11) { calMes = 0; calAno++ }
+  renderCalendario()
+}
+function renderCalendario() {
+  const grid = document.getElementById('cal-grid')
+  const lbl = document.getElementById('cal-mes-label')
+  const lista = document.getElementById('cal-lista')
+  if (!grid || !lbl) return
+  lbl.textContent = MESES[calMes] + ' ' + calAno
+
+  const periodos = feriasCache.map(f => ({
+    nome: f['NOME_FUNC'] || '', status: f['STATUS'] || 'Pendente',
+    ini: parseDataCal(f['INICIO']), fim: parseDataCal(f['FIM'] || f['INICIO'])
+  })).filter(p => p.ini)
+
+  const soData = d => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const diasNoMes = new Date(calAno, calMes + 1, 0).getDate()
+  const offset = new Date(calAno, calMes, 1).getDay()
+  let cells = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(d => `<div class="cal-dow">${d}</div>`).join('')
+  for (let i = 0; i < offset; i++) cells += '<div class="cal-cell vazio"></div>'
+  for (let dia = 1; dia <= diasNoMes; dia++) {
+    const data = new Date(calAno, calMes, dia)
+    const cobre = periodos.filter(p => data >= soData(p.ini) && data <= soData(p.fim))
+    const assinado = cobre.some(p => p.status === 'Assinado')
+    const cls = cobre.length ? (assinado ? 'cal-cell ferias' : 'cal-cell ferias pend') : 'cal-cell'
+    const hojeCls = data.toDateString() === new Date().toDateString() ? ' hoje' : ''
+    cells += `<div class="${cls}${hojeCls}" title="${esc(cobre.map(p => p.nome).join(', '))}"><span>${dia}</span>${cobre.length ? '<i class="cal-dot' + (assinado ? '' : ' pend') + '"></i>' : ''}</div>`
+  }
+  grid.innerHTML = cells
+
+  if (lista) {
+    const mIni = new Date(calAno, calMes, 1), mFim = new Date(calAno, calMes + 1, 0)
+    const doMes = periodos.filter(p => p.fim >= mIni && p.ini <= mFim).sort((a, b) => a.ini - b.ini)
+    if (!doMes.length) lista.innerHTML = '<p class="lista-vazia">Nenhuma férias neste mês</p>'
+    else lista.innerHTML = doMes.map(p => `
+      <div class="lista-item" style="margin-bottom:6px">
+        <div class="avatar" style="background:var(--verde-claro);color:var(--verde-text)">${getIniciais(p.nome || '?')}</div>
+        <div class="lista-item-info">
+          <div class="lista-item-nome">${esc(p.nome)}</div>
+          <div class="lista-item-sub">${p.ini.toLocaleDateString('pt-BR')} → ${p.fim.toLocaleDateString('pt-BR')}</div>
+        </div>
+        <span class="badge ${p.status === 'Assinado' ? 'badge-verde' : 'badge-amarelo'}">${esc(p.status)}</span>
+      </div>`).join('')
+  }
 }
 
 // ─── DIAGNÓSTICO / HISTÓRICO DE ERROS ────────────────────────────
@@ -1038,6 +1108,8 @@ async function enviarPaginaAssinaturaPropria(idx, tipo) {
       func_nome:    p.nome,
       pagina:       p.pagina,
       valor_liquido: p.valorLiquido || null,
+      ferias_inicio: p.feriasInicio || null,
+      ferias_fim:    p.feriasFim || null,
     }
   })
   esconderLoading()
@@ -1411,6 +1483,8 @@ async function identificarFuncionariosAutomatico() {
       if (d.valor_liquido) {
         paginasFracionadas[i].valorLiquido = d.valor_liquido
       }
+      if (d.ferias_inicio) paginasFracionadas[i].feriasInicio = d.ferias_inicio
+      if (d.ferias_fim)    paginasFracionadas[i].feriasFim    = d.ferias_fim
 
       if (d.func_id) {
         func = funcionarios.find(f => String(f['ID']) === String(d.func_id))
@@ -1527,7 +1601,7 @@ async function enviarPaginaZapSign(idx) {
   const btn = document.getElementById('btn-zap-' + idx)
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>'
   mostrarLoading('Enviando para ' + p.nome.split(' ')[0] + '...')
-  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfBase64, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true, tipo: p.tipoDoc || tipoDocAtual, valor_liquido: p.valorLiquido || null } })
+  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfBase64, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true, tipo: p.tipoDoc || tipoDocAtual, valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null } })
   esconderLoading()
   if (res && res.ok) {
     paginasFracionadas[idx].status  = 'enviado'
@@ -1573,7 +1647,8 @@ async function enviarTodasPendentes(metodo) {
       const res = await chamarGAS({
         acao: 'processar_pagina_proprio',
         dados: { pdf_base64: p.pdfBase64, tipo: p.tipoDoc || tipoDocAtual,
-                 competencia: p.competencia, func_id: p.funcId, func_nome: p.nome, pagina: p.pagina }
+                 competencia: p.competencia, func_id: p.funcId, func_nome: p.nome, pagina: p.pagina,
+                 valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null }
       })
       if (res && res.ok) {
         paginasFracionadas[i].status = 'enviado'
