@@ -88,6 +88,7 @@ function doPost(e) {
       case 'liquidar_salario':              return respOk(liquidarSalario(body.dados, usuario))
       case 'listar_log':                 return respOk(listarLog(body.dados))
       case 'listar_ferias':              return respOk(listarFerias())
+      case 'atualizar_ferias':           return respOk(atualizarFerias(body.dados))
       case 'listar_pagamentos_func':        return respOk(listarPagamentos(body.dados))
       case 'listar_pagamentos':           return respOk(listarPagamentos(body.dados))
       case 'confirmar_notificacao':       return respOk(confirmarNotificacao(body.dados, usuario))
@@ -2178,7 +2179,6 @@ function parseDataFlex(s) {
 
 // Registra um período de férias como Pendente (ao enviar a Folha de Férias)
 function registrarFeriasPendente(funcId, nome, inicio, fim, competencia, refToken) {
-  if (!inicio && !fim) return
   inicializarAbaFerias()
   var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_FERIAS)
   var hoje  = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy')
@@ -2239,6 +2239,35 @@ function listarFerias() {
     })
     return o
   })
+}
+
+// Ajuste manual do período de férias (edita datas/status pelo REF_TOKEN)
+function atualizarFerias(dados) {
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_FERIAS)
+  if (!sheet) throw new Error('Aba FERIAS não encontrada')
+  var vals = sheet.getDataRange().getValues()
+  var hdrs = vals[0]
+  var iTok = hdrs.indexOf('REF_TOKEN'), iIni = hdrs.indexOf('INICIO'), iFim = hdrs.indexOf('FIM')
+  var iStatus = hdrs.indexOf('STATUS'), iEvt = hdrs.indexOf('EVENTO_ID'), iNome = hdrs.indexOf('NOME_FUNC')
+  for (var i = 1; i < vals.length; i++) {
+    if (dados.ref_token && String(vals[i][iTok]) === String(dados.ref_token)) {
+      if (dados.inicio !== undefined) sheet.getRange(i + 1, iIni + 1).setValue(dados.inicio || '')
+      if (dados.fim !== undefined)    sheet.getRange(i + 1, iFim + 1).setValue(dados.fim || '')
+      if (dados.status)               sheet.getRange(i + 1, iStatus + 1).setValue(dados.status)
+      var statusAtual = dados.status || vals[i][iStatus]
+      var ini = dados.inicio !== undefined ? dados.inicio : vals[i][iIni]
+      var fim = dados.fim !== undefined ? dados.fim : vals[i][iFim]
+      var evtAtual = iEvt >= 0 ? String(vals[i][iEvt] || '') : ''
+      if (statusAtual === 'Assinado' && ini && !evtAtual) {
+        try {
+          var id = criarEventoFerias(vals[i][iNome], ini, fim)
+          if (id && iEvt >= 0) sheet.getRange(i + 1, iEvt + 1).setValue(id)
+        } catch (e) { Logger.log('Erro Google Calendar: ' + e.message) }
+      }
+      return { ok: true }
+    }
+  }
+  throw new Error('Registro de férias não encontrado')
 }
 
 // Rodar UMA VEZ: autoriza o acesso ao Google Calendar (cria e apaga um evento teste)

@@ -679,6 +679,21 @@ html, body {
 .cal-cell.hoje { border-color: var(--verde); border-width: 1.5px; }
 .cal-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--verde); display: inline-block; margin-top: 2px; }
 .cal-dot.pend { background: var(--amber-text); }
+.cal-tab {
+  flex: 1; padding: 8px; border: 0.5px solid var(--border); background: var(--card-bg);
+  color: var(--text-secondary); border-radius: var(--radius-sm); font-size: 12px; font-weight: 600;
+  cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 5px;
+  transition: all var(--transition);
+}
+.cal-tab.ativo { background: var(--verde); color: #fff; border-color: var(--verde); }
+.gantt-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; cursor: pointer; }
+.gantt-nome { width: 86px; flex-shrink: 0; font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gantt-track { flex: 1; height: 22px; background: var(--surface); border-radius: 6px; position: relative; display: flex; align-items: center; }
+.gantt-bar {
+  position: absolute; height: 16px; border-radius: 5px; color: #fff; font-size: 9px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap;
+  padding: 0 4px; min-width: 26px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
 
 /* ── LOG AUDITORIA ──────────────────────────────────────────────── */
 .log-item {

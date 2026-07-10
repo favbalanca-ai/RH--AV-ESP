@@ -409,7 +409,7 @@ function renderCalendario() {
   lbl.textContent = MESES[calMes] + ' ' + calAno
 
   const periodos = feriasCache.map(f => ({
-    nome: f['NOME_FUNC'] || '', status: f['STATUS'] || 'Pendente',
+    nome: f['NOME_FUNC'] || '', status: f['STATUS'] || 'Pendente', token: f['REF_TOKEN'] || '',
     ini: parseDataCal(f['INICIO']), fim: parseDataCal(f['FIM'] || f['INICIO'])
   })).filter(p => p.ini)
 
@@ -433,7 +433,7 @@ function renderCalendario() {
     const doMes = periodos.filter(p => p.fim >= mIni && p.ini <= mFim).sort((a, b) => a.ini - b.ini)
     if (!doMes.length) lista.innerHTML = '<p class="lista-vazia">Nenhuma férias neste mês</p>'
     else lista.innerHTML = doMes.map(p => `
-      <div class="lista-item" style="margin-bottom:6px">
+      <div class="lista-item" style="margin-bottom:6px;cursor:pointer" onclick="editarFerias('${esc(p.token)}')">
         <div class="avatar" style="background:var(--verde-claro);color:var(--verde-text)">${getIniciais(p.nome || '?')}</div>
         <div class="lista-item-info">
           <div class="lista-item-nome">${esc(p.nome)}</div>
@@ -442,6 +442,90 @@ function renderCalendario() {
         <span class="badge ${p.status === 'Assinado' ? 'badge-verde' : 'badge-amarelo'}">${esc(p.status)}</span>
       </div>`).join('')
   }
+  renderGantt()
+}
+
+let calView = 'grid'
+function setCalView(v) {
+  calView = v
+  const g = document.getElementById('cal-grid'), gantt = document.getElementById('cal-gantt')
+  const tg = document.getElementById('cal-tab-grid'), tga = document.getElementById('cal-tab-gantt')
+  if (g)     g.style.display = v === 'grid' ? 'grid' : 'none'
+  if (gantt) gantt.style.display = v === 'gantt' ? 'block' : 'none'
+  if (tg)  tg.classList.toggle('ativo', v === 'grid')
+  if (tga) tga.classList.toggle('ativo', v === 'gantt')
+}
+
+function renderGantt() {
+  const el = document.getElementById('cal-gantt'); if (!el) return
+  const diasNoMes = new Date(calAno, calMes + 1, 0).getDate()
+  const mIni = new Date(calAno, calMes, 1), mFim = new Date(calAno, calMes + 1, 0)
+  const regs = feriasCache.map(f => ({ token: f['REF_TOKEN'] || '', nome: f['NOME_FUNC'] || '?', status: f['STATUS'] || 'Pendente', ini: parseDataCal(f['INICIO']), fim: parseDataCal(f['FIM'] || f['INICIO']) }))
+  const noMes = regs.filter(r => r.ini && r.fim && r.fim >= mIni && r.ini <= mFim).sort((a, b) => a.ini - b.ini)
+  const semDatas = regs.filter(r => !r.ini)
+  let html = ''
+  if (noMes.length) {
+    html += noMes.map(r => {
+      const sD = r.ini < mIni ? 1 : r.ini.getDate()
+      const eD = r.fim > mFim ? diasNoMes : r.fim.getDate()
+      const left = (sD - 1) / diasNoMes * 100
+      const width = (eD - sD + 1) / diasNoMes * 100
+      const cor = r.status === 'Assinado' ? 'var(--verde)' : 'var(--amber-text)'
+      const lbl = ('0'+r.ini.getDate()).slice(-2)+'/'+('0'+(r.ini.getMonth()+1)).slice(-2)+'–'+('0'+r.fim.getDate()).slice(-2)+'/'+('0'+(r.fim.getMonth()+1)).slice(-2)
+      return `<div class="gantt-row" onclick="editarFerias('${esc(r.token)}')">
+        <div class="gantt-nome">${esc(r.nome)}</div>
+        <div class="gantt-track"><div class="gantt-bar" style="left:${left}%;width:${width}%;background:${cor}">${lbl}</div></div>
+      </div>`
+    }).join('')
+  } else {
+    html += '<p class="lista-vazia">Nenhuma férias neste mês</p>'
+  }
+  if (semDatas.length) {
+    html += '<div style="font-size:11px;font-weight:700;color:var(--amber-text);margin:12px 0 6px"><i class="ti ti-alert-triangle" style="vertical-align:-2px"></i> Sem datas — toque para definir</div>'
+    html += semDatas.map(r => `<div class="gantt-row" onclick="editarFerias('${esc(r.token)}')">
+      <div class="gantt-nome">${esc(r.nome)}</div>
+      <div class="gantt-track" style="justify-content:center;color:var(--text-hint);font-size:11px">definir período</div></div>`).join('')
+  }
+  el.innerHTML = html
+}
+
+function editarFerias(refToken) {
+  const r = feriasCache.find(f => String(f['REF_TOKEN']) === String(refToken))
+  if (!r) return toast('❌ Registro não encontrado', 'erro')
+  const ini = String(r['INICIO'] || '').substring(0, 10)
+  const fim = String(r['FIM'] || '').substring(0, 10)
+  const assinado = r['STATUS'] === 'Assinado'
+  const modal = document.createElement('div')
+  modal.id = 'modal-ferias'
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:400;display:flex;align-items:flex-end;justify-content:center'
+  modal.innerHTML = `<div style="background:var(--card-bg);border-radius:20px 20px 0 0;padding:20px 16px 28px;width:100%;max-width:480px">
+    <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 14px"></div>
+    <h3 style="font-size:15px;font-weight:700;margin-bottom:2px">${esc(r['NOME_FUNC'] || '')}</h3>
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:14px">Ajustar período de férias</p>
+    <div class="dois-col">
+      <div class="campo-grupo"><label>Início</label><input type="date" id="fer-ini" value="${esc(ini)}"></div>
+      <div class="campo-grupo"><label>Fim</label><input type="date" id="fer-fim" value="${esc(fim)}"></div>
+    </div>
+    <div class="campo-grupo"><label>Status</label><select id="fer-status"><option ${assinado ? '' : 'selected'}>Pendente</option><option ${assinado ? 'selected' : ''}>Assinado</option></select></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button onclick="document.getElementById('modal-ferias').remove()" class="btn-secundario" style="flex:1">Cancelar</button>
+      <button onclick="salvarFerias('${esc(refToken)}')" class="btn-primario" style="flex:1">Salvar</button>
+    </div>
+  </div>`
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove() })
+  document.body.appendChild(modal)
+}
+async function salvarFerias(refToken) {
+  const inicio = document.getElementById('fer-ini')?.value || ''
+  const fim    = document.getElementById('fer-fim')?.value || ''
+  const status = document.getElementById('fer-status')?.value || 'Pendente'
+  if (inicio && fim && fim < inicio) return toast('❌ Fim antes do início', 'erro')
+  document.getElementById('modal-ferias')?.remove()
+  mostrarLoading('Salvando...')
+  const res = await chamarGAS({ acao: 'atualizar_ferias', dados: { ref_token: refToken, inicio, fim, status } })
+  esconderLoading()
+  if (res && res.ok) { toast('✅ Férias atualizadas', 'sucesso'); carregarCalendario() }
+  else toast('❌ ' + ((res && res.erro) || 'Erro'), 'erro')
 }
 
 // ─── DIAGNÓSTICO / HISTÓRICO DE ERROS ────────────────────────────
