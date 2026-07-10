@@ -406,7 +406,7 @@ function criarPastaFuncionario(id, nomeCompleto) {
   const ex = raiz.getFoldersByName(nomePasta)
   if (ex.hasNext()) return ex.next()
   const pasta = raiz.createFolder(nomePasta)
-  ;['ASO_EXAMES','EPI_RECIBOS','FOLHA_PAGAMENTO','DOCUMENTOS_ADM'].forEach(s => pasta.createFolder(s))
+  ;['ASO_EXAMES','EPI_RECIBOS','FOLHA_PAGAMENTO','FERIAS','DOCUMENTOS_ADM'].forEach(s => pasta.createFolder(s))
   return pasta
 }
 
@@ -421,7 +421,7 @@ function salvarPdfNoDrive(funcId, nomeCompleto, subpasta, nomeArquivo, pdfBase64
   const pasta = buscarPastaFuncionario(funcId, nomeCompleto)
   if (!pasta) throw new Error('Pasta do funcionário não encontrada no Drive')
   const subs = pasta.getFoldersByName(subpasta)
-  const destino = subs.hasNext() ? subs.next() : pasta
+  const destino = subs.hasNext() ? subs.next() : pasta.createFolder(subpasta)
   const arq = destino.createFile(Utilities.newBlob(Utilities.base64Decode(pdfBase64), 'application/pdf', nomeArquivo))
   arq.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW)
   return arq.getUrl()
@@ -577,11 +577,13 @@ function processarPaginaFolha(dados, usuario) {
   const hoje = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy')
   const comp = dados.competencia || ''
   const compLimpo = comp.replace(/\//g, '-')
+  const tipo = dados.tipo || 'Folha'
+  const subpasta = tipo === 'Ferias' ? 'FERIAS' : 'FOLHA_PAGAMENTO'
   const func = encontrarFuncionarioPorNome(dados.nome_funcionario, funcionarios)
   if (!func) throw new Error('Funcionário não encontrado: ' + dados.nome_funcionario)
-  const nomeArq = 'Folha_' + compLimpo + '_' + (func['NOME_CURTO'] || func['NOME_COMPLETO'].split(' ')[0]) + '.pdf'
+  const nomeArq = tipo + '_' + compLimpo + '_' + (func['NOME_CURTO'] || func['NOME_COMPLETO'].split(' ')[0]) + '.pdf'
   let linkDrive = ''
-  try { linkDrive = salvarPdfNoDrive(func['ID'], func['NOME_COMPLETO'], 'FOLHA_PAGAMENTO', nomeArq, dados.pdf_base64) }
+  try { linkDrive = salvarPdfNoDrive(func['ID'], func['NOME_COMPLETO'], subpasta, nomeArq, dados.pdf_base64) }
   catch(e) { logAcao(usuario, 'ERRO_DRIVE', e.message) }
   let zapToken = '', zapSignUrl = '', zapSignerToken = ''
   if (dados.enviar_zapsign) {
@@ -908,7 +910,7 @@ function confirmarAssinatura(token, assinaturaBase64, pdfAssinadoExterno) {
     pdfAssinado = pdfAssinadoExterno
   } else if (tipo === 'EPI') {
     pdfAssinado = gerarReciboEpiPdfAssinado(funcObj, itens, motivo, assinaturaBase64)
-  } else if (tipo === 'Folha' || tipo === 'Ponto') {
+  } else if (tipo === 'Folha' || tipo === 'Ponto' || tipo === 'Ferias') {
     pdfAssinado = gerarFolhaPdfAssinado(pdfBase64, assinaturaBase64, funcNome, tipo, referencia)
   } else {
     pdfAssinado = adicionarAssinaturaAoPdf(pdfBase64, assinaturaBase64, funcNome)
@@ -917,7 +919,7 @@ function confirmarAssinatura(token, assinaturaBase64, pdfAssinadoExterno) {
   let linkDrive = ''
   try {
     const nomeArq = tipo + '_' + String(referencia || '').replace(/\//g,'-') + '_ASSINADO.pdf'
-    const subpasta = tipo === 'EPI' ? 'EPI_RECIBOS' : 'FOLHA_PAGAMENTO'
+    const subpasta = tipo === 'EPI' ? 'EPI_RECIBOS' : tipo === 'Ferias' ? 'FERIAS' : 'FOLHA_PAGAMENTO'
     linkDrive = salvarPdfNoDrive(funcId, funcNome, subpasta, nomeArq, pdfAssinado)
   } catch(e) {
     logAcao('SISTEMA', 'ERRO_DRIVE_ASSINATURA', e.message)
@@ -1151,7 +1153,7 @@ function processarPaginaProprio(dados, usuario) {
   var comp     = dados.competencia || ''
   var compLimpo = String(comp || '').replace(/\//g, '-')
   var tipo     = dados.tipo || 'Folha'
-  var subpasta = 'FOLHA_PAGAMENTO'
+  var subpasta = tipo === 'Ferias' ? 'FERIAS' : 'FOLHA_PAGAMENTO'
   var nomeArq  = tipo + '_' + compLimpo + '_' + (func['NOME_CURTO'] || func['NOME_COMPLETO'].split(' ')[0]) + '_PENDENTE.pdf'
 
   var linkDrive = ''
@@ -1199,7 +1201,7 @@ function processarPaginaProprio(dados, usuario) {
 
 function gerarFolhaPdfAssinado(pdfBase64Original, assinaturaBase64, funcNome, tipo, competencia) {
   var hoje = Utilities.formatDate(new Date(), 'America/Sao_Paulo', "dd/MM/yyyy 'às' HH:mm")
-  var tipoLabel = tipo === 'Ponto' ? 'Folha de Ponto' : 'Folha de Pagamento'
+  var tipoLabel = tipo === 'Ponto' ? 'Folha de Ponto' : tipo === 'Ferias' ? 'Folha de Férias' : 'Folha de Pagamento'
 
   var html =
     '<!DOCTYPE html><html><head><meta charset="UTF-8">' +
