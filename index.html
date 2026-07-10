@@ -488,12 +488,17 @@
           <div id="cal-mes-label" style="font-size:15px;font-weight:700"></div>
           <button onclick="mudarMesCal(1)" class="cal-nav-btn"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
         </div>
+        <select id="cal-unidade" onchange="filtrarCal()" style="width:100%;margin-bottom:10px;border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;font-family:inherit;background:var(--card-bg);color:var(--text-primary);outline:none">
+          <option value="">Todas as unidades</option>
+        </select>
         <div style="display:flex;gap:6px;margin-bottom:12px">
-          <button id="cal-tab-grid" onclick="setCalView('grid')" class="cal-tab ativo"><i class="ti ti-calendar-month" aria-hidden="true"></i> Calendário</button>
-          <button id="cal-tab-gantt" onclick="setCalView('gantt')" class="cal-tab"><i class="ti ti-timeline" aria-hidden="true"></i> Linha do tempo</button>
+          <button id="cal-tab-grid" onclick="setCalView('grid')" class="cal-tab ativo"><i class="ti ti-calendar-month" aria-hidden="true"></i> Mês</button>
+          <button id="cal-tab-gantt" onclick="setCalView('gantt')" class="cal-tab"><i class="ti ti-timeline" aria-hidden="true"></i> Gantt</button>
+          <button id="cal-tab-ano" onclick="setCalView('ano')" class="cal-tab"><i class="ti ti-calendar" aria-hidden="true"></i> Ano</button>
         </div>
         <div id="cal-grid" class="cal-grid"></div>
         <div id="cal-gantt" style="display:none"></div>
+        <div id="cal-ano" style="display:none"></div>
         <div style="display:flex;gap:14px;justify-content:center;margin-top:10px;font-size:10px;color:var(--text-secondary)">
           <span style="display:flex;align-items:center;gap:4px"><i class="cal-dot"></i> Assinadas</span>
           <span style="display:flex;align-items:center;gap:4px"><i class="cal-dot pend"></i> Pendentes</span>
@@ -517,7 +522,7 @@
   </nav>
 </div>
 
-<script src="app.js?v=20260629f"></script>
+<script src="app.js?v=20260629g"></script>
 <script>
   // Registra o Service Worker (necessário para Web Share Target e cache offline)
   if ('serviceWorker' in navigator) {
