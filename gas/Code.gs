@@ -325,7 +325,9 @@ function webhookZapSign(body) {
     atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', docToken, { 'STATUS': 'Assinado', 'DATA ASSINATURA': hoje })
     try {
       const comp = String(folha['COMPETÊNCIA'] || 'semdata').replace(/\//g,'-')
-      const link = salvarPdfNoDrive(folha['ID FUNC.'], folha['FUNCIONÁRIO'], 'FOLHA_PAGAMENTO', 'Folha_' + comp + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(docToken))
+      const tipoF = folha['TIPO'] || 'Folha'
+      const subF = tipoF === 'Ferias' ? 'FERIAS' : 'FOLHA_PAGAMENTO'
+      const link = salvarPdfNoDrive(folha['ID FUNC.'], folha['FUNCIONÁRIO'], subF, tipoF + '_' + comp + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(docToken))
       atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', docToken, { 'LINK DOC ASSINADO': link })
       // Gera link de confirmação de pagamento para o empregador
       try {
@@ -491,7 +493,9 @@ function sincronizarPendentes() {
           atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', token, { 'STATUS': 'Assinado', 'DATA ASSINATURA': hoje, 'LINK DOC ASSINADO': '' })
           try {
             const comp = String(folha['COMPETÊNCIA'] || 'semdata').replace(/\//g,'-')
-            const link = salvarPdfNoDrive(folha['ID FUNC.'], folha['FUNCIONÁRIO'], 'FOLHA_PAGAMENTO', 'Folha_' + comp + '_' + token.substring(0,8) + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(token))
+            const tipoF = folha['TIPO'] || 'Folha'
+            const subF = tipoF === 'Ferias' ? 'FERIAS' : 'FOLHA_PAGAMENTO'
+            const link = salvarPdfNoDrive(folha['ID FUNC.'], folha['FUNCIONÁRIO'], subF, tipoF + '_' + comp + '_' + token.substring(0,8) + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(token))
             atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', token, { 'LINK DOC ASSINADO': link })
           } catch(de) {}
           atualizados++
@@ -541,7 +545,9 @@ function recuperarPdfsAssinados() {
     if (folha['STATUS'] !== 'Assinado' || !token || link) return
     try {
       const comp = String(folha['COMPETÊNCIA'] || 'semdata').replace(/\//g,'-')
-      const url = salvarPdfNoDrive(folha['ID FUNC.'], folha['FUNCIONÁRIO'], 'FOLHA_PAGAMENTO', 'Folha_' + comp + '_' + token.substring(0,8) + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(token))
+      const tipoF = folha['TIPO'] || 'Folha'
+      const subF = tipoF === 'Ferias' ? 'FERIAS' : 'FOLHA_PAGAMENTO'
+      const url = salvarPdfNoDrive(folha['ID FUNC.'], folha['FUNCIONÁRIO'], subF, tipoF + '_' + comp + '_' + token.substring(0,8) + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(token))
       atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', token, { 'LINK DOC ASSINADO': url })
       recuperados++
     } catch(e) { erros.push('Folha ' + token.substring(0,8) + ': ' + e.message) }
@@ -592,7 +598,7 @@ function processarPaginaFolha(dados, usuario) {
       zapToken = zap.token; zapSignUrl = zap.signUrl; zapSignerToken = zap.signerToken
     } catch(e) { logAcao(usuario, 'ERRO_ZAPSIGN', e.message); throw e }
   }
-  adicionarLinha(CONFIG.ABAS.FOLHA, [func['ID'], func['NOME_COMPLETO'], comp, hoje, zapToken ? 'Pendente' : 'Salvo', '', zapToken, linkDrive, '', zapSignerToken ? 'Signer: ' + zapSignerToken : 'Fracionado'])
+  adicionarLinha(CONFIG.ABAS.FOLHA, [func['ID'], func['NOME_COMPLETO'], comp, hoje, zapToken ? 'Pendente' : 'Salvo', '', zapToken, linkDrive, '', zapSignerToken ? 'Signer: ' + zapSignerToken : 'Fracionado', dados.valor_liquido || '', tipo])
   logAcao(usuario, 'FOLHA_INDIVIDUAL', 'Func ' + func['ID'] + ' | ' + comp)
   return { func_id: func['ID'], nome: func['NOME_COMPLETO'], link_drive: linkDrive, zapsign: zapToken, sign_url: zapSignUrl }
 }
@@ -1173,6 +1179,7 @@ function processarPaginaProprio(dados, usuario) {
     '',                   // I: LINK DOC ASSINADO
     'Assinatura Própria — ' + tipo, // J: OBSERVAÇÕES
     dados.valor_liquido || '', // K: VALOR_LIQUIDO
+    tipo,                 // L: TIPO
   ])
 
   var linkData = gerarLinkAssinatura({
@@ -1831,6 +1838,21 @@ function adicionarColunasFuncionarios() {
     }
   })
   return 'OK'
+}
+
+// ─── Rodar UMA VEZ: adiciona a coluna TIPO na aba FOLHA_PAGAMENTO ──
+// Necessária para o webhook do ZapSign salvar o assinado na pasta certa
+// (Ferias -> FERIAS). Sem ela, tudo cai em FOLHA_PAGAMENTO.
+function adicionarColunaTipoFolha() {
+  var sheet = getSheet(CONFIG.ABAS.FOLHA)
+  var hdrs  = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+  if (hdrs.indexOf('TIPO') === -1) {
+    sheet.getRange(1, sheet.getLastColumn() + 1).setValue('TIPO')
+    Logger.log('Coluna TIPO adicionada na FOLHA_PAGAMENTO')
+    return 'Coluna TIPO adicionada'
+  }
+  Logger.log('Coluna TIPO já existe')
+  return 'Já existe'
 }
 
 // ═══════════════════════════════════════════════════════════════════
