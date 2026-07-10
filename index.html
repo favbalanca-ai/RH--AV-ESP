@@ -299,6 +299,9 @@
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:8px 12px;border:0.5px solid var(--border);border-radius:var(--radius-sm);flex:1;background:var(--surface)">
             <input type="radio" name="tipo-doc" value="Ponto" onchange="setTipoDoc(this.value)" style="accent-color:var(--verde)"> <span>Folha de Ponto</span>
           </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:8px 12px;border:0.5px solid var(--border);border-radius:var(--radius-sm);flex:1;background:var(--surface)">
+            <input type="radio" name="tipo-doc" value="Ferias" onchange="setTipoDoc(this.value)" style="accent-color:var(--verde)"> <span>Folha de Férias</span>
+          </label>
         </div>
         <div id="tipo-doc-label" style="font-size:11px;color:var(--verde-text);font-weight:600;margin-top:6px"></div>
       </div>
@@ -488,7 +491,7 @@
   </nav>
 </div>
 
-<script src="app.js?v=20260629c"></script>
+<script src="app.js?v=20260629d"></script>
 <script>
   // Registra o Service Worker (necessário para Web Share Target e cache offline)
   if ('serviceWorker' in navigator) {

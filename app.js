@@ -58,7 +58,8 @@ let tipoDocAtual = 'Folha'
 function setTipoDoc(valor) {
   tipoDocAtual = valor
   const label = document.getElementById('tipo-doc-label')
-  if (label) label.textContent = valor === 'Ponto' ? 'Folha de Ponto selecionada' : 'Folha de Pagamento selecionada'
+  const nomes = { Ponto: 'Folha de Ponto', Ferias: 'Folha de Férias', Folha: 'Folha de Pagamento' }
+  if (label) label.textContent = (nomes[valor] || 'Folha de Pagamento') + ' selecionada'
 }
 
 async function carregarPdfLib() {
@@ -1405,7 +1406,7 @@ async function identificarFuncionariosAutomatico() {
       tipoIA = d.tipo_documento || ''
       compIA = d.competencia    || ''
 
-      if (tipoIA) paginasFracionadas[i].tipoDoc     = tipoIA
+      if (tipoIA && paginasFracionadas[i].tipoDoc !== 'Ferias') paginasFracionadas[i].tipoDoc = tipoIA
       if (compIA) paginasFracionadas[i].competencia  = compIA
       if (d.valor_liquido) {
         paginasFracionadas[i].valorLiquido = d.valor_liquido
@@ -1526,7 +1527,7 @@ async function enviarPaginaZapSign(idx) {
   const btn = document.getElementById('btn-zap-' + idx)
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>'
   mostrarLoading('Enviando para ' + p.nome.split(' ')[0] + '...')
-  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfBase64, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true, valor_liquido: p.valorLiquido || null } })
+  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfBase64, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true, tipo: p.tipoDoc || tipoDocAtual, valor_liquido: p.valorLiquido || null } })
   esconderLoading()
   if (res && res.ok) {
     paginasFracionadas[idx].status  = 'enviado'
