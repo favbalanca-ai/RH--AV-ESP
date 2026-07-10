@@ -98,6 +98,7 @@
           <button class="btn-acao" onclick="irPara('fracionar')"><div class="acao-icon purple"><i class="ti ti-file-invoice" aria-hidden="true"></i></div><span class="label">Folha pgto.</span></button>
           <button class="btn-acao" onclick="irPara('pagamento')"><div class="acao-icon green"><i class="ti ti-cash" aria-hidden="true"></i></div><span class="label">Pagamentos</span></button>
           <button class="btn-acao" onclick="irPara('diagnostico')"><div class="acao-icon red"><i class="ti ti-history" aria-hidden="true"></i></div><span class="label">Histórico &amp; erros</span></button>
+          <button class="btn-acao" onclick="irPara('calendario')"><div class="acao-icon blue"><i class="ti ti-calendar-event" aria-hidden="true"></i></div><span class="label">Calendário férias</span></button>
         </div>
       </div>
     </div>
@@ -479,6 +480,26 @@
       </button>
     </div>
 
+    <!-- CALENDÁRIO DE FÉRIAS -->
+    <div id="pg-calendario" class="pagina">
+      <div class="card mb-3">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <button onclick="mudarMesCal(-1)" class="cal-nav-btn"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>
+          <div id="cal-mes-label" style="font-size:15px;font-weight:700"></div>
+          <button onclick="mudarMesCal(1)" class="cal-nav-btn"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
+        </div>
+        <div id="cal-grid" class="cal-grid"></div>
+        <div style="display:flex;gap:14px;justify-content:center;margin-top:10px;font-size:10px;color:var(--text-secondary)">
+          <span style="display:flex;align-items:center;gap:4px"><i class="cal-dot"></i> Assinadas</span>
+          <span style="display:flex;align-items:center;gap:4px"><i class="cal-dot pend"></i> Pendentes</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-titulo"><i class="ti ti-beach" aria-hidden="true"></i> Férias do mês</div>
+        <div id="cal-lista" class="lista"></div>
+      </div>
+    </div>
+
   </main>
 
   <nav class="nav-bottom">
@@ -491,7 +512,7 @@
   </nav>
 </div>
 
-<script src="app.js?v=20260629d"></script>
+<script src="app.js?v=20260629e"></script>
 <script>
   // Registra o Service Worker (necessário para Web Share Target e cache offline)
   if ('serviceWorker' in navigator) {
