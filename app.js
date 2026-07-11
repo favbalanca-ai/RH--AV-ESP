@@ -1163,16 +1163,28 @@ async function copiarLink() {
   }
 }
 
-function renderEntregas(lista) {
-  const el = document.getElementById('lista-entregas')
-  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhuma entrega</p>'; return }
-  el.innerHTML = lista.map(e => {
-    const func  = funcionarios.find(f => f['NOME_COMPLETO'] === e['FUNCIONÁRIO'])
-    const tel   = telWhats(func?.['TELEFONE'] || e['TELEFONE'])
-    const waUrl = tel ? `https://wa.me/${tel}` : ''
-    return `
+let entregasCache = []
+let filtroEntregaStatus = ''
+
+function setFiltroEntrega(btn, val) {
+  filtroEntregaStatus = val
+  document.querySelectorAll('#filtro-epi-entrega .motivo-chip').forEach(b => b.classList.remove('ativo'))
+  btn.classList.add('ativo')
+  filtrarEntregas()
+}
+
+function filtrarEntregas() {
+  renderEntregas(entregasCache)
+}
+
+function itemEntregaHTML(e) {
+  const assinado = e['ASSINADO?'] === 'Sim'
+  const func  = funcionarios.find(f => f['NOME_COMPLETO'] === e['FUNCIONÁRIO'])
+  const tel   = telWhats(func?.['TELEFONE'] || e['TELEFONE'])
+  const waUrl = tel ? `https://wa.me/${tel}` : ''
+  return `
     <div class="lista-item">
-      <div class="avatar" style="background:var(--blue-bg);color:var(--blue-text)">${getIniciais(e['FUNCIONÁRIO']||'?')}</div>
+      <div class="avatar" style="background:${assinado?'var(--verde-claro)':'var(--amber-bg)'};color:${assinado?'var(--verde-text)':'var(--amber-text)'}">${getIniciais(e['FUNCIONÁRIO']||'?')}</div>
       <div class="lista-item-info">
         <div class="lista-item-nome">${esc(e['FUNCIONÁRIO']||'—')}</div>
         <div class="lista-item-sub">${esc(e['DESCRIÇÃO DO EPI']||'')} · ${esc(e['DATA ENTREGA']||'')} · ${esc(e['MOTIVO ENTREGA']||'')}</div>
@@ -1180,10 +1192,40 @@ function renderEntregas(lista) {
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
         ${badge(e['ASSINADO?'])}
-        ${waUrl && e['ASSINADO?'] !== 'Sim' ? `<a href="${waUrl}" target="_blank" style="background:#22C55E;color:#fff;border-radius:6px;padding:3px 7px;font-size:10px;text-decoration:none;display:flex;align-items:center;gap:3px"><i class="ti ti-brand-whatsapp" style="font-size:10px"></i></a>` : ''}
+        ${waUrl && !assinado ? `<a href="${waUrl}" target="_blank" style="background:#22C55E;color:#fff;border-radius:6px;padding:3px 7px;font-size:10px;text-decoration:none;display:flex;align-items:center;gap:3px"><i class="ti ti-brand-whatsapp" style="font-size:10px"></i></a>` : ''}
       </div>
     </div>`
-  }).join('')
+}
+
+function grupoEntregaHTML(titulo, cor, itens) {
+  if (!itens.length) return ''
+  return `
+    <div style="display:flex;align-items:center;gap:6px;margin:10px 2px 6px">
+      <span style="width:7px;height:7px;border-radius:50%;background:${cor}"></span>
+      <span style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.03em">${titulo}</span>
+      <span style="font-size:10px;font-weight:600;color:var(--text-secondary);background:var(--surface);border-radius:10px;padding:1px 7px">${itens.length}</span>
+    </div>
+    ${itens.map(itemEntregaHTML).join('')}`
+}
+
+function renderEntregas(lista) {
+  entregasCache = lista || []
+  const el = document.getElementById('lista-entregas')
+  if (!el) return
+
+  const q = (document.getElementById('busca-epi-entrega')?.value || '').toLowerCase().trim()
+  let filtrada = entregasCache
+  if (filtroEntregaStatus === 'assinado') filtrada = filtrada.filter(e => e['ASSINADO?'] === 'Sim')
+  else if (filtroEntregaStatus === 'pendente') filtrada = filtrada.filter(e => e['ASSINADO?'] !== 'Sim')
+  if (q) filtrada = filtrada.filter(e =>
+    (e['FUNCIONÁRIO']||'').toLowerCase().includes(q) || (e['DESCRIÇÃO DO EPI']||'').toLowerCase().includes(q))
+
+  if (!filtrada.length) { el.innerHTML = '<p class="lista-vazia">Nenhuma entrega encontrada</p>'; return }
+
+  const assinados = filtrada.filter(e => e['ASSINADO?'] === 'Sim')
+  const pendentes = filtrada.filter(e => e['ASSINADO?'] !== 'Sim')
+  el.innerHTML = grupoEntregaHTML('Assinados', 'var(--verde)', assinados)
+              + grupoEntregaHTML('Pendentes', 'var(--amber-text)', pendentes)
 }
 
 // ─── FOLHA / FRACIONAR ────────────────────────────────────────────
