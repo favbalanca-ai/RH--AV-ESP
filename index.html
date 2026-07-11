@@ -371,6 +371,13 @@
             <i class="ti ti-send" aria-hidden="true"></i> Notificar
           </button>
         </div>
+        <input id="busca-folha" type="text" placeholder="🔍 Buscar por nome ou competência..." oninput="filtrarFolhas()"
+          style="width:100%;border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;font-family:inherit;background:var(--card-bg);color:var(--text-primary);outline:none;margin-bottom:8px">
+        <div id="filtro-folha" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+          <button class="motivo-chip ativo" onclick="setFiltroFolha(this,'')">Todos</button>
+          <button class="motivo-chip" onclick="setFiltroFolha(this,'Assinado')">Assinados</button>
+          <button class="motivo-chip" onclick="setFiltroFolha(this,'Pendente')">Pendentes</button>
+        </div>
         <div id="historico-folha" class="lista"></div>
       </div>
     </div>
@@ -522,7 +529,7 @@
   </nav>
 </div>
 
-<script src="app.js?v=20260629i"></script>
+<script src="app.js?v=20260629j"></script>
 <script>
   // Registra o Service Worker (necessário para Web Share Target e cache offline)
   if ('serviceWorker' in navigator) {

@@ -1403,27 +1403,30 @@ function preencherMesesFracionar() {
   sel.innerHTML = opts
 }
 
+let folhaListaCache = []
+let filtroFolhaStatus = ''
+
 async function carregarEntregasFolha() {
   const res = await chamarGAS({ acao: 'listar_folhas' })
-  if (res && res.ok) renderHistoricoFolha(res.data.slice(0,20))
+  if (res && res.ok) renderHistoricoFolha(res.data.slice(0,50))
 }
 
-// FIX #5: renderHistoricoFolha não gera mais sel-comp-notif interno pois ele já existe fixo no index.html
-function renderHistoricoFolha(lista) {
-  const el = document.getElementById('historico-folha'); if (!el) return
-  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum envio</p>'; return }
+function setFiltroFolha(btn, val) {
+  filtroFolhaStatus = val
+  document.querySelectorAll('#filtro-folha .motivo-chip').forEach(b => b.classList.remove('ativo'))
+  btn.classList.add('ativo')
+  filtrarFolhas()
+}
 
-  // Atualiza o select de competência fixo no HTML (sem criar um segundo)
-  const assinados = lista.filter(f => f['STATUS'] === 'Assinado')
-  const competencias = [...new Set(assinados.map(f => f['COMPETÊNCIA']))]
-  const selComp = document.getElementById('sel-comp-notif')
-  if (selComp && competencias.length) {
-    selComp.innerHTML = competencias.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')
-  }
+function filtrarFolhas() {
+  renderHistoricoFolha(folhaListaCache)
+}
 
-  el.innerHTML = lista.map(f => `
+function itemFolhaHTML(f) {
+  const assinado = f['STATUS'] === 'Assinado'
+  return `
     <div class="lista-item">
-      <div class="avatar" style="background:var(--purple-bg);color:var(--purple-text)">${getIniciais(f['FUNCIONÁRIO']||'?')}</div>
+      <div class="avatar" style="background:${assinado?'var(--verde-claro)':'var(--amber-bg)'};color:${assinado?'var(--verde-text)':'var(--amber-text)'}">${getIniciais(f['FUNCIONÁRIO']||'?')}</div>
       <div class="lista-item-info">
         <div class="lista-item-nome">${esc(f['FUNCIONÁRIO'])}</div>
         <div class="lista-item-sub">${esc(f['COMPETÊNCIA'])} · ${esc(f['DATA ENVIO'])}</div>
@@ -1431,12 +1434,51 @@ function renderHistoricoFolha(lista) {
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
         ${badge(f['STATUS'])}
-        ${f['STATUS'] === 'Assinado' ? `<button onclick="notificarPagamentoIndividual('${f['ID FUNC.']}','${normalizarComp(f['COMPETÊNCIA'])}')"
+        ${assinado ? `<button onclick="notificarPagamentoIndividual('${f['ID FUNC.']}','${normalizarComp(f['COMPETÊNCIA'])}')"
           style="background:#25D366;color:#fff;border:none;border-radius:6px;padding:3px 7px;font-size:10px;cursor:pointer;display:flex;align-items:center;gap:3px">
           <i class="ti ti-brand-whatsapp"></i>
         </button>` : ''}
       </div>
-    </div>`).join('')
+    </div>`
+}
+
+function grupoFolhaHTML(titulo, cor, itens) {
+  if (!itens.length) return ''
+  return `
+    <div style="display:flex;align-items:center;gap:6px;margin:10px 2px 6px">
+      <span style="width:7px;height:7px;border-radius:50%;background:${cor}"></span>
+      <span style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.03em">${titulo}</span>
+      <span style="font-size:10px;font-weight:600;color:var(--text-secondary);background:var(--surface);border-radius:10px;padding:1px 7px">${itens.length}</span>
+    </div>
+    ${itens.map(itemFolhaHTML).join('')}`
+}
+
+// FIX #5: renderHistoricoFolha não gera mais sel-comp-notif interno pois ele já existe fixo no index.html
+function renderHistoricoFolha(lista) {
+  folhaListaCache = lista || []
+  const el = document.getElementById('historico-folha'); if (!el) return
+
+  // Atualiza o select de competência fixo no HTML (sem criar um segundo)
+  const competencias = [...new Set(folhaListaCache.filter(f => f['STATUS'] === 'Assinado').map(f => f['COMPETÊNCIA']))]
+  const selComp = document.getElementById('sel-comp-notif')
+  if (selComp && competencias.length) {
+    const atual = selComp.value
+    selComp.innerHTML = competencias.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')
+    if (atual && competencias.includes(atual)) selComp.value = atual
+  }
+
+  const q = (document.getElementById('busca-folha')?.value || '').toLowerCase().trim()
+  let filtrada = folhaListaCache
+  if (filtroFolhaStatus) filtrada = filtrada.filter(f => (f['STATUS']||'') === filtroFolhaStatus)
+  if (q) filtrada = filtrada.filter(f =>
+    (f['FUNCIONÁRIO']||'').toLowerCase().includes(q) || (f['COMPETÊNCIA']||'').toLowerCase().includes(q))
+
+  if (!filtrada.length) { el.innerHTML = '<p class="lista-vazia">Nenhum envio encontrado</p>'; return }
+
+  const assinados = filtrada.filter(f => f['STATUS'] === 'Assinado')
+  const pendentes = filtrada.filter(f => f['STATUS'] !== 'Assinado')
+  el.innerHTML = grupoFolhaHTML('Assinados', 'var(--verde)', assinados)
+              + grupoFolhaHTML('Pendentes', 'var(--amber-text)', pendentes)
 }
 
 async function notificarPagamentoIndividual(funcId, competencia) {
