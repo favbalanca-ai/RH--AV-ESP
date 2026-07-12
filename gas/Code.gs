@@ -82,6 +82,7 @@ function doPost(e) {
       case 'listar_adiantamentos':        return respOk(listarAdiantamentos(body.dados))
       case 'resumo_comissao':             return respOk(resumoComissao(body.dados))
       case 'gerar_autorizacao_pagamento': return respOk(gerarAutorizacaoPagamento(body.dados, usuario))
+      case 'gerar_recibo_adiantamento':   return respOk(gerarReciboAdiantamento(body.dados, usuario))
       case 'listar_autorizacoes':         return respOk(listarAutorizacoes(body.dados))
       case 'gerar_msg_pagamento':         return respOk(gerarMensagemPagamento(body.dados))
       case 'gerar_relatorio_pagamentos': return respOk(gerarRelatorioPagamentos(body.dados))
@@ -1446,6 +1447,101 @@ function resumoComissao(dados) {
     percentual:    valorAnual > 0 ? Math.round((totalPago / valorAnual) * 100) : 0,
     adiantamentos: adiantamentos,
   }
+}
+
+// Formata número no padrão brasileiro (1234.5 -> "1.234,50")
+function formatBRL(n) {
+  n = Number(n) || 0
+  var p = Math.abs(n).toFixed(2).split('.')
+  var inteiro = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return (n < 0 ? '-' : '') + inteiro + ',' + p[1]
+}
+
+// ── RECIBO DE ADIANTAMENTO DE COMISSÃO ────────────────────────────
+// Gera o recibo em PDF. modo 'impresso' => sem assinatura (linha em branco).
+// modo 'assinatura' + assinatura_base64 => carimba a assinatura na posição
+// escolhida (sig_x/sig_y/sig_w em % da página A4) e salva no Drive.
+function gerarReciboAdiantamento(dados, usuario) {
+  var func = listarFuncionarios().find(function(f) { return String(f['ID']) === String(dados.func_id) })
+  if (!func) throw new Error('Funcionário não encontrado')
+
+  var valorNum = (typeof dados.valor === 'number') ? dados.valor
+               : parseFloat(String(dados.valor || '').replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3})/g, '').replace(',', '.')) || 0
+  var valorFmt = 'R$ ' + formatBRL(valorNum)
+  var hojeExt  = Utilities.formatDate(new Date(), 'America/Sao_Paulo', "dd 'de' MMMM 'de' yyyy")
+  var comAssin = !!dados.assinatura_base64
+
+  var sigX = dados.sig_x != null ? dados.sig_x : 30
+  var sigY = dados.sig_y != null ? dados.sig_y : 72
+  var sigW = dados.sig_w != null ? dados.sig_w : 34
+
+  var esc = function(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+  var sigOverlay = comAssin
+    ? '<img src="data:image/png;base64,' + dados.assinatura_base64 + '" style="position:absolute;left:' + sigX + '%;top:' + sigY + '%;width:' + sigW + '%;height:auto;">'
+    : ''
+
+  var obsLinha = dados.observacoes ? '<div class="campo"><span class="rot">Observações:</span><span>' + esc(dados.observacoes) + '</span></div>' : ''
+
+  var html =
+    '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' +
+    '@page{size:A4;margin:0}html,body{margin:0;padding:0}' +
+    '.page{position:relative;width:210mm;height:297mm;box-sizing:border-box;font-family:Arial,sans-serif;color:#222}' +
+    '.content{padding:20mm 18mm}' +
+    '.header{background:#1A5C2A;color:#fff;padding:16px 20px;border-radius:6px}' +
+    '.header h1{margin:0;font-size:18px}.header p{margin:4px 0 0;font-size:10px;opacity:.85}' +
+    '.titulo{text-align:center;font-size:15px;font-weight:bold;color:#1A5C2A;letter-spacing:.5px;margin:26px 0 4px}' +
+    '.valor-box{text-align:center;font-size:22px;font-weight:bold;color:#1A5C2A;margin:6px 0 22px}' +
+    '.texto{font-size:12px;line-height:1.8;text-align:justify;margin:14px 0}' +
+    '.dados{background:#f6faf3;border:1px solid #d9e8cc;border-radius:8px;padding:14px 16px;margin:18px 0}' +
+    '.campo{display:flex;gap:8px;font-size:11px;margin:5px 0}.rot{font-weight:bold;min-width:150px;color:#444}' +
+    '.assinaturas{margin-top:70px;text-align:center}' +
+    '.linha-ass{width:340px;border-top:1.5px solid #333;margin:0 auto 6px}' +
+    '.ass-nome{font-size:12px;font-weight:bold}.ass-sub{font-size:10px;color:#555}' +
+    '.local{text-align:center;font-size:11px;margin-top:34px}' +
+    '.rodape{position:absolute;bottom:14mm;left:0;right:0;text-align:center;font-size:8px;color:#999}' +
+    '</style></head><body><div class="page">' + sigOverlay +
+    '<div class="content">' +
+    '<div class="header"><h1>Fazenda Água Viva</h1><p>Sistema SST — Recibo de Adiantamento de Comissão</p></div>' +
+    '<div class="titulo">RECIBO DE ADIANTAMENTO DE COMISSÃO</div>' +
+    '<div class="valor-box">' + valorFmt + '</div>' +
+    '<div class="texto">Recebi de <strong>FAZENDA ÁGUA VIVA</strong> a importância de <strong>' + valorFmt +
+    '</strong>, a título de <strong>adiantamento de comissão</strong> referente ao exercício de <strong>' + esc(dados.ano || '') +
+    '</strong>, dando plena e geral quitação do valor ora recebido.</div>' +
+    '<div class="dados">' +
+    '<div class="campo"><span class="rot">Funcionário:</span><span>' + esc(func['NOME_COMPLETO']) + '</span></div>' +
+    '<div class="campo"><span class="rot">CPF:</span><span>' + esc(func['CPF'] || '—') + '</span></div>' +
+    '<div class="campo"><span class="rot">Função / Unidade:</span><span>' + esc((func['FUNCAO'] || '—') + ' · ' + (func['UNIDADE'] || '—')) + '</span></div>' +
+    '<div class="campo"><span class="rot">Forma de pagamento:</span><span>' + esc(dados.forma_pagto || 'Pix') + '</span></div>' +
+    '<div class="campo"><span class="rot">Data do pagamento:</span><span>' + esc(dados.data_pagto || '—') + '</span></div>' +
+    obsLinha +
+    '</div>' +
+    '<div class="local">' + esc(func['UNIDADE'] || 'Fazenda Água Viva') + ', ' + hojeExt + '.</div>' +
+    '<div class="assinaturas"><div class="linha-ass"></div>' +
+    '<div class="ass-nome">' + esc(func['NOME_COMPLETO']) + '</div>' +
+    '<div class="ass-sub">Assinatura do funcionário</div></div>' +
+    '</div>' +
+    '<div class="rodape">Documento gerado' + (comAssin ? ' e assinado digitalmente' : '') + ' em ' + hojeExt + ' pelo Sistema SST — Fazenda Água Viva</div>' +
+    '</div></body></html>'
+
+  var pdfBytes = HtmlService.createHtmlOutput(html).getAs('application/pdf').setName('recibo_adiantamento.pdf').getBytes()
+  var pdfBase64 = Utilities.base64Encode(pdfBytes)
+
+  var resultado = { ok: true, pdf_base64: pdfBase64 }
+
+  if (comAssin) {
+    var dataArq = String(dados.data_pagto || hojeExt).replace(/\//g, '-')
+    var nomeArq = 'Recibo_Adiantamento_' + dataArq + '_R$' + formatBRL(valorNum).replace(/[.,]/g, '') + '_ASSINADO.pdf'
+    try {
+      resultado.link = salvarPdfNoDrive(func['ID'], func['NOME_COMPLETO'], 'ADIANTAMENTOS', nomeArq, pdfBase64)
+    } catch (e) {
+      Logger.log('Erro ao salvar recibo adiantamento no Drive: ' + e.message)
+      resultado.aviso = 'PDF gerado, mas não foi salvo no Drive: ' + e.message
+    }
+    logAcao(usuario || 'SISTEMA', 'RECIBO_ADIANTAMENTO_ASSINADO', 'Func ' + func['ID'] + ' | ' + valorFmt + ' | ' + (dados.data_pagto || ''))
+  }
+
+  return resultado
 }
 
 function gerarAutorizacaoPagamento(dados, usuario) {

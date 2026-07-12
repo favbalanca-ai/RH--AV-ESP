@@ -2132,18 +2132,257 @@ async function carregarResumoPgto() {
   if (cardAdiant) cardAdiant.style.display = d.adiantamentos?.length ? 'block' : 'none'
 }
 
+let adiantamentosCache = []
 function renderAdiantamentos(lista) {
+  adiantamentosCache = lista || []
   const el = document.getElementById('lista-adiantamentos')
   if (!el) return
-  if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum adiantamento</p>'; return }
-  el.innerHTML = lista.map(a => `
+  if (!adiantamentosCache.length) { el.innerHTML = '<p class="lista-vazia">Nenhum adiantamento</p>'; return }
+  el.innerHTML = adiantamentosCache.map((a, i) => `
     <div class="lista-item">
       <div class="lista-item-info">
         <div class="lista-item-nome">R$ ${formatarValor(a['VALOR'])}</div>
         <div class="lista-item-sub">${esc(a['DATA_PAGTO'])} · ${esc(a['FORMA_PAGTO'])}${a['OBSERVACOES']?' · '+esc(a['OBSERVACOES']):''}</div>
       </div>
-      <span class="badge badge-verde">Pago</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="badge badge-verde">Pago</span>
+        <button onclick="abrirReciboAdiantamento(${i})" title="Recibo"
+          style="background:var(--verde-claro);color:var(--verde-text);border:none;border-radius:8px;padding:6px 8px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px">
+          <i class="ti ti-receipt"></i>
+        </button>
+      </div>
     </div>`).join('')
+}
+
+// ── RECIBO DE ADIANTAMENTO ────────────────────────────────────────
+function abrirPdfBase64(b64, nome) {
+  const blob = new Blob([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], { type: 'application/pdf' })
+  const url  = URL.createObjectURL(blob)
+  window.open(url, '_blank')
+  setTimeout(() => URL.revokeObjectURL(url), 60000)
+}
+
+function abrirReciboAdiantamento(idx) {
+  const a = adiantamentosCache[idx]; if (!a) return
+  const modal = document.createElement('div')
+  modal.id = 'modal-recibo-op'
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:300;display:flex;align-items:flex-end;justify-content:center'
+  modal.innerHTML = `
+    <div style="background:var(--card-bg,#fff);border-radius:20px 20px 0 0;padding:20px 16px 32px;width:100%;max-width:480px">
+      <div style="width:36px;height:4px;background:#E5E7EB;border-radius:2px;margin:0 auto 16px"></div>
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:4px;text-align:center">Recibo de adiantamento</h3>
+      <p style="font-size:12px;color:var(--text-secondary);text-align:center;margin-bottom:16px">R$ ${formatarValor(a['VALOR'])} · ${esc(a['DATA_PAGTO']||'')}</p>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button onclick="document.getElementById('modal-recibo-op').remove();reciboAdiantamentoImpresso(${idx})"
+          style="background:#185FA5;color:#fff;border:none;border-radius:12px;padding:14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">🖨️</span>
+          <div style="text-align:left"><div>Imprimir / Baixar</div><div style="font-size:10px;opacity:0.85;font-weight:400">PDF para assinar à mão</div></div>
+        </button>
+        <button onclick="document.getElementById('modal-recibo-op').remove();abrirAssinaturaReciboAdiant(${idx})"
+          style="background:#1A5C2A;color:#fff;border:none;border-radius:12px;padding:14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">✍️</span>
+          <div style="text-align:left"><div>Assinar no app</div><div style="font-size:10px;opacity:0.85;font-weight:400">Assine e posicione a assinatura no PDF</div></div>
+        </button>
+        <button onclick="document.getElementById('modal-recibo-op').remove()" style="background:none;border:none;color:var(--text-secondary);font-size:13px;padding:10px;cursor:pointer">Cancelar</button>
+      </div>
+    </div>`
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove() })
+  document.body.appendChild(modal)
+}
+
+function dadosReciboAdiant(idx) {
+  const a = adiantamentosCache[idx]
+  return {
+    func_id: funcPgtoSelecionado?.['ID'], ano: a['ANO'],
+    valor: a['VALOR'], data_pagto: a['DATA_PAGTO'],
+    forma_pagto: a['FORMA_PAGTO'], observacoes: a['OBSERVACOES']
+  }
+}
+
+async function reciboAdiantamentoImpresso(idx) {
+  if (!funcPgtoSelecionado) return toast('❌ Selecione o funcionário', 'erro')
+  mostrarLoading('Gerando recibo...')
+  const res = await chamarGAS({ acao: 'gerar_recibo_adiantamento', dados: { ...dadosReciboAdiant(idx), modo: 'impresso' } })
+  esconderLoading()
+  if (res && res.ok && res.data?.pdf_base64) { abrirPdfBase64(res.data.pdf_base64); toast('✅ Recibo gerado', 'sucesso') }
+  else toast('❌ ' + ((res&&res.erro)||'Erro ao gerar recibo'), 'erro')
+}
+
+// ── Assinatura própria com posicionamento ─────────────────────────
+let _reciboSig = { b64: null, idx: null, x: 30, y: 72, w: 34 }
+
+function reciboPreviewHTML(func, a) {
+  return `
+    <div style="padding:6% 6%;font-family:Arial,sans-serif;color:#222;height:100%;box-sizing:border-box;font-size:2.6vw">
+      <div style="background:#1A5C2A;color:#fff;padding:4% 5%;border-radius:3px">
+        <div style="font-weight:bold;font-size:3.2vw">Fazenda Água Viva</div>
+        <div style="font-size:2vw;opacity:.85">Sistema SST — Recibo de Adiantamento de Comissão</div>
+      </div>
+      <div style="text-align:center;font-weight:bold;color:#1A5C2A;margin:5% 0 1%;font-size:3vw">RECIBO DE ADIANTAMENTO DE COMISSÃO</div>
+      <div style="text-align:center;font-weight:bold;color:#1A5C2A;font-size:4.4vw;margin-bottom:4%">R$ ${formatarValor(a['VALOR'])}</div>
+      <div style="text-align:justify;line-height:1.7;margin:3% 0">Recebi de <b>FAZENDA ÁGUA VIVA</b> a importância acima, a título de <b>adiantamento de comissão</b> referente ao exercício de <b>${esc(a['ANO']||'')}</b>, dando plena e geral quitação.</div>
+      <div style="background:#f6faf3;border:1px solid #d9e8cc;border-radius:5px;padding:4%;margin:4% 0">
+        <div style="margin:2% 0"><b>Funcionário:</b> ${esc(func['NOME_COMPLETO']||'')}</div>
+        <div style="margin:2% 0"><b>CPF:</b> ${esc(func['CPF']||'—')}</div>
+        <div style="margin:2% 0"><b>Forma de pagamento:</b> ${esc(a['FORMA_PAGTO']||'Pix')}</div>
+        <div style="margin:2% 0"><b>Data do pagamento:</b> ${esc(a['DATA_PAGTO']||'—')}</div>
+      </div>
+      <div style="margin-top:16%;text-align:center">
+        <div style="width:60%;border-top:1.5px solid #333;margin:0 auto 2%"></div>
+        <div style="font-weight:bold">${esc(func['NOME_COMPLETO']||'')}</div>
+        <div style="font-size:2vw;color:#555">Assinatura do funcionário</div>
+      </div>
+    </div>`
+}
+
+function abrirAssinaturaReciboAdiant(idx) {
+  if (!funcPgtoSelecionado) return toast('❌ Selecione o funcionário', 'erro')
+  _reciboSig = { b64: null, idx, x: 30, y: 72, w: 34 }
+  const func = funcPgtoSelecionado
+  const a = adiantamentosCache[idx]
+
+  const modal = document.createElement('div')
+  modal.id = 'modal-recibo-assin'
+  modal.style.cssText = 'position:fixed;inset:0;background:#0d1117;z-index:400;display:flex;flex-direction:column'
+  modal.innerHTML = `
+    <div style="background:#1A5C2A;color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+      <div><div style="font-size:14px;font-weight:600">✍️ Recibo de adiantamento</div><div style="font-size:10px;opacity:.7">Assine e arraste para posicionar</div></div>
+      <button onclick="document.getElementById('modal-recibo-assin').remove()" style="background:none;border:none;color:rgba(255,255,255,.7);font-size:13px;cursor:pointer">✕ Fechar</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;align-items:center;gap:12px">
+      <div style="color:#fff;font-size:11px;opacity:.75;text-align:center;max-width:420px">1) Toque em <b>Assinar</b> · 2) Arraste a assinatura para o local desejado · 3) Gere o recibo</div>
+      <div id="recibo-preview" style="position:relative;width:100%;max-width:420px;aspect-ratio:210/297;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.4);touch-action:none">
+        ${reciboPreviewHTML(func, a)}
+        <div id="recibo-sig-box" style="display:none;position:absolute;left:30%;top:72%;width:34%;cursor:move;border:1.5px dashed rgba(26,92,42,.6);border-radius:4px;background:rgba(26,92,42,.06);touch-action:none">
+          <img id="recibo-sig-img" style="width:100%;display:block;pointer-events:none" src="">
+        </div>
+      </div>
+      <div style="width:100%;max-width:420px;display:flex;flex-direction:column;gap:8px">
+        <div id="recibo-size-wrap" style="display:none;align-items:center;gap:8px;color:#fff;font-size:11px">
+          <span>Tamanho</span>
+          <input id="recibo-size" type="range" min="15" max="60" value="34" style="flex:1" oninput="ajustarTamanhoSigRecibo(this.value)">
+        </div>
+        <button id="recibo-btn-assinar" onclick="abrirPadSigRecibo()" style="background:#fff;color:#1A5C2A;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:600;cursor:pointer">✍️ Assinar</button>
+        <button id="recibo-btn-gerar" onclick="gerarReciboAssinado()" disabled style="background:#555;color:#999;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:600;cursor:not-allowed">Gerar recibo assinado</button>
+      </div>
+    </div>
+    <div id="recibo-pad" style="display:none;position:absolute;inset:0;background:#1A1A1A;flex-direction:column;z-index:10">
+      <div style="background:#1A5C2A;color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:14px;font-weight:600">Assine com o dedo</div>
+        <button onclick="fecharPadSigRecibo()" style="background:none;border:none;color:rgba(255,255,255,.6);font-size:12px;cursor:pointer">✕ Cancelar</button>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;gap:10px">
+        <canvas id="recibo-canvas" style="background:#fff;border-radius:10px;touch-action:none;width:100%;max-width:600px"></canvas>
+        <div style="display:flex;gap:10px;width:100%;max-width:600px">
+          <button onclick="limparPadSigRecibo()" style="flex:1;background:#333;color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:600;cursor:pointer">🗑 Limpar</button>
+          <button id="recibo-btn-ok" onclick="salvarPadSigRecibo()" disabled style="flex:2;background:#555;color:#999;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:not-allowed">✅ Usar assinatura</button>
+        </div>
+      </div>
+    </div>`
+  document.body.appendChild(modal)
+  configurarDragSigRecibo()
+}
+
+// Canvas de assinatura
+let _rcv, _rctx, _rDraw = false, _rTraco = false, _rlx = 0, _rly = 0
+function abrirPadSigRecibo() {
+  document.getElementById('recibo-pad').style.display = 'flex'
+  setTimeout(() => {
+    _rcv = document.getElementById('recibo-canvas')
+    const w = _rcv.parentElement.clientWidth - 24
+    _rcv.width = Math.min(w, 600); _rcv.height = 260
+    _rctx = _rcv.getContext('2d')
+    _rctx.strokeStyle = '#1A1A1A'; _rctx.lineWidth = 2.8; _rctx.lineCap = 'round'; _rctx.lineJoin = 'round'
+    limparPadSigRecibo()
+    const pos = e => { const r = _rcv.getBoundingClientRect(), s = e.touches ? e.touches[0] : e
+      return { x: (s.clientX - r.left) * _rcv.width / r.width, y: (s.clientY - r.top) * _rcv.height / r.height } }
+    const start = e => { e.preventDefault(); _rDraw = true; const p = pos(e); _rlx = p.x; _rly = p.y }
+    const move = e => { e.preventDefault(); if (!_rDraw) return; const p = pos(e)
+      _rctx.beginPath(); _rctx.moveTo(_rlx, _rly); _rctx.lineTo(p.x, p.y); _rctx.stroke(); _rlx = p.x; _rly = p.y
+      if (!_rTraco) { _rTraco = true; const b = document.getElementById('recibo-btn-ok'); b.disabled = false; b.style.cssText = b.style.cssText.replace('#555','#1A5C2A').replace('#999','#fff').replace('not-allowed','pointer') } }
+    const end = e => { e.preventDefault(); _rDraw = false }
+    _rcv.onmousedown = start; _rcv.onmousemove = move; _rcv.onmouseup = end
+    _rcv.ontouchstart = start; _rcv.ontouchmove = move; _rcv.ontouchend = end
+  }, 60)
+}
+function limparPadSigRecibo() { if (_rctx) _rctx.clearRect(0,0,_rcv.width,_rcv.height); _rTraco = false
+  const b = document.getElementById('recibo-btn-ok'); if (b) { b.disabled = true; b.style.background = '#555'; b.style.color = '#999'; b.style.cursor = 'not-allowed' } }
+function fecharPadSigRecibo() { document.getElementById('recibo-pad').style.display = 'none' }
+function salvarPadSigRecibo() {
+  if (!_rTraco) return
+  const tmp = document.createElement('canvas'); tmp.width = _rcv.width; tmp.height = _rcv.height
+  const c = tmp.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0,0,tmp.width,tmp.height); c.drawImage(_rcv,0,0)
+  _reciboSig.b64 = recortarSigRecibo(tmp)
+  const box = document.getElementById('recibo-sig-box')
+  document.getElementById('recibo-sig-img').src = 'data:image/png;base64,' + _reciboSig.b64
+  box.style.display = 'block'
+  document.getElementById('recibo-size-wrap').style.display = 'flex'
+  document.getElementById('recibo-btn-assinar').textContent = '🔄 Assinar novamente'
+  const g = document.getElementById('recibo-btn-gerar'); g.disabled = false; g.style.background = '#1A5C2A'; g.style.color = '#fff'; g.style.cursor = 'pointer'
+  fecharPadSigRecibo()
+}
+function recortarSigRecibo(canvas) {
+  const ctx = canvas.getContext('2d'), d = ctx.getImageData(0,0,canvas.width,canvas.height).data
+  let minX = canvas.width, maxX = 0, minY = canvas.height, maxY = 0
+  for (let y = 0; y < canvas.height; y++) for (let x = 0; x < canvas.width; x++) {
+    const i = (y*canvas.width+x)*4
+    if (d[i] < 240 || d[i+1] < 240 || d[i+2] < 240) { if (x<minX)minX=x; if (x>maxX)maxX=x; if (y<minY)minY=y; if (y>maxY)maxY=y }
+  }
+  if (maxX < minX) return canvas.toDataURL('image/png').split(',')[1]
+  const pad = 10
+  minX = Math.max(0,minX-pad); maxX = Math.min(canvas.width,maxX+pad); minY = Math.max(0,minY-pad); maxY = Math.min(canvas.height,maxY+pad)
+  const out = document.createElement('canvas'); out.width = maxX-minX; out.height = maxY-minY
+  out.getContext('2d').drawImage(canvas, minX, minY, out.width, out.height, 0, 0, out.width, out.height)
+  return out.toDataURL('image/png').split(',')[1]
+}
+
+// Drag da assinatura sobre o preview
+function configurarDragSigRecibo() {
+  const box = document.getElementById('recibo-sig-box'), prev = document.getElementById('recibo-preview')
+  if (!box || !prev) return
+  let dragging = false, offX = 0, offY = 0
+  const startDrag = e => {
+    dragging = true; const s = e.touches ? e.touches[0] : e
+    const br = box.getBoundingClientRect()
+    offX = s.clientX - br.left; offY = s.clientY - br.top
+    e.preventDefault()
+  }
+  const moveDrag = e => {
+    if (!dragging) return
+    const s = e.touches ? e.touches[0] : e
+    const pr = prev.getBoundingClientRect()
+    let left = (s.clientX - offX - pr.left) / pr.width * 100
+    let top  = (s.clientY - offY - pr.top) / pr.height * 100
+    left = Math.max(0, Math.min(left, 100 - _reciboSig.w))
+    top  = Math.max(0, Math.min(top, 98))
+    _reciboSig.x = left; _reciboSig.y = top
+    box.style.left = left + '%'; box.style.top = top + '%'
+    e.preventDefault()
+  }
+  const endDrag = () => { dragging = false }
+  box.onmousedown = startDrag; document.addEventListener('mousemove', moveDrag); document.addEventListener('mouseup', endDrag)
+  box.ontouchstart = startDrag; box.ontouchmove = moveDrag; box.ontouchend = endDrag
+}
+function ajustarTamanhoSigRecibo(v) {
+  _reciboSig.w = parseInt(v)
+  const box = document.getElementById('recibo-sig-box')
+  if (box) { box.style.width = v + '%'; if (_reciboSig.x + _reciboSig.w > 100) { _reciboSig.x = 100 - _reciboSig.w; box.style.left = _reciboSig.x + '%' } }
+}
+
+async function gerarReciboAssinado() {
+  if (!_reciboSig.b64) return toast('❌ Assine primeiro', 'erro')
+  mostrarLoading('Gerando recibo assinado...')
+  const res = await chamarGAS({ acao: 'gerar_recibo_adiantamento', dados: {
+    ...dadosReciboAdiant(_reciboSig.idx), modo: 'assinatura',
+    assinatura_base64: _reciboSig.b64,
+    sig_x: Math.round(_reciboSig.x), sig_y: Math.round(_reciboSig.y), sig_w: _reciboSig.w
+  }})
+  esconderLoading()
+  if (res && res.ok && res.data?.pdf_base64) {
+    document.getElementById('modal-recibo-assin')?.remove()
+    abrirPdfBase64(res.data.pdf_base64)
+    toast(res.data.link ? '✅ Recibo assinado e salvo no Drive' : '✅ Recibo gerado', 'sucesso')
+  } else toast('❌ ' + ((res&&res.erro)||'Erro ao gerar recibo'), 'erro')
 }
 
 async function registrarAdiantamento() {
