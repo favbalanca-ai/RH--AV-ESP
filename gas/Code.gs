@@ -494,13 +494,15 @@ function sincronizarPendentes() {
         const status = consultarStatusZapSign(token)
         if (status === 'signed') {
           atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', token, { 'STATUS': 'Assinado', 'DATA ASSINATURA': hoje, 'LINK DOC ASSINADO': '' })
+          const tipoF = folha['TIPO'] || 'Folha'
+          // Confirma as férias (status + evento no Calendar) ANTES do PDF: se o
+          // download/save do PDF falhar, a confirmação de férias não pode ser perdida.
+          if (tipoF === 'Ferias') { try { confirmarFeriasAssinada(token) } catch(fe) { erros.push('Ferias ' + token.substring(0,8) + ': ' + fe.message) } }
           try {
             const comp = String(folha['COMPETÊNCIA'] || 'semdata').replace(/\//g,'-')
-            const tipoF = folha['TIPO'] || 'Folha'
             const subF = tipoF === 'Ferias' ? 'FERIAS' : 'FOLHA_PAGAMENTO'
             const link = salvarPdfNoDrive(folha['ID FUNC.'], folha['FUNCIONÁRIO'], subF, tipoF + '_' + comp + '_' + token.substring(0,8) + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(token))
             atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', token, { 'LINK DOC ASSINADO': link })
-            if (tipoF === 'Ferias') confirmarFeriasAssinada(token)
           } catch(de) {}
           atualizados++
         } else if (status === 'refused') {
@@ -510,8 +512,44 @@ function sincronizarPendentes() {
       } catch(e) { erros.push('Folha ' + token.substring(0,8) + ': ' + e.message) }
     })
 
+  // Reconciliação de férias: pega registros que ficaram 'Pendente' na aba FERIAS
+  // mesmo já assinados no ZapSign (ex.: falha anterior ao salvar o PDF).
+  try { atualizados += reconciliarFerias(erros) } catch(e) { erros.push('ReconcFerias: ' + e.message) }
+
   logAcao('SYNC', 'SINCRONIZACAO', 'Verificados: ' + verificados + ' | Atualizados: ' + atualizados + ' | Erros: ' + erros.length)
   return { verificados, atualizados, pendentes: verificados - atualizados, erros, horario: Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm:ss') }
+}
+
+// Auto-cura: confirma na aba FERIAS todo período ainda 'Pendente' cujo documento
+// já está assinado (verifica direto no ZapSign, ou pela FOLHA já 'Assinado').
+function reconciliarFerias(erros) {
+  erros = erros || []
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_FERIAS)
+  if (!sheet) return 0
+  var vals = sheet.getDataRange().getValues()
+  if (vals.length < 2) return 0
+  var hdrs = vals[0]
+  var iTok = hdrs.indexOf('REF_TOKEN'), iStatus = hdrs.indexOf('STATUS')
+  if (iTok < 0 || iStatus < 0) return 0
+
+  // Índice de tokens de folha já assinados (evita chamada ao ZapSign quando possível)
+  var folhaAssinada = {}
+  lerAbaComoObjetos(CONFIG.ABAS.FOLHA).forEach(function (f) {
+    if (f['STATUS'] === 'Assinado' && f['ZAPSIGN_DOC']) folhaAssinada[String(f['ZAPSIGN_DOC']).trim()] = true
+  })
+
+  var corrigidos = 0
+  for (var i = 1; i < vals.length; i++) {
+    var status = vals[i][iStatus]
+    var token = String(vals[i][iTok] || '').trim()
+    if (!token || (status !== 'Pendente' && status !== '')) continue
+    try {
+      var assinado = folhaAssinada[token]
+      if (!assinado) { assinado = (consultarStatusZapSign(token) === 'signed') }
+      if (assinado) { confirmarFeriasAssinada(token); corrigidos++ }
+    } catch (e) { erros.push('Ferias ' + token.substring(0,8) + ': ' + e.message) }
+  }
+  return corrigidos
 }
 
 function syncAutomatico() { sincronizarPendentes() }
