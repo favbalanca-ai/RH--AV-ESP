@@ -282,32 +282,38 @@ html, body {
 .pendencia-dot.info     { background: var(--blue-text); }
 
 /* ── AÇÕES RÁPIDAS ──────────────────────────────────────────────── */
-.acoes-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.acoes-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
 .btn-acao {
+  position: relative;
   background: var(--card-bg);
   border: 0.5px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 11px 12px;
+  border-radius: 16px;
+  padding: 14px 8px 12px;
   cursor: pointer;
-  display: flex; flex-direction: row; align-items: center; gap: 10px;
-  text-align: left; transition: all var(--transition);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  text-align: center;
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
   box-shadow: var(--shadow-card);
+  -webkit-tap-highlight-color: transparent;
 }
-.btn-acao:active { transform: scale(0.96); background: var(--verde-claro); border-color: rgba(26,92,42,0.2); }
-.btn-acao:hover { box-shadow: var(--shadow-pop); }
+.btn-acao:active { transform: scale(0.95); }
+.btn-acao:hover { box-shadow: var(--shadow-pop); transform: translateY(-2px); }
 .acao-icon {
-  width: 36px; height: 36px;
-  border-radius: 10px;
+  width: 46px; height: 46px;
+  border-radius: 14px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 17px;
+  font-size: 22px;
+  transition: transform var(--transition);
 }
+.btn-acao:active .acao-icon { transform: scale(0.92); }
 .acao-icon.green  { background: var(--verde-claro);  color: var(--verde-text); }
 .acao-icon.blue   { background: var(--blue-bg);      color: var(--blue-text); }
 .acao-icon.amber  { background: var(--amber-bg);     color: var(--amber-text); }
 .acao-icon.coral  { background: var(--coral-bg);     color: var(--coral-text); }
 .acao-icon.purple { background: var(--purple-bg);    color: var(--purple-text); }
 .acao-icon.red    { background: var(--red-bg);       color: var(--red-text); }
-.btn-acao span.label { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.btn-acao span.label { font-size: 11px; font-weight: 600; color: var(--text-primary); line-height: 1.25; }
+@media (max-width: 360px) { .acoes-grid { grid-template-columns: repeat(2, 1fr); } }
 
 /* ── BUSCA ──────────────────────────────────────────────────────── */
 .search-bar {
