@@ -67,6 +67,8 @@ function doPost(e) {
       case 'listar_epi_estoque':          return respOk(listarEpiEstoque())
       case 'listar_epi_entregas':         return respOk(listarEpiEntregas())
       case 'entregar_epi':                return respOk(entregarEpi(body.dados, usuario))
+      case 'listar_epi_acumulados':       return respOk(listarEpiAcumulados())
+      case 'fechar_mes_epi':              return respOk(fecharMesEpi(body.dados, usuario))
       case 'enviar_folha':                return respOk(enviarFolha(body.dados, usuario))
       case 'listar_folhas':               return respOk(listarFolhas())
       case 'sincronizar':                 return respOk(sincronizarPendentes())
@@ -163,6 +165,27 @@ function atualizarCelulasPorId(nomeAba, colunaId, valorId, atualizacoes) {
   return false
 }
 
+// Igual a atualizarCelulasPorId, mas atualiza TODAS as linhas com o mesmo valor
+// (usado quando vários registros compartilham um doc, ex.: recibo mensal de EPI).
+function atualizarTodasCelulasPorId(nomeAba, colunaId, valorId, atualizacoes) {
+  const sheet = getSheet(nomeAba)
+  const dados = sheet.getDataRange().getValues()
+  const headers = dados[0]
+  const idIdx = headers.indexOf(colunaId)
+  if (idIdx === -1) return 0
+  let n = 0
+  for (let i = 1; i < dados.length; i++) {
+    if (String(dados[i][idIdx]) === String(valorId)) {
+      Object.entries(atualizacoes).forEach(([col, val]) => {
+        const cIdx = headers.indexOf(col)
+        if (cIdx !== -1) sheet.getRange(i + 1, cIdx + 1).setValue(val)
+      })
+      n++
+    }
+  }
+  return n
+}
+
 function proximoId(nomeAba, colunaId) {
   const dados = lerAbaComoObjetos(nomeAba)
   return dados.reduce((mx, row) => Math.max(mx, parseInt(row[colunaId]) || 0), 0) + 1
@@ -242,6 +265,28 @@ function entregarEpi(dados, usuario) {
   })
 
   const hoje = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy')
+
+  // MODO ACUMULAR: grava as entregas do mês sem enviar para assinatura.
+  // O documento consolidado é enviado depois via fecharMesEpi().
+  if (dados.metodo_assinatura === 'acumular') {
+    const nums = []
+    dados.itens.forEach(item => {
+      const num = (lerAbaComoObjetos(CONFIG.ABAS.EPI_ENTREGAS).length + 1).toString().padStart(4,'0')
+      adicionarLinha(CONFIG.ABAS.EPI_ENTREGAS, [
+        num, hoje, dados.func_id, func['NOME_COMPLETO'],
+        item.cod, item.descricao, item.ca, item.quantidade,
+        dados.motivo, 'Acumulado', '', '', '', 'Acumulado no mês',
+      ])
+      nums.push(num)
+    })
+    logAcao(usuario, 'EPI_ACUMULADO', 'Func ' + dados.func_id + ' | ' + dados.itens.map(i=>i.cod).join(','))
+    return {
+      numeros_registro: nums, acumulado: true,
+      mensagem: dados.itens.length + ' EPI(s) registrados no mês para ' +
+        (func['NOME_CURTO'] || func['NOME_COMPLETO'].split(' ')[0]) + '. Feche o mês para enviar à assinatura.',
+    }
+  }
+
   const pdfBase64 = gerarReciboEpiPdf(func, dados.itens, dados.motivo, usuario)
   const nomeDoc   = 'Recibo_EPI_' + (func['NOME_CURTO'] || func['NOME_COMPLETO']) + '_' + hoje.replace(/\//g,'-')
   const usarZapSign = dados.metodo_assinatura !== 'proprio'
@@ -271,6 +316,78 @@ function entregarEpi(dados, usuario) {
       : 'Recibo gerado para ' + (func['NOME_CURTO'] || func['NOME_COMPLETO'].split(' ')[0]) + '. Envie o link de assinatura.',
     pdf_base64:        pdfBase64,
     metodo_assinatura: dados.metodo_assinatura || 'zapsign',
+  }
+}
+
+// Lista os EPIs acumulados (ainda não enviados p/ assinatura), agrupados por funcionário.
+function listarEpiAcumulados() {
+  const acum = lerAbaComoObjetos(CONFIG.ABAS.EPI_ENTREGAS).filter(e => e['ASSINADO?'] === 'Acumulado')
+  const porFunc = {}
+  acum.forEach(e => {
+    const id = String(e['ID FUNC.'])
+    if (!porFunc[id]) porFunc[id] = { func_id: id, nome: e['FUNCIONÁRIO'], itens: [] }
+    porFunc[id].itens.push({
+      cod: e['CÓD. EPI'] || '', descricao: e['DESCRIÇÃO DO EPI'] || '',
+      ca: e['Nº CA'] || '', quantidade: e['QUANTIDADE'] || 1,
+      data: e['DATA ENTREGA'] || '', motivo: e['MOTIVO ENTREGA'] || '',
+    })
+  })
+  return Object.keys(porFunc).map(k => porFunc[k])
+}
+
+// Fecha o mês: consolida os EPIs acumulados de um funcionário em UM recibo e
+// envia para assinatura (ZapSign) ou gera o PDF p/ assinatura própria.
+function fecharMesEpi(dados, usuario) {
+  const func = listarFuncionarios().find(f => String(f['ID']) === String(dados.func_id))
+  if (!func) throw new Error('Funcionário não encontrado')
+
+  const sheet = getSheet(CONFIG.ABAS.EPI_ENTREGAS)
+  const vals  = sheet.getDataRange().getValues()
+  const hdrs  = vals[0]
+  const idFuncIdx = hdrs.indexOf('ID FUNC.')
+  const statusIdx = hdrs.indexOf('ASSINADO?')
+  const zapIdx    = hdrs.indexOf('ZAPSIGN_DOC')
+  const codIdx    = hdrs.indexOf('CÓD. EPI')
+  const descIdx   = hdrs.indexOf('DESCRIÇÃO DO EPI')
+  const caIdx     = hdrs.indexOf('Nº CA')
+  const qtdIdx    = hdrs.indexOf('QUANTIDADE')
+
+  const rowsIdx = [], itens = []
+  for (let r = 1; r < vals.length; r++) {
+    if (String(vals[r][idFuncIdx]) === String(dados.func_id) && String(vals[r][statusIdx]).trim() === 'Acumulado') {
+      rowsIdx.push(r)
+      itens.push({ cod: vals[r][codIdx], descricao: vals[r][descIdx], ca: vals[r][caIdx], quantidade: vals[r][qtdIdx] })
+    }
+  }
+  if (!itens.length) throw new Error('Nenhum EPI acumulado para este funcionário')
+
+  const mesRef = dados.competencia || Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'MM/yyyy')
+  const motivo = 'Entregas do mês ' + mesRef
+  const pdfBase64 = gerarReciboEpiPdf(func, itens, motivo, usuario)
+  const nomeDoc = 'Recibo_EPI_MENSAL_' + mesRef.replace(/\//g,'-') + '_' + (func['NOME_CURTO'] || func['NOME_COMPLETO'])
+
+  if (dados.metodo_assinatura === 'proprio') {
+    // Marca as linhas como aguardando; confirmarAssinatura() as fecha todas juntas.
+    rowsIdx.forEach(r => { sheet.getRange(r + 1, statusIdx + 1).setValue('Aguardando Assinatura') })
+    logAcao(usuario, 'EPI_FECHAR_MES', 'Func ' + dados.func_id + ' | ' + itens.length + ' itens | ' + mesRef + ' | próprio')
+    return {
+      pdf_base64: pdfBase64, itens: itens, motivo: motivo, consolidado: true, metodo_assinatura: 'proprio',
+      mensagem: 'Recibo mensal gerado para ' + (func['NOME_CURTO'] || func['NOME_COMPLETO'].split(' ')[0]) + '. Envie o link de assinatura.',
+    }
+  }
+
+  const zap = enviarParaZapSign(pdfBase64, nomeDoc, func['NOME_COMPLETO'], func['TELEFONE'])
+  rowsIdx.forEach(r => {
+    sheet.getRange(r + 1, statusIdx + 1).setValue('Pendente')
+    if (zapIdx >= 0) sheet.getRange(r + 1, zapIdx + 1).setValue(zap.token || '')
+  })
+  try { salvarPdfNoDrive(dados.func_id, func['NOME_COMPLETO'], 'EPI_RECIBOS', nomeDoc + '_PENDENTE.pdf', pdfBase64) }
+  catch(e) { logAcao(usuario, 'ERRO_DRIVE', e.message) }
+  logAcao(usuario, 'EPI_FECHAR_MES', 'Func ' + dados.func_id + ' | ' + itens.length + ' itens | ' + mesRef + ' | ZapSign: ' + zap.token)
+  return {
+    consolidado: true, link_assinatura: zap.signUrl || '',
+    mensagem: 'Recibo mensal (' + itens.length + ' itens) enviado para WhatsApp de ' +
+      (func['NOME_CURTO'] || func['NOME_COMPLETO'].split(' ')[0]) + '. Aguardando assinatura.',
   }
 }
 
@@ -313,10 +430,10 @@ function webhookZapSign(body) {
   const entregas = lerAbaComoObjetos(CONFIG.ABAS.EPI_ENTREGAS)
   const entrega = entregas.find(e => String(e['ZAPSIGN_DOC']).trim() === String(docToken).trim())
   if (entrega) {
-    atualizarCelulasPorId(CONFIG.ABAS.EPI_ENTREGAS, 'ZAPSIGN_DOC', docToken, { 'ASSINADO?': 'Sim', 'DATA ASSINATURA': hoje, 'LINK DOC ASSINADO': '' })
+    atualizarTodasCelulasPorId(CONFIG.ABAS.EPI_ENTREGAS, 'ZAPSIGN_DOC', docToken, { 'ASSINADO?': 'Sim', 'DATA ASSINATURA': hoje, 'LINK DOC ASSINADO': '' })
     try {
       const link = salvarPdfNoDrive(entrega['ID FUNC.'], entrega['FUNCIONÁRIO'], 'EPI_RECIBOS', 'Recibo_EPI_' + hoje.replace(/\//g,'-') + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(docToken))
-      atualizarCelulasPorId(CONFIG.ABAS.EPI_ENTREGAS, 'ZAPSIGN_DOC', docToken, { 'LINK DOC ASSINADO': link })
+      atualizarTodasCelulasPorId(CONFIG.ABAS.EPI_ENTREGAS, 'ZAPSIGN_DOC', docToken, { 'LINK DOC ASSINADO': link })
     } catch(e) { logAcao('WEBHOOK', 'DRIVE_OPCIONAL', e.message) }
     logAcao('WEBHOOK', 'ASSINATURA_EPI', 'Doc: ' + docToken)
     return { ok: true, tipo: 'epi' }
@@ -465,22 +582,27 @@ function sincronizarPendentes() {
   const hoje = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy')
   let verificados = 0, atualizados = 0, erros = []
 
+  // Um token pode cobrir vários registros (recibo mensal consolidado): checa
+  // cada token uma única vez e atualiza TODAS as linhas que o compartilham.
+  const epiTokensVistos = {}
   lerAbaComoObjetos(CONFIG.ABAS.EPI_ENTREGAS)
     .filter(e => (e['ASSINADO?'] === 'Pendente' || e['ASSINADO?'] === '') && e['ZAPSIGN_DOC'])
     .forEach(entrega => {
-      verificados++
       const token = String(entrega['ZAPSIGN_DOC']).trim()
+      if (epiTokensVistos[token]) return
+      epiTokensVistos[token] = true
+      verificados++
       try {
         const status = consultarStatusZapSign(token)
         if (status === 'signed') {
-          atualizarCelulasPorId(CONFIG.ABAS.EPI_ENTREGAS, 'ZAPSIGN_DOC', token, { 'ASSINADO?': 'Sim', 'DATA ASSINATURA': hoje, 'LINK DOC ASSINADO': '' })
+          atualizarTodasCelulasPorId(CONFIG.ABAS.EPI_ENTREGAS, 'ZAPSIGN_DOC', token, { 'ASSINADO?': 'Sim', 'DATA ASSINATURA': hoje, 'LINK DOC ASSINADO': '' })
           try {
             const link = salvarPdfNoDrive(entrega['ID FUNC.'], entrega['FUNCIONÁRIO'], 'EPI_RECIBOS', 'Recibo_EPI_' + hoje.replace(/\//g,'-') + '_' + token.substring(0,8) + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(token))
-            atualizarCelulasPorId(CONFIG.ABAS.EPI_ENTREGAS, 'ZAPSIGN_DOC', token, { 'LINK DOC ASSINADO': link })
+            atualizarTodasCelulasPorId(CONFIG.ABAS.EPI_ENTREGAS, 'ZAPSIGN_DOC', token, { 'LINK DOC ASSINADO': link })
           } catch(de) {}
           atualizados++
         } else if (status === 'refused') {
-          atualizarCelulasPorId(CONFIG.ABAS.EPI_ENTREGAS, 'ZAPSIGN_DOC', token, { 'ASSINADO?': 'Recusado', 'DATA ASSINATURA': hoje })
+          atualizarTodasCelulasPorId(CONFIG.ABAS.EPI_ENTREGAS, 'ZAPSIGN_DOC', token, { 'ASSINADO?': 'Recusado', 'DATA ASSINATURA': hoje })
           atualizados++
         }
       } catch(e) { erros.push('EPI ' + token.substring(0,8) + ': ' + e.message) }

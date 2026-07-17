@@ -948,7 +948,98 @@ async function carregarEpi() {
   ])
   esconderLoading()
   if (resEst && resEst.ok) { estoque = resEst.data; preencherSelectsOcultos(); renderEstoqueModal(estoque) }
-  if (resEnt && resEnt.ok) renderEntregas(resEnt.data.slice(0,15))
+  if (resEnt && resEnt.ok) {
+    const dados = resEnt.data
+    renderEpiAcumulados(dados.filter(e => e['ASSINADO?'] === 'Acumulado'))
+    renderEntregas(dados.filter(e => e['ASSINADO?'] !== 'Acumulado').slice(0,15))
+  }
+}
+
+// ── EPIs acumulados no mês → fechar mês ───────────────────────────
+function renderEpiAcumulados(acumulados) {
+  const el = document.getElementById('epi-acumulados-wrap')
+  if (!el) return
+  if (!acumulados || !acumulados.length) { el.innerHTML = ''; return }
+
+  // Agrupa por funcionário
+  const porFunc = {}
+  acumulados.forEach(e => {
+    const id = String(e['ID FUNC.'])
+    if (!porFunc[id]) porFunc[id] = { func_id: id, nome: e['FUNCIONÁRIO'] || '?', itens: [] }
+    porFunc[id].itens.push(e)
+  })
+  const grupos = Object.values(porFunc)
+
+  el.innerHTML = `
+    <div class="card" style="border:0.5px solid rgba(133,79,11,0.25)">
+      <div class="card-titulo" style="color:var(--amber-text)"><i class="ti ti-package"></i> Acumulados no mês — fechar e assinar</div>
+      ${grupos.map(g => `
+        <div style="background:var(--amber-bg);border-radius:var(--radius-md);padding:10px;margin-bottom:8px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="avatar" style="background:rgba(133,79,11,0.15);color:var(--amber-text)">${getIniciais(g.nome)}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.nome)}</div>
+              <div style="font-size:10px;color:var(--amber-text)">${g.itens.length} EPI(s) acumulado(s)</div>
+            </div>
+            <button onclick="fecharMesEpiUI('${g.func_id}')" style="background:var(--verde);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:5px">
+              <i class="ti ti-file-check"></i> Fechar mês
+            </button>
+          </div>
+          <div style="font-size:10px;color:var(--text-secondary);margin-top:6px;padding-left:44px">${g.itens.map(i => esc((i['DESCRIÇÃO DO EPI']||'') + (i['QUANTIDADE']>1?' ('+i['QUANTIDADE']+')':''))).join(' · ')}</div>
+        </div>`).join('')}
+    </div>`
+}
+
+function fecharMesEpiUI(funcId) {
+  const modal = document.createElement('div')
+  modal.id = 'modal-fechar-mes'
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:300;display:flex;align-items:flex-end;justify-content:center'
+  modal.innerHTML = `
+    <div style="background:var(--card-bg,#fff);border-radius:20px 20px 0 0;padding:20px 16px 32px;width:100%;max-width:480px">
+      <div style="width:36px;height:4px;background:#E5E7EB;border-radius:2px;margin:0 auto 16px"></div>
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:6px;text-align:center">Fechar mês — enviar recibo</h3>
+      <p style="font-size:12px;color:var(--text-secondary);text-align:center;margin-bottom:16px">Consolida os EPIs do mês em um único documento</p>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button onclick="document.getElementById('modal-fechar-mes').remove();executarFecharMes('${funcId}','zapsign')" style="background:#1A5C2A;color:#fff;border:none;border-radius:12px;padding:14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">📲</span>
+          <div style="text-align:left"><div>ZapSign — WhatsApp automático</div><div style="font-size:10px;opacity:0.8;font-weight:400">Link enviado automaticamente</div></div>
+        </button>
+        <button onclick="document.getElementById('modal-fechar-mes').remove();executarFecharMes('${funcId}','proprio')" style="background:#E6F1FB;color:#185FA5;border:0.5px solid rgba(24,95,165,0.2);border-radius:12px;padding:14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">✍️</span>
+          <div style="text-align:left"><div>Assinatura própria</div><div style="font-size:10px;opacity:0.7;font-weight:400">Gera link para assinar no celular</div></div>
+        </button>
+        <button onclick="document.getElementById('modal-fechar-mes').remove()" style="background:none;border:none;color:var(--text-secondary);font-size:13px;padding:10px;cursor:pointer">Cancelar</button>
+      </div>
+    </div>`
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove() })
+  document.body.appendChild(modal)
+}
+
+async function executarFecharMes(funcId, metodo) {
+  const func = funcionarios.find(f => String(f['ID']) === String(funcId))
+  mostrarLoading('Gerando recibo mensal...')
+  const res = await chamarGAS({ acao: 'fechar_mes_epi', dados: { func_id: funcId, metodo_assinatura: metodo } })
+  if (metodo === 'proprio' && res && res.ok && res.data?.pdf_base64) {
+    mostrarLoading('Gerando link de assinatura...')
+    const res2 = await chamarGAS({ acao: 'gerar_link_assinatura', dados: {
+      tipo: 'EPI', func_id: funcId,
+      referencia: res.data.motivo || 'Entregas do mês',
+      pdf_base64: res.data.pdf_base64, itens: res.data.itens || [],
+      motivo: res.data.motivo || 'Entregas do mês',
+      func_cpf: func?.['CPF'] || '', func_funcao: func?.['FUNCAO'] || '', func_unidade: func?.['UNIDADE'] || '',
+    }})
+    esconderLoading()
+    if (res2 && res2.ok) mostrarLinkAssinaturaEpi(res2.data.link, res2.data.mensagem, res2.data.wa_link)
+    else toast('❌ Erro ao gerar link', 'erro')
+    carregarEpi()
+    return
+  }
+  esconderLoading()
+  if (res && res.ok) {
+    if (res.data.link_assinatura) mostrarLinkAssinaturaEpi(res.data.link_assinatura, res.data.mensagem, '')
+    else toast('✅ ' + res.data.mensagem, 'sucesso')
+    carregarEpi()
+  } else toast('❌ ' + ((res&&res.erro)||'Erro ao fechar o mês'), 'erro')
 }
 
 function toggleEstoqueModal() {
@@ -1092,7 +1183,7 @@ async function enviarEpi(metodo) {
   const btn = document.getElementById('btn-enviar-epi')
   const motivo = motivoEpiSelecionado || 'Admissional'
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Enviando...'
-  mostrarLoading('Gerando recibo PDF...')
+  mostrarLoading(metodo === 'acumular' ? 'Registrando no mês...' : 'Gerando recibo PDF...')
 
   const res = await chamarGAS({ acao: 'entregar_epi', dados: {
     func_id: funcEpiSelecionado['ID'], itens: itensEpiSel, motivo,
@@ -1260,6 +1351,13 @@ function mostrarModalEnvio(tipo, dadosEnvio) {
             <div style="font-size:10px;opacity:0.7;font-weight:400">Gera link para assinar com o dedo no celular</div>
           </div>
         </button>
+        ${tipo === 'epi' ? `<button onclick="document.getElementById('modal-envio').remove();enviarEpi('acumular')" style="background:#FFF3E0;color:#854F0B;border:0.5px solid rgba(133,79,11,0.2);border-radius:12px;padding:14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">📦</span>
+          <div style="text-align:left">
+            <div>Acumular no mês — assinar depois</div>
+            <div style="font-size:10px;opacity:0.75;font-weight:400">Registra a entrega e envia tudo junto no fim do mês</div>
+          </div>
+        </button>` : ''}
         <button onclick="document.getElementById('modal-envio').remove()" style="background:none;border:none;color:#6B7280;font-size:13px;padding:10px;cursor:pointer">Cancelar</button>
       </div>
     </div>`
