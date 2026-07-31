@@ -679,39 +679,95 @@ html { overflow-x: hidden; }
 .btn-copiar { background: var(--verde); color: #fff; border: none; border-radius: 6px; padding: 6px 10px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; }
 
 /* ── CALENDÁRIO DE FÉRIAS ───────────────────────────────────────── */
+/* ── CALENDÁRIO DE FÉRIAS (estilo Google Agenda) ─────────────────────
+   Visão de mês com barras contínuas: cada período de férias é uma faixa
+   que atravessa os dias, quebrando a cada semana. Dentro da semana as
+   faixas são empilhadas em "trilhas" para não se sobreporem.          */
+.gc-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.gc-nav     { display: flex; align-items: center; gap: 6px; }
+.gc-titulo  { font-size: 16px; font-weight: 700; letter-spacing: -0.02em; margin-left: 4px; }
+.gc-btn-hoje {
+  border: 0.5px solid var(--border); background: var(--card-bg); color: var(--text-primary);
+  border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 600;
+  cursor: pointer; font-family: inherit; transition: background var(--transition);
+}
+.gc-btn-hoje:hover { background: var(--surface); }
+.gc-btn-seta {
+  border: none; background: none; color: var(--text-secondary);
+  width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 17px;
+  display: flex; align-items: center; justify-content: center; font-family: inherit;
+  transition: background var(--transition);
+}
+.gc-btn-seta:hover { background: var(--surface); color: var(--text-primary); }
+.gc-filtros { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+.gc-select {
+  border: 0.5px solid var(--border); border-radius: 999px; padding: 6px 10px;
+  font-size: 11.5px; font-family: inherit; background: var(--card-bg);
+  color: var(--text-primary); outline: none; cursor: pointer; max-width: 160px;
+}
+.gc-views { display: flex; border: 0.5px solid var(--border); border-radius: 999px; overflow: hidden; }
+.gc-view {
+  border: none; background: var(--card-bg); color: var(--text-secondary);
+  padding: 6px 13px; font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: inherit;
+  transition: all var(--transition);
+}
+.gc-view + .gc-view { border-left: 0.5px solid var(--border); }
+.gc-view.ativo { background: var(--verde); color: #fff; }
+
+.gc { border: 0.5px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.gc-dows { display: grid; grid-template-columns: repeat(7, 1fr); background: var(--surface); }
+.gc-dow  { text-align: center; font-size: 9.5px; font-weight: 700; color: var(--text-secondary);
+           padding: 7px 0; text-transform: uppercase; letter-spacing: 0.05em; }
+.gc-week { position: relative; border-top: 0.5px solid var(--border); }
+.gc-days { display: grid; grid-template-columns: repeat(7, 1fr); }
+.gc-day  { border-right: 0.5px solid var(--border); padding: 4px 0 0; background: var(--card-bg); }
+.gc-day:last-child { border-right: none; }
+.gc-day.fora { background: var(--surface); }
+.gc-daynum {
+  font-size: 11px; font-weight: 600; color: var(--text-secondary);
+  width: 21px; height: 21px; border-radius: 50%; margin: 0 auto;
+  display: flex; align-items: center; justify-content: center;
+}
+.gc-day.fora .gc-daynum { color: var(--text-hint); }
+.gc-day.hoje .gc-daynum { background: var(--verde); color: #fff; font-weight: 700; }
+
+/* Camada das faixas, sobreposta às células */
+.gc-lanes { position: absolute; left: 0; right: 0; top: 27px; display: flex; flex-direction: column; gap: 3px; pointer-events: none; }
+.gc-lane  { display: grid; grid-template-columns: repeat(7, 1fr); }
+.gc-chip  {
+  pointer-events: auto; cursor: pointer;
+  margin: 0 3px; height: 19px; line-height: 19px; padding: 0 7px;
+  font-size: 10.5px; font-weight: 600; color: #fff; background: var(--verde);
+  border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: filter var(--transition);
+}
+.gc-chip:hover { filter: brightness(1.12); }
+.gc-chip.pendente { background: var(--amber-text); }
+/* Continua na semana anterior/seguinte: encosta na borda e perde o arredondamento */
+.gc-chip.cont-ini { border-top-left-radius: 0;  border-bottom-left-radius: 0;  margin-left: 0; }
+.gc-chip.cont-fim { border-top-right-radius: 0; border-bottom-right-radius: 0; margin-right: 0; }
+.gc-vazio { padding: 26px 16px; text-align: center; font-size: 12px; color: var(--text-hint); }
+
+.gc-legenda { display: flex; gap: 14px; justify-content: center; margin-top: 10px; font-size: 10px; color: var(--text-secondary); }
+.gc-legenda span { display: flex; align-items: center; gap: 5px; }
+.gc-ponto { width: 9px; height: 9px; border-radius: 3px; background: var(--verde); display: inline-block; }
+.gc-ponto.pend { background: var(--amber-text); }
+
+@media (max-width: 520px) {
+  .gc-filtros { margin-left: 0; width: 100%; }
+  .gc-select  { flex: 1; max-width: none; }
+  .gc-views   { width: 100%; }
+  .gc-view    { flex: 1; }
+  .gc-chip    { font-size: 9.5px; padding: 0 4px; margin: 0 1.5px; height: 17px; line-height: 17px; }
+  .gc-lanes   { top: 25px; gap: 2px; }
+  .gc-dow     { font-size: 8.5px; }
+}
+
 .ferias-resumo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
 .ferias-resumo .stat-num   { font-size: 22px; }
 .ferias-resumo .stat-label { font-size: 10px; line-height: 1.25; }
 .ferias-resumo .card-stat  { cursor: default; padding: 13px 11px 11px; }
 .ferias-resumo .card-stat:active { transform: none; }
-.cal-nav-btn {
-  background: var(--surface); border: 0.5px solid var(--border);
-  border-radius: var(--radius-sm); color: var(--text-primary);
-  width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: 16px; font-family: inherit; transition: all var(--transition);
-}
-.cal-nav-btn:active { transform: scale(0.92); }
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-.cal-dow { text-align: center; font-size: 10px; font-weight: 700; color: var(--text-hint); padding: 2px 0; }
-.cal-cell {
-  aspect-ratio: 1; border-radius: 9px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  font-size: 12px; background: var(--surface); color: var(--text-primary);
-  border: 0.5px solid transparent;
-}
-.cal-cell.vazio { background: transparent; }
-.cal-cell.ferias { background: var(--verde-claro); color: var(--verde-text); font-weight: 700; }
-.cal-cell.ferias.pend { background: var(--amber-bg); color: var(--amber-text); }
-.cal-cell.hoje { border-color: var(--verde); border-width: 1.5px; }
-.cal-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--verde); display: inline-block; margin-top: 2px; }
-.cal-dot.pend { background: var(--amber-text); }
-.cal-tab {
-  flex: 1; padding: 8px; border: 0.5px solid var(--border); background: var(--card-bg);
-  color: var(--text-secondary); border-radius: var(--radius-sm); font-size: 12px; font-weight: 600;
-  cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 5px;
-  transition: all var(--transition);
-}
-.cal-tab.ativo { background: var(--verde); color: #fff; border-color: var(--verde); }
 .gantt-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; cursor: pointer; }
 .gantt-nome { width: 86px; flex-shrink: 0; font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gantt-track { flex: 1; height: 22px; background: var(--surface); border-radius: 6px; position: relative; display: flex; align-items: center; }
@@ -774,10 +830,11 @@ html { overflow-x: hidden; }
   :root { --col-max: 720px; --main-pad: 16px; }
   .cards-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
   .acoes-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  /* As células do calendário são quadradas (aspect-ratio: 1): sem um teto de
-     largura elas viram blocos gigantes numa coluna larga. */
-  .cal-grid, .cal-tabs-wrap, #cal-unidade { max-width: 440px; margin-left: auto; margin-right: auto; }
-  #cal-unidade { display: block; }
+  /* O calendário de férias ocupa a largura toda, como no Google Agenda —
+     as células crescem em altura conforme as faixas, não em proporção. */
+  .gc-day  { padding-top: 5px; }
+  .gc-chip { font-size: 11.5px; height: 21px; line-height: 21px; }
+  .gc-lanes { top: 30px; }
 }
 
 /* ── Desktop: barra lateral + conteúdo multicoluna ─────────────────── */

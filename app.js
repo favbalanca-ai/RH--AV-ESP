@@ -426,10 +426,9 @@ function feriasFiltradas() {
   return base.filter(f => (f['STATUS'] || 'Pendente') === filtroFeriasStatus)
 }
 function setFiltroFerias(v) {
-  filtroFeriasStatus = v
-  ;[['fer-f-todos', ''], ['fer-f-assin', 'Assinado'], ['fer-f-pend', 'Pendente']].forEach(([id, val]) => {
-    const b = document.getElementById(id); if (b) b.classList.toggle('ativo', v === val)
-  })
+  filtroFeriasStatus = v || ''
+  const sel = document.getElementById('cal-status')
+  if (sel && sel.value !== filtroFeriasStatus) sel.value = filtroFeriasStatus
   renderCalendario()
 }
 
@@ -479,10 +478,9 @@ function mudarMesCal(delta) {
   renderCalendario()
 }
 function renderCalendario() {
-  const grid = document.getElementById('cal-grid')
   const lbl = document.getElementById('cal-mes-label')
   const lista = document.getElementById('cal-lista')
-  if (!grid || !lbl) return
+  if (!lbl) return
   lbl.textContent = calView === 'ano' ? String(calAno) : (MESES[calMes] + ' ' + calAno)
 
   const periodos = feriasFiltradas().map(f => ({
@@ -490,20 +488,7 @@ function renderCalendario() {
     ini: parseDataCal(f['INICIO']), fim: parseDataCal(f['FIM'] || f['INICIO'])
   })).filter(p => p.ini)
 
-  const soData = d => new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const diasNoMes = new Date(calAno, calMes + 1, 0).getDate()
-  const offset = new Date(calAno, calMes, 1).getDay()
-  let cells = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(d => `<div class="cal-dow">${d}</div>`).join('')
-  for (let i = 0; i < offset; i++) cells += '<div class="cal-cell vazio"></div>'
-  for (let dia = 1; dia <= diasNoMes; dia++) {
-    const data = new Date(calAno, calMes, dia)
-    const cobre = periodos.filter(p => data >= soData(p.ini) && data <= soData(p.fim))
-    const assinado = cobre.some(p => p.status === 'Assinado')
-    const cls = cobre.length ? (assinado ? 'cal-cell ferias' : 'cal-cell ferias pend') : 'cal-cell'
-    const hojeCls = data.toDateString() === new Date().toDateString() ? ' hoje' : ''
-    cells += `<div class="${cls}${hojeCls}" title="${esc(cobre.map(p => p.nome).join(', '))}"><span>${dia}</span>${cobre.length ? '<i class="cal-dot' + (assinado ? '' : ' pend') + '"></i>' : ''}</div>`
-  }
-  grid.innerHTML = cells
+  renderMesGoogle(periodos)
 
   if (lista) {
     const mIni = new Date(calAno, calMes, 1), mFim = new Date(calAno, calMes + 1, 0)
@@ -536,11 +521,84 @@ function renderCalendario() {
   renderAno()
 }
 
+// ── Visão de mês estilo Google Agenda ─────────────────────────────
+// Cada período vira uma faixa contínua que atravessa os dias e quebra a cada
+// semana. Dentro da semana as faixas são empilhadas em trilhas para não se
+// sobreporem, e a altura da linha acompanha o número de trilhas.
+const DOWS_CAL = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
+
+function renderMesGoogle(periodos) {
+  const el = document.getElementById('cal-mes'); if (!el) return
+  const DIA = 86400000
+  const somaDias = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)
+
+  const primeiro = new Date(calAno, calMes, 1)
+  const ultimo   = new Date(calAno, calMes + 1, 0)
+  const inicio   = somaDias(primeiro, -primeiro.getDay())          // domingo da 1ª semana
+  const fimGrade = somaDias(ultimo, 6 - ultimo.getDay())           // sábado da última
+  // fimGrade é o ÚLTIMO dia da grade, não o início da última semana: por isso
+  // conta-se o dia dele antes de dividir, senão sobra uma semana vazia no fim.
+  const semanas  = Math.round(((fimGrade - inicio) / DIA + 1) / 7)
+  const hoje     = hojeCal()
+
+  const eventos = periodos.map(p => ({
+    nome: p.nome, status: p.status, token: p.token,
+    ini: soDataCal(p.ini), fim: soDataCal(p.fim || p.ini),
+  }))
+
+  let html = '<div class="gc-dows">' + DOWS_CAL.map(d => `<div class="gc-dow">${d}</div>`).join('') + '</div>'
+
+  for (let s = 0; s < semanas; s++) {
+    const semIni = somaDias(inicio, s * 7)
+    const semFim = somaDias(semIni, 6)
+
+    // Mais longos primeiro: as faixas grandes ficam nas trilhas de cima.
+    const daSemana = eventos
+      .filter(e => e.fim >= semIni && e.ini <= semFim)
+      .sort((a, b) => (a.ini - b.ini) || ((b.fim - b.ini) - (a.fim - a.ini)))
+
+    const trilhas = []
+    daSemana.forEach(e => {
+      const c0 = Math.max(0, Math.round((e.ini - semIni) / DIA))
+      const c1 = Math.min(6, Math.round((e.fim - semIni) / DIA))
+      let t = trilhas.findIndex(tr => tr.every(x => c1 < x.c0 || c0 > x.c1))
+      if (t === -1) { trilhas.push([]); t = trilhas.length - 1 }
+      trilhas[t].push({ ...e, c0, c1 })
+    })
+
+    const altura = Math.max(84, 32 + trilhas.length * 22)
+    let dias = ''
+    for (let d = 0; d < 7; d++) {
+      const data = somaDias(semIni, d)
+      const fora = data.getMonth() !== calMes
+      const eHoje = data.getTime() === hoje.getTime()
+      dias += `<div class="gc-day${fora ? ' fora' : ''}${eHoje ? ' hoje' : ''}" style="min-height:${altura}px">`
+            + `<div class="gc-daynum">${data.getDate()}</div></div>`
+    }
+
+    const lanes = trilhas.map(tr => '<div class="gc-lane">' + tr.map(e => {
+      const cls = 'gc-chip' + (e.status === 'Assinado' ? '' : ' pendente')
+                + (e.ini < semIni ? ' cont-ini' : '') + (e.fim > semFim ? ' cont-fim' : '')
+      const dica = e.nome + ' · ' + e.ini.toLocaleDateString('pt-BR') + ' → ' + e.fim.toLocaleDateString('pt-BR')
+      return `<div class="${cls}" style="grid-column:${e.c0 + 1}/span ${e.c1 - e.c0 + 1}"`
+           + ` title="${esc(dica)}" onclick="editarFerias('${esc(e.token)}')">${esc(e.nome)}</div>`
+    }).join('') + '</div>').join('')
+
+    html += `<div class="gc-week"><div class="gc-days">${dias}</div><div class="gc-lanes">${lanes}</div></div>`
+  }
+  el.innerHTML = html
+}
+
+function irHojeCal() {
+  const h = new Date(); calMes = h.getMonth(); calAno = h.getFullYear()
+  renderCalendario()
+}
+
 let calView = 'grid'
 function setCalView(v) {
   calView = v
-  const g = document.getElementById('cal-grid'), gantt = document.getElementById('cal-gantt'), ano = document.getElementById('cal-ano')
-  if (g)     g.style.display = v === 'grid' ? 'grid' : 'none'
+  const mes = document.getElementById('cal-mes'), gantt = document.getElementById('cal-gantt'), ano = document.getElementById('cal-ano')
+  if (mes)   mes.style.display = v === 'grid' ? 'block' : 'none'
   if (gantt) gantt.style.display = v === 'gantt' ? 'block' : 'none'
   if (ano)   ano.style.display = v === 'ano' ? 'block' : 'none'
   ;[['cal-tab-grid', 'grid'], ['cal-tab-gantt', 'gantt'], ['cal-tab-ano', 'ano']].forEach(([id, val]) => {
