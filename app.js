@@ -118,7 +118,9 @@ document.addEventListener('DOMContentLoaded', () => {
 function entrarNoApp() {
   document.getElementById('tela-login').style.display = 'none'
   aplicarTemaInicial()
-  document.getElementById('tela-app').style.display   = 'flex'
+  // Limpa o display inline em vez de fixar 'flex': assim o CSS decide o
+  // layout (coluna flex no mobile, grid com barra lateral no desktop).
+  document.getElementById('tela-app').style.display   = ''
   preencherMesesFracionar()
   preencherSelectsOcultos()
   carregarDashboard()
