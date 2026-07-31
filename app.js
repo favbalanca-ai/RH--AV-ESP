@@ -410,12 +410,66 @@ function filtrarCal() {
   calUnidade = document.getElementById('cal-unidade')?.value || ''
   renderCalendario()
 }
-function feriasFiltradas() {
+// Só o filtro de unidade — é a base do resumo, que não deve encolher quando o
+// usuário filtra a lista por status.
+function feriasPorUnidade() {
   if (!calUnidade) return feriasCache
   return feriasCache.filter(f => {
     const func = funcionarios.find(x => String(x['ID']) === String(f['ID_FUNC']))
     return func && func['UNIDADE'] === calUnidade
   })
+}
+let filtroFeriasStatus = ''
+function feriasFiltradas() {
+  const base = feriasPorUnidade()
+  if (!filtroFeriasStatus) return base
+  return base.filter(f => (f['STATUS'] || 'Pendente') === filtroFeriasStatus)
+}
+function setFiltroFerias(v) {
+  filtroFeriasStatus = v
+  ;[['fer-f-todos', ''], ['fer-f-assin', 'Assinado'], ['fer-f-pend', 'Pendente']].forEach(([id, val]) => {
+    const b = document.getElementById(id); if (b) b.classList.toggle('ativo', v === val)
+  })
+  renderCalendario()
+}
+
+const soDataCal = d => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+const hojeCal   = () => soDataCal(new Date())
+
+function renderResumoFerias() {
+  const h0 = hojeCal()
+  const em30 = new Date(h0); em30.setDate(em30.getDate() + 30)
+  const regs = feriasPorUnidade()
+    .map(f => ({ status: f['STATUS'] || 'Pendente', ini: parseDataCal(f['INICIO']), fim: parseDataCal(f['FIM'] || f['INICIO']) }))
+    .filter(r => r.ini)
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v }
+  set('fer-hoje', regs.filter(r => h0 >= soDataCal(r.ini) && h0 <= soDataCal(r.fim || r.ini)).length)
+  set('fer-pend', regs.filter(r => r.status !== 'Assinado').length)
+  set('fer-prox', regs.filter(r => soDataCal(r.ini) > h0 && soDataCal(r.ini) <= em30).length)
+}
+
+// Reclassifica e move para a pasta FERIAS os recibos que foram parar em
+// FOLHA_PAGAMENTO (coluna TIPO vazia nas linhas antigas).
+async function corrigirArquivamentoFerias() {
+  const btn = document.getElementById('btn-corrigir-arq')
+  const rotulo = '<i class="ti ti-folder-symlink"></i> Corrigir arquivamento'
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Verificando...' }
+  mostrarLoading('Verificando arquivamento no Drive...')
+  const res = await chamarGAS({ acao: 'corrigir_arquivamento_ferias' })
+  esconderLoading()
+  if (btn) { btn.disabled = false; btn.innerHTML = rotulo }
+
+  if (!res || !res.ok || !res.data) return toast('❌ ' + ((res && res.erro) || 'Erro ao corrigir'), 'erro')
+  const d = res.data
+  if (!d.marcados && !d.movidos) {
+    toast('✅ Nada a corrigir — os recibos já estão na pasta certa', 'sucesso')
+  } else {
+    toast('✅ ' + d.movidos + ' PDF(s) movidos p/ FERIAS · ' + d.marcados + ' registro(s) reclassificados', 'sucesso')
+  }
+  if (d.erros && d.erros.length) {
+    console.warn('Arquivamento — pendências:', d.erros)
+    toast('⚠️ ' + d.erros.length + ' registro(s) não puderam ser movidos', 'erro')
+  }
 }
 function mudarMesCal(delta) {
   if (calView === 'ano') { calAno += delta; renderCalendario(); return }
@@ -454,17 +508,30 @@ function renderCalendario() {
   if (lista) {
     const mIni = new Date(calAno, calMes, 1), mFim = new Date(calAno, calMes + 1, 0)
     const doMes = periodos.filter(p => p.fim >= mIni && p.ini <= mFim).sort((a, b) => a.ini - b.ini)
-    if (!doMes.length) lista.innerHTML = '<p class="lista-vazia">Nenhuma férias neste mês</p>'
-    else lista.innerHTML = doMes.map(p => `
+    if (!doMes.length) lista.innerHTML = `<p class="lista-vazia">Nenhuma férias neste mês${filtroFeriasStatus ? ' com o filtro "' + esc(filtroFeriasStatus) + '"' : ''}</p>`
+    else {
+      const h0 = hojeCal()
+      lista.innerHTML = doMes.map(p => {
+        const ini = soDataCal(p.ini), fim = soDataCal(p.fim || p.ini)
+        const dias = Math.round((fim - ini) / 86400000) + 1
+        let sit, sitCor
+        if (h0 < ini)      { sit = 'Faltam ' + Math.round((ini - h0) / 86400000) + ' dia(s)'; sitCor = 'var(--blue-text)' }
+        else if (h0 > fim) { sit = 'Concluída';  sitCor = 'var(--text-hint)' }
+        else               { sit = 'Em curso';   sitCor = 'var(--verde-text)' }
+        return `
       <div class="lista-item" style="margin-bottom:6px;cursor:pointer" onclick="editarFerias('${esc(p.token)}')">
         <div class="avatar" style="background:var(--verde-claro);color:var(--verde-text)">${getIniciais(p.nome || '?')}</div>
         <div class="lista-item-info">
           <div class="lista-item-nome">${esc(p.nome)}</div>
-          <div class="lista-item-sub">${p.ini.toLocaleDateString('pt-BR')} → ${p.fim.toLocaleDateString('pt-BR')}</div>
+          <div class="lista-item-sub">${p.ini.toLocaleDateString('pt-BR')} → ${p.fim.toLocaleDateString('pt-BR')} · ${dias} dia(s)</div>
+          <div style="font-size:10px;font-weight:600;color:${sitCor};margin-top:2px">${sit}</div>
         </div>
         <span class="badge ${p.status === 'Assinado' ? 'badge-verde' : 'badge-amarelo'}">${esc(p.status)}</span>
-      </div>`).join('')
+      </div>`
+      }).join('')
+    }
   }
+  renderResumoFerias()
   renderGantt()
   renderAno()
 }

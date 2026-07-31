@@ -92,6 +92,7 @@ function doPost(e) {
       case 'listar_log':                 return respOk(listarLog(body.dados))
       case 'listar_ferias':              return respOk(listarFerias())
       case 'atualizar_ferias':           return respOk(atualizarFerias(body.dados))
+      case 'corrigir_arquivamento_ferias': return respOk(corrigirArquivamentoFerias())
       case 'listar_pagamentos_func':        return respOk(listarPagamentos(body.dados))
       case 'listar_pagamentos':           return respOk(listarPagamentos(body.dados))
       case 'confirmar_notificacao':       return respOk(confirmarNotificacao(body.dados, usuario))
@@ -445,8 +446,8 @@ function webhookZapSign(body) {
     atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', docToken, { 'STATUS': 'Assinado', 'DATA ASSINATURA': hoje })
     try {
       const comp = String(folha['COMPETÊNCIA'] || 'semdata').replace(/\//g,'-')
-      const tipoF = folha['TIPO'] || 'Folha'
-      const subF = tipoF === 'Ferias' ? 'FERIAS' : 'FOLHA_PAGAMENTO'
+      const tipoF = tipoDaFolha(folha, docToken)
+      const subF = subpastaDoTipo(tipoF)
       const link = salvarPdfNoDrive(folha['ID FUNC.'], folha['FUNCIONÁRIO'], subF, tipoF + '_' + comp + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(docToken))
       atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', docToken, { 'LINK DOC ASSINADO': link })
       // Gera link de confirmação de pagamento para o empregador
@@ -460,7 +461,7 @@ function webhookZapSign(body) {
         }
       } catch(ePagto) { Logger.log('Erro link pagamento ZapSign: ' + ePagto.message) }
     } catch(e) { logAcao('WEBHOOK', 'DRIVE_OPCIONAL', e.message) }
-    if ((folha['TIPO'] || '') === 'Ferias') confirmarFeriasAssinada(docToken)
+    if (tipoDaFolha(folha, docToken) === 'Ferias') confirmarFeriasAssinada(docToken)
     logAcao('WEBHOOK', 'ASSINATURA_FOLHA', 'Doc: ' + docToken)
     return { ok: true, tipo: 'folha' }
   }
@@ -608,6 +609,8 @@ function sincronizarPendentes() {
       } catch(e) { erros.push('EPI ' + token.substring(0,8) + ': ' + e.message) }
     })
 
+  // Lido uma vez só: serve de fallback quando a coluna TIPO está vazia.
+  const feriasTokens = tokensDeFerias()
   lerAbaComoObjetos(CONFIG.ABAS.FOLHA)
     .filter(f => (f['STATUS'] === 'Pendente' || f['STATUS'] === '') && f['ZAPSIGN_DOC'])
     .forEach(folha => {
@@ -617,13 +620,13 @@ function sincronizarPendentes() {
         const status = consultarStatusZapSign(token)
         if (status === 'signed') {
           atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', token, { 'STATUS': 'Assinado', 'DATA ASSINATURA': hoje, 'LINK DOC ASSINADO': '' })
-          const tipoF = folha['TIPO'] || 'Folha'
+          const tipoF = tipoDaFolha(folha, token, feriasTokens)
           // Confirma as férias (status + evento no Calendar) ANTES do PDF: se o
           // download/save do PDF falhar, a confirmação de férias não pode ser perdida.
           if (tipoF === 'Ferias') { try { confirmarFeriasAssinada(token) } catch(fe) { erros.push('Ferias ' + token.substring(0,8) + ': ' + fe.message) } }
           try {
             const comp = String(folha['COMPETÊNCIA'] || 'semdata').replace(/\//g,'-')
-            const subF = tipoF === 'Ferias' ? 'FERIAS' : 'FOLHA_PAGAMENTO'
+            const subF = subpastaDoTipo(tipoF)
             const link = salvarPdfNoDrive(folha['ID FUNC.'], folha['FUNCIONÁRIO'], subF, tipoF + '_' + comp + '_' + token.substring(0,8) + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(token))
             atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', token, { 'LINK DOC ASSINADO': link })
           } catch(de) {}
@@ -704,14 +707,15 @@ function recuperarPdfsAssinados() {
     } catch(e) { erros.push('EPI ' + token.substring(0,8) + ': ' + e.message) }
   })
 
+  const feriasTokensRec = tokensDeFerias()
   lerAbaComoObjetos(CONFIG.ABAS.FOLHA).forEach(folha => {
     const token = String(folha['ZAPSIGN_DOC'] || '').trim()
     const link  = String(folha['LINK DOC ASSINADO'] || '').trim()
     if (folha['STATUS'] !== 'Assinado' || !token || link) return
     try {
       const comp = String(folha['COMPETÊNCIA'] || 'semdata').replace(/\//g,'-')
-      const tipoF = folha['TIPO'] || 'Folha'
-      const subF = tipoF === 'Ferias' ? 'FERIAS' : 'FOLHA_PAGAMENTO'
+      const tipoF = tipoDaFolha(folha, token, feriasTokensRec)
+      const subF = subpastaDoTipo(tipoF)
       const url = salvarPdfNoDrive(folha['ID FUNC.'], folha['FUNCIONÁRIO'], subF, tipoF + '_' + comp + '_' + token.substring(0,8) + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(token))
       atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', token, { 'LINK DOC ASSINADO': url })
       recuperados++
@@ -749,7 +753,7 @@ function processarPaginaFolha(dados, usuario) {
   const comp = dados.competencia || ''
   const compLimpo = comp.replace(/\//g, '-')
   const tipo = dados.tipo || 'Folha'
-  const subpasta = tipo === 'Ferias' ? 'FERIAS' : 'FOLHA_PAGAMENTO'
+  const subpasta = subpastaDoTipo(tipo)
   const func = encontrarFuncionarioPorNome(dados.nome_funcionario, funcionarios)
   if (!func) throw new Error('Funcionário não encontrado: ' + dados.nome_funcionario)
   const nomeArq = tipo + '_' + compLimpo + '_' + (func['NOME_CURTO'] || func['NOME_COMPLETO'].split(' ')[0]) + '.pdf'
@@ -763,7 +767,9 @@ function processarPaginaFolha(dados, usuario) {
       zapToken = zap.token; zapSignUrl = zap.signUrl; zapSignerToken = zap.signerToken
     } catch(e) { logAcao(usuario, 'ERRO_ZAPSIGN', e.message); throw e }
   }
+  garantirColunaTipoFolha()
   adicionarLinha(CONFIG.ABAS.FOLHA, [func['ID'], func['NOME_COMPLETO'], comp, hoje, zapToken ? 'Pendente' : 'Salvo', '', zapToken, linkDrive, '', zapSignerToken ? 'Signer: ' + zapSignerToken : 'Fracionado', dados.valor_liquido || '', tipo])
+  definirTipoUltimaLinhaFolha(tipo)
   if (tipo === 'Ferias' && zapToken) registrarFeriasPendente(func['ID'], func['NOME_COMPLETO'], dados.ferias_inicio, dados.ferias_fim, comp, zapToken)
   logAcao(usuario, 'FOLHA_INDIVIDUAL', 'Func ' + func['ID'] + ' | ' + comp)
   return { func_id: func['ID'], nome: func['NOME_COMPLETO'], link_drive: linkDrive, zapsign: zapToken, sign_url: zapSignUrl }
@@ -1104,7 +1110,7 @@ function confirmarAssinatura(token, assinaturaBase64, pdfAssinadoExterno) {
   let linkDrive = ''
   try {
     const nomeArq = tipo + '_' + String(referencia || '').replace(/\//g,'-') + '_ASSINADO.pdf'
-    const subpasta = tipo === 'EPI' ? 'EPI_RECIBOS' : tipo === 'Ferias' ? 'FERIAS' : 'FOLHA_PAGAMENTO'
+    const subpasta = subpastaDoTipo(tipo)
     linkDrive = salvarPdfNoDrive(funcId, funcNome, subpasta, nomeArq, pdfAssinado)
   } catch(e) {
     logAcao('SISTEMA', 'ERRO_DRIVE_ASSINATURA', e.message)
@@ -1340,8 +1346,9 @@ function processarPaginaProprio(dados, usuario) {
   var comp     = dados.competencia || ''
   var compLimpo = String(comp || '').replace(/\//g, '-')
   var tipo     = dados.tipo || 'Folha'
-  var subpasta = tipo === 'Ferias' ? 'FERIAS' : 'FOLHA_PAGAMENTO'
+  var subpasta = subpastaDoTipo(tipo)
   var nomeArq  = tipo + '_' + compLimpo + '_' + (func['NOME_CURTO'] || func['NOME_COMPLETO'].split(' ')[0]) + '_PENDENTE.pdf'
+  garantirColunaTipoFolha()
 
   var linkDrive = ''
   try {
@@ -1362,6 +1369,7 @@ function processarPaginaProprio(dados, usuario) {
     dados.valor_liquido || '', // K: VALOR_LIQUIDO
     tipo,                 // L: TIPO
   ])
+  definirTipoUltimaLinhaFolha(tipo)
 
   var linkData = gerarLinkAssinatura({
     tipo:         tipo,
@@ -2118,19 +2126,38 @@ function adicionarColunasFuncionarios() {
   return 'OK'
 }
 
-// ─── Rodar UMA VEZ: adiciona a coluna TIPO na aba FOLHA_PAGAMENTO ──
-// Necessária para o webhook do ZapSign salvar o assinado na pasta certa
-// (Ferias -> FERIAS). Sem ela, tudo cai em FOLHA_PAGAMENTO.
-function adicionarColunaTipoFolha() {
+// ─── Coluna TIPO na aba FOLHA_PAGAMENTO ────────────────────────────
+// É ela que decide a pasta do assinado (Ferias -> FERIAS). Antes dependia de
+// rodar adicionarColunaTipoFolha() na mão; se isso não fosse feito, TIPO vinha
+// vazio e TODO documento assinado — inclusive férias — caía em FOLHA_PAGAMENTO.
+// Agora a coluna é criada sozinha na hora de gravar.
+function garantirColunaTipoFolha() {
   var sheet = getSheet(CONFIG.ABAS.FOLHA)
-  var hdrs  = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
-  if (hdrs.indexOf('TIPO') === -1) {
-    sheet.getRange(1, sheet.getLastColumn() + 1).setValue('TIPO')
-    Logger.log('Coluna TIPO adicionada na FOLHA_PAGAMENTO')
-    return 'Coluna TIPO adicionada'
+  if (!sheet) return -1
+  var ultima = Math.max(1, sheet.getLastColumn())
+  var hdrs   = sheet.getRange(1, 1, 1, ultima).getValues()[0]
+  var iTipo  = hdrs.indexOf('TIPO')
+  if (iTipo === -1) {
+    sheet.getRange(1, ultima + 1).setValue('TIPO')
+    Logger.log('Coluna TIPO criada na aba ' + CONFIG.ABAS.FOLHA)
+    return ultima // índice 0-based da coluna recém-criada
   }
-  Logger.log('Coluna TIPO já existe')
-  return 'Já existe'
+  return iTipo
+}
+
+// Grava o TIPO da última linha inserida pela COLUNA CERTA (por nome de
+// cabeçalho). O appendRow é posicional: se a ordem das colunas da planilha
+// mudar, o tipo ia parar em outra coluna e o arquivamento errava a pasta.
+function definirTipoUltimaLinhaFolha(tipo) {
+  var iTipo = garantirColunaTipoFolha()
+  if (iTipo < 0) return
+  var sheet = getSheet(CONFIG.ABAS.FOLHA)
+  sheet.getRange(sheet.getLastRow(), iTipo + 1).setValue(tipo || 'Folha')
+}
+
+function adicionarColunaTipoFolha() {
+  garantirColunaTipoFolha()
+  return 'OK'
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2442,6 +2469,102 @@ function parseDataFlex(s) {
   if (b) return new Date(parseInt(b[3]), parseInt(b[2]) - 1, parseInt(b[1]))
   var d = new Date(s)
   return isNaN(d) ? null : d
+}
+
+// Todos os REF_TOKEN da aba FERIAS, para reconhecer um documento de férias
+// mesmo quando a coluna TIPO da FOLHA_PAGAMENTO está vazia (linhas antigas).
+function tokensDeFerias() {
+  var mapa = {}
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_FERIAS)
+  if (!sheet) return mapa
+  var vals = sheet.getDataRange().getValues()
+  if (vals.length < 2) return mapa
+  var iTok = vals[0].indexOf('REF_TOKEN')
+  if (iTok < 0) return mapa
+  for (var i = 1; i < vals.length; i++) {
+    var t = String(vals[i][iTok] || '').trim()
+    if (t) mapa[t] = true
+  }
+  return mapa
+}
+
+// Tipo do documento de uma linha da FOLHA_PAGAMENTO. A coluna TIPO é a fonte
+// principal; quando ela falta ou está vazia, o token da aba FERIAS decide —
+// é o que impede um recibo de férias de ser arquivado como folha de pagamento.
+function tipoDaFolha(folha, token, feriasTokens) {
+  var t = String((folha && folha['TIPO']) || '').trim()
+  if (t) return t
+  var tk = String(token || (folha && folha['ZAPSIGN_DOC']) || '').trim()
+  if (tk && (feriasTokens || tokensDeFerias())[tk]) return 'Ferias'
+  return 'Folha'
+}
+
+function subpastaDoTipo(tipo) {
+  return tipo === 'Ferias' ? 'FERIAS' : tipo === 'EPI' ? 'EPI_RECIBOS' : 'FOLHA_PAGAMENTO'
+}
+
+function extrairIdDoDrive(url) {
+  var m = String(url || '').match(/[-\w]{25,}/)
+  return m ? m[0] : ''
+}
+
+// Conserta o que já foi arquivado errado: percorre a FOLHA_PAGAMENTO, acha as
+// linhas que são de férias (pela aba FERIAS), preenche a coluna TIPO e move o
+// PDF assinado da pasta FOLHA_PAGAMENTO para a pasta FERIAS do funcionário.
+// Idempotente — rodar de novo não duplica nada.
+function corrigirArquivamentoFerias() {
+  var iTipo = garantirColunaTipoFolha()
+  var sheet = getSheet(CONFIG.ABAS.FOLHA)
+  if (!sheet) return { ok: false, erro: 'Aba ' + CONFIG.ABAS.FOLHA + ' não encontrada' }
+
+  var vals = sheet.getDataRange().getValues()
+  if (vals.length < 2) return { ok: true, marcados: 0, movidos: 0, erros: [] }
+
+  var hdrs   = vals[0]
+  var iTok   = hdrs.indexOf('ZAPSIGN_DOC')
+  var iLink  = hdrs.indexOf('LINK DOC ASSINADO')
+  var iFunc  = hdrs.indexOf('ID FUNC.')
+  var iNome  = hdrs.indexOf('FUNCIONÁRIO')
+  var feriasTokens = tokensDeFerias()
+  var marcados = 0, movidos = 0, erros = []
+
+  // Índice cru (sem lerAbaComoObjetos) para o número da linha bater com a planilha
+  for (var i = 1; i < vals.length; i++) {
+    var token = iTok  >= 0 ? String(vals[i][iTok]  || '').trim() : ''
+    var tipoAtual = iTipo >= 0 ? String(vals[i][iTipo] || '').trim() : ''
+    if (!token) continue
+    if (tipoAtual && tipoAtual !== 'Ferias') continue           // já classificado como outra coisa
+    if (!tipoAtual && !feriasTokens[token]) continue            // sem TIPO e não é férias
+
+    // 1) preenche a coluna TIPO nas linhas antigas
+    if (!tipoAtual && iTipo >= 0) {
+      sheet.getRange(i + 1, iTipo + 1).setValue('Ferias')
+      marcados++
+    }
+
+    // 2) move o PDF assinado para a subpasta FERIAS
+    var link = iLink >= 0 ? String(vals[i][iLink] || '').trim() : ''
+    if (!link) continue
+    try {
+      var id = extrairIdDoDrive(link)
+      if (!id) continue
+      var arq = DriveApp.getFileById(id)
+      var pastaFunc = buscarPastaFuncionario(vals[i][iFunc], String(vals[i][iNome] || ''))
+      if (!pastaFunc) { erros.push(vals[i][iNome] + ': pasta do funcionário não encontrada'); continue }
+
+      var pais = arq.getParents(), jaCerto = false
+      while (pais.hasNext()) { if (pais.next().getName() === 'FERIAS') jaCerto = true }
+      if (jaCerto) continue
+
+      var subs = pastaFunc.getFoldersByName('FERIAS')
+      arq.moveTo(subs.hasNext() ? subs.next() : pastaFunc.createFolder('FERIAS'))
+      movidos++
+    } catch (e) { erros.push(String(vals[i][iNome] || '?') + ': ' + e.message) }
+  }
+
+  logAcao('SISTEMA', 'CORRIGIR_ARQUIVAMENTO_FERIAS',
+    'TIPO preenchido: ' + marcados + ' | PDFs movidos: ' + movidos + ' | Erros: ' + erros.length)
+  return { ok: true, marcados: marcados, movidos: movidos, erros: erros }
 }
 
 // Registra um período de férias como Pendente (ao enviar a Folha de Férias)

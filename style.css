@@ -679,6 +679,11 @@ html { overflow-x: hidden; }
 .btn-copiar { background: var(--verde); color: #fff; border: none; border-radius: 6px; padding: 6px 10px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; }
 
 /* ── CALENDÁRIO DE FÉRIAS ───────────────────────────────────────── */
+.ferias-resumo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+.ferias-resumo .stat-num   { font-size: 22px; }
+.ferias-resumo .stat-label { font-size: 10px; line-height: 1.25; }
+.ferias-resumo .card-stat  { cursor: default; padding: 13px 11px 11px; }
+.ferias-resumo .card-stat:active { transform: none; }
 .cal-nav-btn {
   background: var(--surface); border: 0.5px solid var(--border);
   border-radius: var(--radius-sm); color: var(--text-primary);
@@ -769,6 +774,10 @@ html { overflow-x: hidden; }
   :root { --col-max: 720px; --main-pad: 16px; }
   .cards-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
   .acoes-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  /* As células do calendário são quadradas (aspect-ratio: 1): sem um teto de
+     largura elas viram blocos gigantes numa coluna larga. */
+  .cal-grid, .cal-tabs-wrap, #cal-unidade { max-width: 440px; margin-left: auto; margin-right: auto; }
+  #cal-unidade { display: block; }
 }
 
 /* ── Desktop: barra lateral + conteúdo multicoluna ─────────────────── */
