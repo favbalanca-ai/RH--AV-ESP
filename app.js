@@ -148,8 +148,10 @@ async function sincronizarManual() {
       toast('✅ ' + d.atualizados + ' atualizada(s)!', 'sucesso')
       if (paginaAtual === 'epi') carregarEpi()
       if (paginaAtual === 'fracionar') carregarEntregasFolha()
-      carregarDashboard()
     } else { toast(d.verificados === 0 ? 'Nenhum pendente' : '🔄 ' + d.pendentes + ' aguardando', '') }
+    // Sempre recarrega o painel: o ↻ é a forma de recuperar os números quando
+    // o carregamento inicial falhou, não só quando houve assinatura nova.
+    carregarDashboard()
   } else { toast('❌ Erro na sincronização', 'erro') }
 }
 
@@ -647,7 +649,20 @@ async function chamarGAS(dados, { timeoutMs = 120000 } = {}) {
 
 // ─── DASHBOARD ────────────────────────────────────────────────────
 async function carregarDashboard() {
-  const [resEx, resEst, resEpi, resFolha, resPgto] = await Promise.all([
+  const setNum = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v }
+
+  // Total de funcionários não depende de rede: mostra na hora em vez de ficar
+  // preso esperando as 5 chamadas abaixo.
+  setNum('num-funcs', funcionarios.length || '…')
+  // Os demais ficam em "…" para o painel não parecer travado enquanto carrega.
+  ;['num-vencidos', 'num-avencer', 'num-epi'].forEach(id => setNum(id, '…'))
+
+  // Ao restaurar a sessão (F5) o login não roda, e com ele a lista de
+  // funcionários nunca era recarregada — o painel e os selects ficavam zerados.
+  const precisaFuncs = !funcionarios.length
+
+  const [resFuncs, resEx, resEst, resEpi, resFolha, resPgto] = await Promise.all([
+    precisaFuncs ? chamarGAS({ acao: 'listar_funcionarios' }) : null,
     chamarGAS({ acao: 'listar_exames' }),
     chamarGAS({ acao: 'listar_epi_estoque' }),
     chamarGAS({ acao: 'listar_epi_entregas' }),
@@ -655,7 +670,11 @@ async function carregarDashboard() {
     chamarGAS({ acao: 'listar_pagamentos', dados: { status: 'Aguardando Pagamento' } }),
   ])
 
-  document.getElementById('num-funcs').textContent = funcionarios.length
+  if (resFuncs && resFuncs.ok && Array.isArray(resFuncs.data)) {
+    funcionarios = resFuncs.data
+    preencherSelectsOcultos()
+  }
+  setNum('num-funcs', funcionarios.length)
 
   // FIX #6: calcula contadores reais antes de chamar renderPendencias
   let examesVencidos = 0, examesAVencer = 0, epiRepor = 0, folhasPendentes = 0
@@ -664,14 +683,23 @@ async function carregarDashboard() {
     todosExames = resEx.data
     examesVencidos = resEx.data.filter(e => (e['STATUS EXAME']||'').includes('VENCIDO')).length
     examesAVencer  = resEx.data.filter(e => (e['STATUS EXAME']||'').includes('A VENCER')).length
-    document.getElementById('num-vencidos').textContent = examesVencidos
-    document.getElementById('num-avencer').textContent  = examesAVencer
+    setNum('num-vencidos', examesVencidos)
+    setNum('num-avencer',  examesAVencer)
+  } else {
+    setNum('num-vencidos', '—'); setNum('num-avencer', '—')
   }
   if (resEst && resEst.ok) {
     estoque = resEst.data
     epiRepor = resEst.data.filter(e => { const s = e['SITUAÇÃO']||''; return s.includes('REPOR') || s.includes('SEM') }).length
-    document.getElementById('num-epi').textContent = epiRepor
+    setNum('num-epi', epiRepor)
+  } else {
+    setNum('num-epi', '—')
   }
+
+  // Sem isto, uma falha ou lentidão do GAS deixava o painel em "—" para sempre,
+  // sem nenhum aviso de que os dados não vieram.
+  const falhas = [resFuncs, resEx, resEst, resEpi, resFolha, resPgto].filter(r => r && !r.ok)
+  if (falhas.length) toast('⚠️ Não foi possível carregar todo o painel — toque em ↻ para tentar de novo', 'erro')
 
   const pendentesEpi   = (resEpi   && resEpi.ok)   ? resEpi.data.filter(e   => e['ASSINADO?'] === 'Pendente' && e['ZAPSIGN_DOC']) : []
   const pendentesFolha = (resFolha && resFolha.ok) ? resFolha.data.filter(f => f['STATUS']    === 'Pendente' && f['ZAPSIGN_DOC']) : []
