@@ -93,6 +93,8 @@ function doPost(e) {
       case 'listar_ferias':              return respOk(listarFerias())
       case 'atualizar_ferias':           return respOk(atualizarFerias(body.dados))
       case 'corrigir_arquivamento_ferias': return respOk(corrigirArquivamentoFerias())
+      case 'salvar_plano_ferias':        return respOk(salvarPlanoFerias(body.dados, usuario))
+      case 'excluir_plano_ferias':       return respOk(excluirPlanoFerias(body.dados, usuario))
       case 'listar_pagamentos_func':        return respOk(listarPagamentos(body.dados))
       case 'listar_pagamentos':           return respOk(listarPagamentos(body.dados))
       case 'confirmar_notificacao':       return respOk(confirmarNotificacao(body.dados, usuario))
@@ -2629,6 +2631,59 @@ function listarFerias() {
     })
     return o
   })
+}
+
+// ─── PLANEJAMENTO DE FÉRIAS ────────────────────────────────────────
+// Períodos simulados no app viram linhas com STATUS 'Planejado'. Ficam no
+// calendário junto com os demais, mas não geram documento nem evento no
+// Calendar — viram Pendente de verdade só quando a folha de férias é enviada.
+function salvarPlanoFerias(dados, usuario) {
+  inicializarAbaFerias()
+  var itens = (dados && dados.periodos) || []
+  if (!itens.length) throw new Error('Nenhum período informado')
+
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_FERIAS)
+  var hoje  = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy')
+  var carimbo = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'yyyyMMddHHmmss')
+  var funcs = listarFuncionarios()
+  var salvos = []
+
+  itens.forEach(function (p, i) {
+    var func = funcs.find(function (f) { return String(f['ID']) === String(p.func_id) })
+    if (!func) return
+    var token = 'PLAN-' + carimbo + '-' + (i + 1)
+    sheet.appendRow([
+      func['ID'], func['NOME_COMPLETO'], p.inicio || '', p.fim || '',
+      p.competencia || '', hoje, 'Planejado', token, '',
+    ])
+    salvos.push({ func_id: func['ID'], nome: func['NOME_COMPLETO'], ref_token: token })
+  })
+
+  logAcao(usuario, 'PLANO_FERIAS', salvos.length + ' período(s) planejado(s)')
+  return { salvos: salvos.length, periodos: salvos }
+}
+
+// Remove um período do plano. Só apaga linhas 'Planejado': as pendentes e
+// assinadas têm documento atrelado e não podem sumir por aqui.
+function excluirPlanoFerias(dados, usuario) {
+  var refToken = dados && dados.ref_token
+  if (!refToken) throw new Error('ref_token não informado')
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_FERIAS)
+  if (!sheet) throw new Error('Aba FERIAS não encontrada')
+  var vals = sheet.getDataRange().getValues()
+  var hdrs = vals[0]
+  var iTok = hdrs.indexOf('REF_TOKEN'), iStatus = hdrs.indexOf('STATUS')
+  for (var i = 1; i < vals.length; i++) {
+    if (String(vals[i][iTok]) === String(refToken)) {
+      if (String(vals[i][iStatus]).trim() !== 'Planejado') {
+        throw new Error('Só é possível excluir períodos com status Planejado')
+      }
+      sheet.deleteRow(i + 1)
+      logAcao(usuario, 'PLANO_FERIAS_EXCLUIDO', refToken)
+      return { ok: true }
+    }
+  }
+  throw new Error('Período não encontrado')
 }
 
 // Ajuste manual do período de férias (edita datas/status pelo REF_TOKEN)

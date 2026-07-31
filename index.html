@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
-<link rel="stylesheet" href="style.css?v=20260731c">
+<link rel="stylesheet" href="style.css?v=20260731d">
 <script src="https://apis.google.com/js/api.js"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
@@ -531,20 +531,25 @@
               <option value="">Todas</option>
               <option value="Assinado">Assinadas</option>
               <option value="Pendente">Pendentes</option>
+              <option value="Planejado">Planejadas</option>
             </select>
             <div class="gc-views">
               <button id="cal-tab-grid"  onclick="setCalView('grid')"  class="gc-view ativo">Mês</button>
               <button id="cal-tab-gantt" onclick="setCalView('gantt')" class="gc-view">Gantt</button>
               <button id="cal-tab-ano"   onclick="setCalView('ano')"   class="gc-view">Ano</button>
+              <button id="cal-tab-plano" onclick="setCalView('plano')" class="gc-view">Planejar</button>
             </div>
           </div>
         </div>
         <div id="cal-mes" class="gc"></div>
         <div id="cal-gantt" style="display:none"></div>
         <div id="cal-ano" style="display:none"></div>
+        <div id="cal-plano" style="display:none"></div>
         <div class="gc-legenda">
           <span><i class="gc-ponto"></i> Assinadas</span>
           <span><i class="gc-ponto pend"></i> Pendentes</span>
+          <span><i class="gc-ponto plan"></i> Planejadas</span>
+          <span><i class="gc-ponto sim"></i> Simulação</span>
         </div>
       </div>
       <div class="card mb-3">
@@ -576,7 +581,7 @@
   </nav>
 </div>
 
-<script src="app.js?v=20260731c"></script>
+<script src="app.js?v=20260731d"></script>
 <script>
   // Registra o Service Worker (necessário para Web Share Target e cache offline)
   if ('serviceWorker' in navigator) {

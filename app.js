@@ -488,7 +488,11 @@ function renderCalendario() {
     ini: parseDataCal(f['INICIO']), fim: parseDataCal(f['FIM'] || f['INICIO'])
   })).filter(p => p.ini)
 
-  renderMesGoogle(periodos)
+  // As simulações entram junto: são o ponto do planejamento, e por isso não
+  // somem quando o filtro de status está ligado.
+  const todos = periodos.concat(simulacoesVisiveis())
+  renderMesGoogle(todos)
+  if (calView === 'plano') renderPlanejamento()
 
   if (lista) {
     const mIni = new Date(calAno, calMes, 1), mFim = new Date(calAno, calMes + 1, 0)
@@ -511,7 +515,7 @@ function renderCalendario() {
           <div class="lista-item-sub">${p.ini.toLocaleDateString('pt-BR')} → ${p.fim.toLocaleDateString('pt-BR')} · ${dias} dia(s)</div>
           <div style="font-size:10px;font-weight:600;color:${sitCor};margin-top:2px">${sit}</div>
         </div>
-        <span class="badge ${p.status === 'Assinado' ? 'badge-verde' : 'badge-amarelo'}">${esc(p.status)}</span>
+        <span class="badge ${p.status === 'Assinado' ? 'badge-verde' : p.status === 'Planejado' ? 'badge-azul' : 'badge-amarelo'}">${esc(p.status)}</span>
       </div>`
       }).join('')
     }
@@ -526,6 +530,29 @@ function renderCalendario() {
 // semana. Dentro da semana as faixas são empilhadas em trilhas para não se
 // sobreporem, e a altura da linha acompanha o número de trilhas.
 const DOWS_CAL = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
+
+// Cor/estilo da faixa conforme o estágio do período
+function classeStatusFerias(s) {
+  return s === 'Assinado'  ? ''
+       : s === 'Simulado'  ? ' simulado'
+       : s === 'Planejado' ? ' planejado'
+       : ' pendente'
+}
+function corStatusFerias(s) {
+  return s === 'Assinado'  ? 'var(--verde)'
+       : s === 'Planejado' ? 'var(--blue-text)'
+       : s === 'Simulado'  ? 'var(--purple-text)'
+       : 'var(--amber-text)'
+}
+function simulacoesVisiveis() {
+  return simulacoes
+    .filter(s => {
+      if (!calUnidade) return true
+      const f = funcionarios.find(x => String(x['ID']) === String(s.funcId))
+      return f && f['UNIDADE'] === calUnidade
+    })
+    .map(s => ({ nome: s.nome, status: 'Simulado', token: s.id, ini: s.ini, fim: s.fim }))
+}
 
 function renderMesGoogle(periodos) {
   const el = document.getElementById('cal-mes'); if (!el) return
@@ -577,7 +604,7 @@ function renderMesGoogle(periodos) {
     }
 
     const lanes = trilhas.map(tr => '<div class="gc-lane">' + tr.map(e => {
-      const cls = 'gc-chip' + (e.status === 'Assinado' ? '' : ' pendente')
+      const cls = 'gc-chip' + classeStatusFerias(e.status)
                 + (e.ini < semIni ? ' cont-ini' : '') + (e.fim > semFim ? ' cont-fim' : '')
       const dica = e.nome + ' · ' + e.ini.toLocaleDateString('pt-BR') + ' → ' + e.fim.toLocaleDateString('pt-BR')
       return `<div class="${cls}" style="grid-column:${e.c0 + 1}/span ${e.c1 - e.c0 + 1}"`
@@ -597,13 +624,12 @@ function irHojeCal() {
 let calView = 'grid'
 function setCalView(v) {
   calView = v
-  const mes = document.getElementById('cal-mes'), gantt = document.getElementById('cal-gantt'), ano = document.getElementById('cal-ano')
-  if (mes)   mes.style.display = v === 'grid' ? 'block' : 'none'
-  if (gantt) gantt.style.display = v === 'gantt' ? 'block' : 'none'
-  if (ano)   ano.style.display = v === 'ano' ? 'block' : 'none'
-  ;[['cal-tab-grid', 'grid'], ['cal-tab-gantt', 'gantt'], ['cal-tab-ano', 'ano']].forEach(([id, val]) => {
-    const b = document.getElementById(id); if (b) b.classList.toggle('ativo', v === val)
+  const alvos = { grid: 'cal-mes', gantt: 'cal-gantt', ano: 'cal-ano', plano: 'cal-plano' }
+  Object.entries(alvos).forEach(([val, id]) => {
+    const el = document.getElementById(id); if (el) el.style.display = v === val ? 'block' : 'none'
   })
+  ;[['cal-tab-grid', 'grid'], ['cal-tab-gantt', 'gantt'], ['cal-tab-ano', 'ano'], ['cal-tab-plano', 'plano']]
+    .forEach(([id, val]) => { const b = document.getElementById(id); if (b) b.classList.toggle('ativo', v === val) })
   renderCalendario()
 }
 
@@ -621,7 +647,7 @@ function renderAno() {
   el.innerHTML = header + regs.map(r => {
     const left = pct(r.ini)
     const width = Math.max(1.5, Math.min(100 - left, pct(r.fim) - left + (100 / diasAno)))
-    const cor = r.status === 'Assinado' ? 'var(--verde)' : 'var(--amber-text)'
+    const cor = corStatusFerias(r.status)
     return `<div class="ano-row" onclick="editarFerias('${esc(r.token)}')">
       <div class="ano-nome">${esc(r.nome)}</div>
       <div class="ano-track"><div class="ano-bar" style="left:${left}%;width:${width}%;background:${cor}"></div></div>
@@ -643,7 +669,7 @@ function renderGantt() {
       const eD = r.fim > mFim ? diasNoMes : r.fim.getDate()
       const left = (sD - 1) / diasNoMes * 100
       const width = (eD - sD + 1) / diasNoMes * 100
-      const cor = r.status === 'Assinado' ? 'var(--verde)' : 'var(--amber-text)'
+      const cor = corStatusFerias(r.status)
       const lbl = ('0'+r.ini.getDate()).slice(-2)+'/'+('0'+(r.ini.getMonth()+1)).slice(-2)+'–'+('0'+r.fim.getDate()).slice(-2)+'/'+('0'+(r.fim.getMonth()+1)).slice(-2)
       return `<div class="gantt-row" onclick="editarFerias('${esc(r.token)}')">
         <div class="gantt-nome">${esc(r.nome)}</div>
@@ -662,12 +688,301 @@ function renderGantt() {
   el.innerHTML = html
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// PLANEJAMENTO / SIMULAÇÃO DE FÉRIAS
+// Projeta os períodos do ano inteiro antes de emitir qualquer documento.
+// As regras seguem a CLT: 30 dias por período aquisitivo (12 meses de
+// trabalho), concessão até 12 meses depois sob pena de férias em dobro
+// (art. 137), e fracionamento em até 3 períodos — um de no mínimo 14 dias
+// e nenhum abaixo de 5 (art. 134 §1).
+// ═══════════════════════════════════════════════════════════════════
+let simulacoes = []          // períodos simulados, ainda não salvos
+let seqSimulacao = 0
+
+const DIA_MS = 86400000
+const somaAnos  = (d, n) => new Date(d.getFullYear() + n, d.getMonth(), d.getDate())
+const somaDiasD = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)
+const diasEntre = (a, b) => Math.round((soDataCal(b) - soDataCal(a)) / DIA_MS)
+const fmtBR     = d => (d ? d.toLocaleDateString('pt-BR') : '—')
+const isoDe     = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+// Períodos de um funcionário: os já registrados na planilha + os simulados
+function periodosDoFunc(funcId) {
+  const reg = feriasCache
+    .filter(f => String(f['ID_FUNC']) === String(funcId))
+    .map(f => ({ ini: parseDataCal(f['INICIO']), fim: parseDataCal(f['FIM'] || f['INICIO']),
+                 status: f['STATUS'] || 'Pendente', token: f['REF_TOKEN'] || '' }))
+    .filter(p => p.ini && p.fim)
+  const sim = simulacoes.filter(s => String(s.funcId) === String(funcId))
+    .map(s => ({ ini: s.ini, fim: s.fim, status: 'Simulado', token: s.id }))
+  return reg.concat(sim)
+}
+
+// Situação do funcionário perante o direito a férias.
+// Devolve o período aquisitivo mais antigo ainda não quitado — é o que
+// manda no planejamento, porque é o que vence primeiro.
+function situacaoFerias(func) {
+  const adm = parseDataCal(func['DATA_ADMISSAO'])
+  if (!adm) return { situacao: 'semdata', saldo: 0, usados: 0 }
+  const hoje = hojeCal()
+  const periodos = periodosDoFunc(func['ID'])
+
+  let completos = 0
+  while (somaAnos(adm, completos + 1) <= hoje) completos++
+
+  if (completos === 0) {
+    return { situacao: 'aquisitivo', admissao: adm, completaEm: somaAnos(adm, 1), saldo: 0, usados: 0 }
+  }
+
+  for (let k = 1; k <= completos; k++) {
+    const iniConc = somaAnos(adm, k)                       // começa a contar o prazo de concessão
+    const fimConc = somaDiasD(somaAnos(adm, k + 1), -1)    // limite legal para conceder
+    const usados = periodos
+      .filter(p => p.ini >= iniConc && p.ini <= fimConc)
+      .reduce((s, p) => s + diasEntre(p.ini, p.fim) + 1, 0)
+    if (usados < 30) {
+      const restam = diasEntre(hoje, fimConc)
+      return {
+        situacao: restam < 0 ? 'vencido' : restam <= 90 ? 'urgente' : 'programar',
+        admissao: adm, aquisitivoIni: somaAnos(adm, k - 1), aquisitivoFim: somaDiasD(iniConc, -1),
+        concessivoIni: iniConc, limite: fimConc, usados, saldo: 30 - usados, restam,
+      }
+    }
+  }
+  return { situacao: 'emdia', admissao: adm, saldo: 0, usados: 30,
+           completaEm: somaAnos(adm, completos + 1) }
+}
+
+const ROTULO_SIT = {
+  vencido:    { txt: 'Vencido',        cls: 'br' },
+  urgente:    { txt: 'Vence em breve', cls: 'ba' },
+  programar:  { txt: 'A programar',    cls: 'bb' },
+  emdia:      { txt: 'Em dia',         cls: 'bg' },
+  aquisitivo: { txt: 'Aquisitivo',     cls: 'badge-cinza' },
+  semdata:    { txt: 'Sem data',       cls: 'badge-cinza' },
+}
+
+// Confere um período contra as regras da CLT e contra a escala da equipe.
+// `erros` impedem a simulação; `alertas` só avisam.
+function validarSimulacao(func, ini, dias) {
+  const erros = [], alertas = []
+  const fim = somaDiasD(ini, dias - 1)
+  const sit = situacaoFerias(func)
+
+  if (dias < 5)  erros.push('Cada período precisa ter no mínimo 5 dias corridos (art. 134 §1).')
+  if (dias > 30) erros.push('Um período não pode passar de 30 dias.')
+
+  const meus = periodosDoFunc(func['ID'])
+  if (meus.some(p => ini <= p.fim && fim >= p.ini))
+    erros.push('Sobrepõe outro período já registrado para este funcionário.')
+
+  if (sit.limite) {
+    const noAno = meus.filter(p => p.ini >= sit.concessivoIni && p.ini <= sit.limite)
+    if (noAno.length >= 3)
+      erros.push('Já existem 3 períodos neste ciclo — o fracionamento permite no máximo 3 (art. 134 §1).')
+    const duracoes = noAno.map(p => diasEntre(p.ini, p.fim) + 1).concat(dias)
+    if (duracoes.length > 1 && !duracoes.some(d => d >= 14))
+      alertas.push('Ao fracionar, um dos períodos precisa ter pelo menos 14 dias corridos.')
+    if (fim > sit.limite)
+      alertas.push('Termina depois do limite para conceder (' + fmtBR(sit.limite) + ') — risco de férias em dobro.')
+  }
+
+  // Art. 134 §3: não começar no repouso semanal nem nos 2 dias anteriores
+  const dow = ini.getDay()
+  if (dow === 0 || dow === 5 || dow === 6)
+    alertas.push('Início em ' + DOWS_CAL[dow] + ': as férias não devem começar no descanso semanal nem nos 2 dias que o antecedem (art. 134 §3).')
+
+  if (sit.saldo > 0 && dias > sit.saldo)
+    alertas.push('Excede o saldo do ciclo: restam ' + sit.saldo + ' dia(s).')
+  if (sit.situacao === 'aquisitivo')
+    alertas.push('Período aquisitivo ainda em curso — completa em ' + fmtBR(sit.completaEm) + '.')
+  if (sit.situacao === 'semdata')
+    alertas.push('Funcionário sem data de admissão: não dá para conferir o período aquisitivo.')
+
+  const unidade = func['UNIDADE'] || ''
+  const juntos = funcionarios
+    .filter(f => String(f['ID']) !== String(func['ID']) && (f['UNIDADE'] || '') === unidade)
+    .filter(f => periodosDoFunc(f['ID']).some(p => ini <= p.fim && fim >= p.ini))
+  if (juntos.length)
+    alertas.push(juntos.length + ' da unidade ' + (unidade || '—') + ' fora no mesmo intervalo: '
+      + juntos.map(f => String(f['NOME_COMPLETO'] || '').split(' ')[0]).join(', ') + '.')
+
+  return { erros, alertas, fim }
+}
+
+function renderPlanejamento() {
+  const el = document.getElementById('cal-plano'); if (!el) return
+  const alvo = calUnidade ? funcionarios.filter(f => (f['UNIDADE'] || '') === calUnidade) : funcionarios
+  const ativos = alvo.filter(f => (f['STATUS'] || 'Ativo') !== 'Inativo')
+
+  if (!ativos.length) { el.innerHTML = '<p class="lista-vazia">Nenhum funcionário para planejar</p>'; return }
+
+  const linhas = ativos.map(f => ({ f, s: situacaoFerias(f) }))
+  const ordem = { vencido: 0, urgente: 1, programar: 2, aquisitivo: 3, emdia: 4, semdata: 5 }
+  linhas.sort((a, b) => (ordem[a.s.situacao] - ordem[b.s.situacao])
+                     || ((a.s.limite || 0) - (b.s.limite || 0)))
+
+  const alerta = linhas.filter(l => l.s.situacao === 'vencido' || l.s.situacao === 'urgente').length
+
+  el.innerHTML = `
+    ${alerta ? `<div class="plano-aviso"><i class="ti ti-alert-triangle"></i>
+        ${alerta} funcionário(s) com o prazo de concessão vencido ou perto de vencer — conceder fora do prazo obriga a pagar em dobro (CLT art. 137).</div>` : ''}
+    <div class="plano-tabela">
+      <div class="plano-linha plano-cab">
+        <span>Funcionário</span><span>Aquisitivo</span><span>Conceder até</span><span>Saldo</span><span></span>
+      </div>
+      ${linhas.map(({ f, s }) => {
+        const r = ROTULO_SIT[s.situacao] || ROTULO_SIT.programar
+        const prazo = s.limite
+          ? fmtBR(s.limite) + (s.restam < 0 ? ` <b class="plano-vencido">(${-s.restam}d atrás)</b>`
+                                            : s.restam <= 90 ? ` <b class="plano-urgente">(${s.restam}d)</b>` : '')
+          : s.completaEm ? 'completa em ' + fmtBR(s.completaEm) : '—'
+        const aq = s.aquisitivoIni ? fmtBR(s.aquisitivoIni) + ' – ' + fmtBR(s.aquisitivoFim)
+                 : s.admissao ? 'desde ' + fmtBR(s.admissao) : '—'
+        return `<div class="plano-linha">
+          <span class="plano-nome">${esc(f['NOME_COMPLETO'] || '')}
+            <em>${esc(f['FUNCAO'] || '')}${f['UNIDADE'] ? ' · ' + esc(f['UNIDADE']) : ''}</em></span>
+          <span class="plano-sec">${aq}</span>
+          <span class="plano-sec">${prazo}</span>
+          <span><span class="badge ${r.cls}">${s.saldo ? s.saldo + 'd' : r.txt}</span></span>
+          <span><button class="plano-btn" onclick="abrirSimulacao('${esc(f['ID'])}')">Simular</button></span>
+        </div>`
+      }).join('')}
+    </div>
+    ${renderListaSimulacoes()}`
+}
+
+function renderListaSimulacoes() {
+  if (!simulacoes.length) {
+    return `<p class="plano-dica">Toque em <strong>Simular</strong> para montar o plano do ano. Os períodos simulados
+            aparecem no calendário em tracejado e só vão para a planilha quando você salvar.</p>`
+  }
+  const total = simulacoes.reduce((s, x) => s + diasEntre(x.ini, x.fim) + 1, 0)
+  return `
+    <div class="plano-sim">
+      <div class="card-titulo" style="margin-bottom:8px"><i class="ti ti-flask"></i>
+        Simulação — ${simulacoes.length} período(s), ${total} dia(s)</div>
+      ${simulacoes.map((s, i) => `
+        <div class="plano-sim-item">
+          <div>
+            <div class="plano-sim-nome">${esc(s.nome)}</div>
+            <div class="plano-sec">${fmtBR(s.ini)} → ${fmtBR(s.fim)} · ${diasEntre(s.ini, s.fim) + 1} dia(s)</div>
+            ${s.alertas.length ? `<div class="plano-alerta">${s.alertas.map(a => '<div>⚠ ' + esc(a) + '</div>').join('')}</div>` : ''}
+          </div>
+          <button class="plano-btn remover" onclick="removerSimulacao(${i})" aria-label="Remover"><i class="ti ti-trash"></i></button>
+        </div>`).join('')}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn-secundario" style="flex:1" onclick="limparSimulacoes()">Descartar</button>
+        <button class="btn-primario" style="flex:1" id="btn-salvar-plano" onclick="salvarPlano()">Salvar plano</button>
+      </div>
+    </div>`
+}
+
+function abrirSimulacao(funcId) {
+  const func = funcionarios.find(f => String(f['ID']) === String(funcId))
+  if (!func) return toast('❌ Funcionário não encontrado', 'erro')
+  const s = situacaoFerias(func)
+  // Sugere o primeiro dia útil (segunda) a partir de hoje ou do início do ciclo
+  let sugerido = hojeCal()
+  if (s.concessivoIni && s.concessivoIni > sugerido) sugerido = s.concessivoIni
+  while (sugerido.getDay() !== 1) sugerido = somaDiasD(sugerido, 1)
+
+  const modal = document.createElement('div')
+  modal.id = 'modal-simular'
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:400;display:flex;align-items:flex-end;justify-content:center'
+  modal.innerHTML = `<div style="background:var(--card-bg);border-radius:20px 20px 0 0;padding:20px 16px 28px;width:100%;max-width:480px">
+    <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 14px"></div>
+    <h3 style="font-size:15px;font-weight:700;margin-bottom:2px">${esc(func['NOME_COMPLETO'] || '')}</h3>
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:14px">
+      ${s.limite ? 'Conceder até ' + fmtBR(s.limite) + ' · saldo ' + s.saldo + ' dia(s)'
+                 : s.completaEm ? 'Aquisitivo completa em ' + fmtBR(s.completaEm) : 'Sem data de admissão'}</p>
+    <div class="dois-col">
+      <div class="campo-grupo"><label>Início</label><input type="date" id="sim-ini" value="${isoDe(sugerido)}" oninput="previewSimulacao('${esc(funcId)}')"></div>
+      <div class="campo-grupo"><label>Dias</label><input type="number" id="sim-dias" min="5" max="30" value="${Math.min(30, Math.max(5, s.saldo || 30))}" oninput="previewSimulacao('${esc(funcId)}')"></div>
+    </div>
+    <div id="sim-preview" class="plano-preview"></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button onclick="document.getElementById('modal-simular').remove()" class="btn-secundario" style="flex:1">Cancelar</button>
+      <button onclick="addSimulacao('${esc(funcId)}')" class="btn-primario" style="flex:1" id="btn-add-sim">Adicionar</button>
+    </div>
+  </div>`
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove() })
+  document.body.appendChild(modal)
+  previewSimulacao(funcId)
+}
+
+function lerCamposSimulacao() {
+  const ini = parseDataCal(document.getElementById('sim-ini')?.value || '')
+  const dias = parseInt(document.getElementById('sim-dias')?.value || '0', 10)
+  return { ini, dias }
+}
+
+function previewSimulacao(funcId) {
+  const el = document.getElementById('sim-preview'); if (!el) return
+  const func = funcionarios.find(f => String(f['ID']) === String(funcId))
+  const { ini, dias } = lerCamposSimulacao()
+  const btn = document.getElementById('btn-add-sim')
+  if (!func || !ini || !dias) { el.innerHTML = ''; if (btn) btn.disabled = true; return }
+
+  const v = validarSimulacao(func, ini, dias)
+  if (btn) btn.disabled = v.erros.length > 0
+  el.innerHTML =
+    `<div class="plano-preview-periodo">${fmtBR(ini)} → ${fmtBR(v.fim)} · ${dias} dia(s)</div>`
+    + v.erros.map(e => `<div class="plano-erro">✕ ${esc(e)}</div>`).join('')
+    + v.alertas.map(a => `<div class="plano-alerta">⚠ ${esc(a)}</div>`).join('')
+    + (!v.erros.length && !v.alertas.length ? '<div class="plano-ok">✓ Dentro das regras</div>' : '')
+}
+
+function addSimulacao(funcId) {
+  const func = funcionarios.find(f => String(f['ID']) === String(funcId)); if (!func) return
+  const { ini, dias } = lerCamposSimulacao()
+  if (!ini || !dias) return toast('❌ Informe início e duração', 'erro')
+  const v = validarSimulacao(func, ini, dias)
+  if (v.erros.length) return toast('❌ ' + v.erros[0], 'erro')
+
+  simulacoes.push({
+    id: 'SIM-' + (++seqSimulacao), funcId: String(func['ID']),
+    nome: func['NOME_COMPLETO'] || '', ini, fim: v.fim, alertas: v.alertas,
+  })
+  document.getElementById('modal-simular')?.remove()
+  toast('✅ Período simulado — veja no calendário', 'sucesso')
+  renderCalendario()
+}
+
+function removerSimulacao(i) { simulacoes.splice(i, 1); renderCalendario() }
+function limparSimulacoes()  { simulacoes = []; renderCalendario() }
+
+async function salvarPlano() {
+  if (!simulacoes.length) return
+  const btn = document.getElementById('btn-salvar-plano')
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvando...' }
+  mostrarLoading('Salvando plano de férias...')
+  const res = await chamarGAS({
+    acao: 'salvar_plano_ferias',
+    dados: { periodos: simulacoes.map(s => ({
+      func_id: s.funcId, inicio: isoDe(s.ini), fim: isoDe(s.fim),
+      competencia: MESES[s.ini.getMonth()] + '/' + s.ini.getFullYear(),
+    })) },
+  })
+  esconderLoading()
+  if (btn) { btn.disabled = false; btn.textContent = 'Salvar plano' }
+
+  if (res && res.ok) {
+    toast('✅ ' + (res.data?.salvos ?? simulacoes.length) + ' período(s) salvos no plano', 'sucesso')
+    simulacoes = []
+    carregarCalendario()
+  } else {
+    toast('❌ ' + ((res && res.erro) || 'Erro ao salvar o plano'), 'erro')
+  }
+}
+
 function editarFerias(refToken) {
+  // Faixa de simulação: ainda não existe na planilha — leva ao painel do plano.
+  if (String(refToken).indexOf('SIM-') === 0) return setCalView('plano')
   const r = feriasCache.find(f => String(f['REF_TOKEN']) === String(refToken))
   if (!r) return toast('❌ Registro não encontrado', 'erro')
   const ini = String(r['INICIO'] || '').substring(0, 10)
   const fim = String(r['FIM'] || '').substring(0, 10)
-  const assinado = r['STATUS'] === 'Assinado'
   const modal = document.createElement('div')
   modal.id = 'modal-ferias'
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:400;display:flex;align-items:flex-end;justify-content:center'
@@ -679,7 +994,9 @@ function editarFerias(refToken) {
       <div class="campo-grupo"><label>Início</label><input type="date" id="fer-ini" value="${esc(ini)}"></div>
       <div class="campo-grupo"><label>Fim</label><input type="date" id="fer-fim" value="${esc(fim)}"></div>
     </div>
-    <div class="campo-grupo"><label>Status</label><select id="fer-status"><option ${assinado ? '' : 'selected'}>Pendente</option><option ${assinado ? 'selected' : ''}>Assinado</option></select></div>
+    <div class="campo-grupo"><label>Status</label><select id="fer-status">
+      ${['Planejado', 'Pendente', 'Assinado'].map(o => `<option${o === (r['STATUS'] || 'Pendente') ? ' selected' : ''}>${o}</option>`).join('')}
+    </select></div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <button onclick="document.getElementById('modal-ferias').remove()" class="btn-secundario" style="flex:1">Cancelar</button>
       <button onclick="salvarFerias('${esc(refToken)}')" class="btn-primario" style="flex:1">Salvar</button>
