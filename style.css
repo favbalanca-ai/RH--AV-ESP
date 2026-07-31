@@ -656,6 +656,8 @@ html, body {
   padding: 8px 10px; font-size: 12px; font-family: inherit;
   background: var(--card-bg); color: var(--text-primary); outline: none;
 }
+.btn-trocar-func { margin-left: auto; flex-shrink: 0; background: var(--surface); color: var(--text-secondary); border: 0.5px solid var(--border); border-radius: 7px; padding: 5px 9px; font-size: 10px; font-weight: 700; display: flex; align-items: center; gap: 3px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.btn-trocar-func:hover { background: var(--amber-bg); color: var(--amber-text); }
 .fpc-links   { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .btn-ver-frac    { background: var(--blue-bg);   color: var(--blue-text);  border: none; border-radius: 7px; padding: 5px 10px; font-size: 11px; font-weight: 700; display: flex; align-items: center; gap: 3px; cursor: pointer; font-family: inherit; }
 .btn-enviar-frac { background: var(--verde);     color: #fff;              border: none; border-radius: 7px; padding: 5px 10px; font-size: 11px; font-weight: 700; display: flex; align-items: center; gap: 3px; cursor: pointer; font-family: inherit; }

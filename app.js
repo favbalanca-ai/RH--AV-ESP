@@ -1712,6 +1712,12 @@ async function processarFracionamento() {
   const competencia = document.getElementById('sel-comp-frac').value
   if (!file) return toast('❌ Selecione o PDF', 'erro')
   if (!competencia) return toast('❌ Selecione a competência antes de separar', 'erro')
+  // Garante que a lista de funcionários esteja carregada — sem ela a seleção
+  // (automática pela IA e manual) fica vazia.
+  if (!funcionarios.length) {
+    const rf = await chamarGAS({ acao: 'listar_funcionarios' })
+    if (rf && rf.ok && Array.isArray(rf.data)) { funcionarios = rf.data; preencherSelectsOcultos() }
+  }
   const btn = document.getElementById('btn-fracionar')
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Separando...'
   mostrarLoading('Carregando pdf-lib...')
@@ -1852,11 +1858,12 @@ function renderCardIdentificado(i, func, metodo) {
   document.getElementById('fpc-func-' + i).innerHTML = `
     <div class="fpc-func">
       <div class="fpc-av">${getIniciais(func['NOME_COMPLETO'])}</div>
-      <div>
+      <div style="flex:1;min-width:0">
         <div class="fpc-nome">${esc(func['NOME_COMPLETO'])}</div>
         <div class="fpc-sub">${esc(func['FUNCAO']||'')} · ${esc(func['UNIDADE']||'')}</div>
         ${metodo === 'ia' || metodo === 'auto' ? `<div class="fpc-auto"><i class="ti ti-robot" style="font-size:9px"></i> Identificado pela IA</div>` : metodo === 'cache' ? `<div class="fpc-auto"><i class="ti ti-history" style="font-size:9px"></i> Mapeamento salvo — confirme</div>` : '<div class="fpc-manual-tag">Selecionado manualmente</div>'}
       </div>
+      <button class="btn-trocar-func" onclick="renderCardManual(${i})"><i class="ti ti-switch-horizontal" style="font-size:11px"></i> Trocar</button>
     </div>`
   const btnEl = document.getElementById('btn-zap-' + i)
   if (btnEl) btnEl.disabled = false
@@ -1867,11 +1874,36 @@ function renderCardManual(i) {
   card.className = 'frac-page-card manual'
   const numEl = document.getElementById('fpc-num-' + i)
   if (numEl) { numEl.className = 'fpc-num manual'; numEl.innerHTML = `<i class="ti ti-alert-triangle" style="font-size:10px;vertical-align:-1px"></i> Pág. ${paginasFracionadas[i].pagina} — selecione` }
-  document.getElementById('fpc-func-' + i).innerHTML = `
+  const selId = String(paginasFracionadas[i].funcId || '')
+  const wrap  = document.getElementById('fpc-func-' + i)
+
+  if (!funcionarios.length) {
+    wrap.innerHTML = `
+      <div style="font-size:11px;color:var(--amber-text);display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span><i class="ti ti-alert-circle" style="font-size:12px;vertical-align:-1px"></i> Lista de funcionários não carregada.</span>
+        <button class="btn-trocar-func" onclick="recarregarFuncionariosFrac(${i})"><i class="ti ti-refresh" style="font-size:11px"></i> Recarregar</button>
+      </div>`
+    return
+  }
+
+  wrap.innerHTML = `
     <select class="frac-select-manual" onchange="selecionarFuncManual(${i}, this.value)">
       <option value="">Selecione o funcionário...</option>
-      ${funcionarios.map(f => `<option value="${esc(f['ID'])}">${esc(f['NOME_COMPLETO'])}</option>`).join('')}
+      ${funcionarios.map(f => `<option value="${esc(f['ID'])}"${String(f['ID']) === selId ? ' selected' : ''}>${esc(f['NOME_COMPLETO'])}</option>`).join('')}
     </select>`
+  const btnEl = document.getElementById('btn-zap-' + i)
+  if (btnEl) btnEl.disabled = !selId
+}
+
+async function recarregarFuncionariosFrac(i) {
+  const res = await chamarGAS({ acao: 'listar_funcionarios' })
+  if (res && res.ok && Array.isArray(res.data)) {
+    funcionarios = res.data
+    preencherSelectsOcultos()
+    renderCardManual(i)
+  } else {
+    toast('❌ Não foi possível carregar os funcionários', 'erro')
+  }
 }
 
 function selecionarFuncManual(i, funcId) {
