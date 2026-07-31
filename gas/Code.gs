@@ -882,11 +882,22 @@ function identificarDocumentoComIA(dados) {
   }
 
   if (!func && resultado.nome_funcionario) {
-    var nomeUpper = resultado.nome_funcionario.toUpperCase()
-    func = funcionarios.find(function(f) {
-      return f['NOME_COMPLETO'].toUpperCase().indexOf(nomeUpper.split(' ')[0]) !== -1 ||
-             nomeUpper.indexOf(f['NOME_COMPLETO'].toUpperCase().split(' ')[0]) !== -1
-    })
+    // 1) Casamento preciso por 2+ partes do nome — evita pegar o empregador
+    //    (comum em avisos/recibos de férias, onde a razão social aparece em destaque).
+    func = encontrarFuncionarioPorNome(resultado.nome_funcionario, funcionarios)
+
+    // 2) Fallback pelo primeiro nome, só quando houver UM único funcionário com
+    //    esse primeiro nome (evita atribuir a pessoa errada em nomes repetidos).
+    if (!func) {
+      var primeiro = String(resultado.nome_funcionario).toUpperCase()
+        .split(' ').filter(function(p) { return p.length > 2 })[0] || ''
+      if (primeiro) {
+        var candidatos = funcionarios.filter(function(f) {
+          return String(f['NOME_COMPLETO'] || '').toUpperCase().split(' ').indexOf(primeiro) !== -1
+        })
+        if (candidatos.length === 1) func = candidatos[0]
+      }
+    }
   }
 
   return {

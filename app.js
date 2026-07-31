@@ -118,7 +118,9 @@ document.addEventListener('DOMContentLoaded', () => {
 function entrarNoApp() {
   document.getElementById('tela-login').style.display = 'none'
   aplicarTemaInicial()
-  document.getElementById('tela-app').style.display   = 'flex'
+  // Limpa o display inline em vez de fixar 'flex': assim o CSS decide o
+  // layout (coluna flex no mobile, grid com barra lateral no desktop).
+  document.getElementById('tela-app').style.display   = ''
   preencherMesesFracionar()
   preencherSelectsOcultos()
   carregarDashboard()
@@ -146,8 +148,10 @@ async function sincronizarManual() {
       toast('✅ ' + d.atualizados + ' atualizada(s)!', 'sucesso')
       if (paginaAtual === 'epi') carregarEpi()
       if (paginaAtual === 'fracionar') carregarEntregasFolha()
-      carregarDashboard()
     } else { toast(d.verificados === 0 ? 'Nenhum pendente' : '🔄 ' + d.pendentes + ' aguardando', '') }
+    // Sempre recarrega o painel: o ↻ é a forma de recuperar os números quando
+    // o carregamento inicial falhou, não só quando houve assinatura nova.
+    carregarDashboard()
   } else { toast('❌ Erro na sincronização', 'erro') }
 }
 
@@ -645,7 +649,20 @@ async function chamarGAS(dados, { timeoutMs = 120000 } = {}) {
 
 // ─── DASHBOARD ────────────────────────────────────────────────────
 async function carregarDashboard() {
-  const [resEx, resEst, resEpi, resFolha, resPgto] = await Promise.all([
+  const setNum = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v }
+
+  // Total de funcionários não depende de rede: mostra na hora em vez de ficar
+  // preso esperando as 5 chamadas abaixo.
+  setNum('num-funcs', funcionarios.length || '…')
+  // Os demais ficam em "…" para o painel não parecer travado enquanto carrega.
+  ;['num-vencidos', 'num-avencer', 'num-epi'].forEach(id => setNum(id, '…'))
+
+  // Ao restaurar a sessão (F5) o login não roda, e com ele a lista de
+  // funcionários nunca era recarregada — o painel e os selects ficavam zerados.
+  const precisaFuncs = !funcionarios.length
+
+  const [resFuncs, resEx, resEst, resEpi, resFolha, resPgto] = await Promise.all([
+    precisaFuncs ? chamarGAS({ acao: 'listar_funcionarios' }) : null,
     chamarGAS({ acao: 'listar_exames' }),
     chamarGAS({ acao: 'listar_epi_estoque' }),
     chamarGAS({ acao: 'listar_epi_entregas' }),
@@ -653,7 +670,11 @@ async function carregarDashboard() {
     chamarGAS({ acao: 'listar_pagamentos', dados: { status: 'Aguardando Pagamento' } }),
   ])
 
-  document.getElementById('num-funcs').textContent = funcionarios.length
+  if (resFuncs && resFuncs.ok && Array.isArray(resFuncs.data)) {
+    funcionarios = resFuncs.data
+    preencherSelectsOcultos()
+  }
+  setNum('num-funcs', funcionarios.length)
 
   // FIX #6: calcula contadores reais antes de chamar renderPendencias
   let examesVencidos = 0, examesAVencer = 0, epiRepor = 0, folhasPendentes = 0
@@ -662,14 +683,23 @@ async function carregarDashboard() {
     todosExames = resEx.data
     examesVencidos = resEx.data.filter(e => (e['STATUS EXAME']||'').includes('VENCIDO')).length
     examesAVencer  = resEx.data.filter(e => (e['STATUS EXAME']||'').includes('A VENCER')).length
-    document.getElementById('num-vencidos').textContent = examesVencidos
-    document.getElementById('num-avencer').textContent  = examesAVencer
+    setNum('num-vencidos', examesVencidos)
+    setNum('num-avencer',  examesAVencer)
+  } else {
+    setNum('num-vencidos', '—'); setNum('num-avencer', '—')
   }
   if (resEst && resEst.ok) {
     estoque = resEst.data
     epiRepor = resEst.data.filter(e => { const s = e['SITUAÇÃO']||''; return s.includes('REPOR') || s.includes('SEM') }).length
-    document.getElementById('num-epi').textContent = epiRepor
+    setNum('num-epi', epiRepor)
+  } else {
+    setNum('num-epi', '—')
   }
+
+  // Sem isto, uma falha ou lentidão do GAS deixava o painel em "—" para sempre,
+  // sem nenhum aviso de que os dados não vieram.
+  const falhas = [resFuncs, resEx, resEst, resEpi, resFolha, resPgto].filter(r => r && !r.ok)
+  if (falhas.length) toast('⚠️ Não foi possível carregar todo o painel — toque em ↻ para tentar de novo', 'erro')
 
   const pendentesEpi   = (resEpi   && resEpi.ok)   ? resEpi.data.filter(e   => e['ASSINADO?'] === 'Pendente' && e['ZAPSIGN_DOC']) : []
   const pendentesFolha = (resFolha && resFolha.ok) ? resFolha.data.filter(f => f['STATUS']    === 'Pendente' && f['ZAPSIGN_DOC']) : []
@@ -1712,6 +1742,12 @@ async function processarFracionamento() {
   const competencia = document.getElementById('sel-comp-frac').value
   if (!file) return toast('❌ Selecione o PDF', 'erro')
   if (!competencia) return toast('❌ Selecione a competência antes de separar', 'erro')
+  // Garante que a lista de funcionários esteja carregada — sem ela a seleção
+  // (automática pela IA e manual) fica vazia.
+  if (!funcionarios.length) {
+    const rf = await chamarGAS({ acao: 'listar_funcionarios' })
+    if (rf && rf.ok && Array.isArray(rf.data)) { funcionarios = rf.data; preencherSelectsOcultos() }
+  }
   const btn = document.getElementById('btn-fracionar')
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Separando...'
   mostrarLoading('Carregando pdf-lib...')
@@ -1852,11 +1888,12 @@ function renderCardIdentificado(i, func, metodo) {
   document.getElementById('fpc-func-' + i).innerHTML = `
     <div class="fpc-func">
       <div class="fpc-av">${getIniciais(func['NOME_COMPLETO'])}</div>
-      <div>
+      <div style="flex:1;min-width:0">
         <div class="fpc-nome">${esc(func['NOME_COMPLETO'])}</div>
         <div class="fpc-sub">${esc(func['FUNCAO']||'')} · ${esc(func['UNIDADE']||'')}</div>
         ${metodo === 'ia' || metodo === 'auto' ? `<div class="fpc-auto"><i class="ti ti-robot" style="font-size:9px"></i> Identificado pela IA</div>` : metodo === 'cache' ? `<div class="fpc-auto"><i class="ti ti-history" style="font-size:9px"></i> Mapeamento salvo — confirme</div>` : '<div class="fpc-manual-tag">Selecionado manualmente</div>'}
       </div>
+      <button class="btn-trocar-func" onclick="renderCardManual(${i})"><i class="ti ti-switch-horizontal" style="font-size:11px"></i> Trocar</button>
     </div>`
   const btnEl = document.getElementById('btn-zap-' + i)
   if (btnEl) btnEl.disabled = false
@@ -1867,11 +1904,36 @@ function renderCardManual(i) {
   card.className = 'frac-page-card manual'
   const numEl = document.getElementById('fpc-num-' + i)
   if (numEl) { numEl.className = 'fpc-num manual'; numEl.innerHTML = `<i class="ti ti-alert-triangle" style="font-size:10px;vertical-align:-1px"></i> Pág. ${paginasFracionadas[i].pagina} — selecione` }
-  document.getElementById('fpc-func-' + i).innerHTML = `
+  const selId = String(paginasFracionadas[i].funcId || '')
+  const wrap  = document.getElementById('fpc-func-' + i)
+
+  if (!funcionarios.length) {
+    wrap.innerHTML = `
+      <div style="font-size:11px;color:var(--amber-text);display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span><i class="ti ti-alert-circle" style="font-size:12px;vertical-align:-1px"></i> Lista de funcionários não carregada.</span>
+        <button class="btn-trocar-func" onclick="recarregarFuncionariosFrac(${i})"><i class="ti ti-refresh" style="font-size:11px"></i> Recarregar</button>
+      </div>`
+    return
+  }
+
+  wrap.innerHTML = `
     <select class="frac-select-manual" onchange="selecionarFuncManual(${i}, this.value)">
       <option value="">Selecione o funcionário...</option>
-      ${funcionarios.map(f => `<option value="${esc(f['ID'])}">${esc(f['NOME_COMPLETO'])}</option>`).join('')}
+      ${funcionarios.map(f => `<option value="${esc(f['ID'])}"${String(f['ID']) === selId ? ' selected' : ''}>${esc(f['NOME_COMPLETO'])}</option>`).join('')}
     </select>`
+  const btnEl = document.getElementById('btn-zap-' + i)
+  if (btnEl) btnEl.disabled = !selId
+}
+
+async function recarregarFuncionariosFrac(i) {
+  const res = await chamarGAS({ acao: 'listar_funcionarios' })
+  if (res && res.ok && Array.isArray(res.data)) {
+    funcionarios = res.data
+    preencherSelectsOcultos()
+    renderCardManual(i)
+  } else {
+    toast('❌ Não foi possível carregar os funcionários', 'erro')
+  }
 }
 
 function selecionarFuncManual(i, funcId) {
