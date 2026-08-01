@@ -824,19 +824,19 @@ html { overflow-x: hidden; }
   .gc-dow     { font-size: 8.5px; }
 }
 
-.ferias-resumo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
-.ferias-resumo .stat-num   { font-size: 22px; }
-.ferias-resumo .stat-label { font-size: 10px; line-height: 1.25; }
-.ferias-resumo .card-stat  { cursor: default; padding: 13px 11px 11px; }
-.ferias-resumo .card-stat:active { transform: none; }
-.gantt-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; cursor: pointer; }
-.gantt-nome { width: 86px; flex-shrink: 0; font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gantt-track { flex: 1; height: 22px; background: var(--surface); border-radius: 6px; position: relative; display: flex; align-items: center; }
-.gantt-bar {
-  position: absolute; height: 16px; border-radius: 5px; color: #fff; font-size: 9px; font-weight: 700;
-  display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap;
-  padding: 0 4px; min-width: 26px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+/* Resumo em uma linha, no topo do próprio card do calendário */
+.fer-resumo {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px;
+  padding-bottom: 11px; margin-bottom: 12px; border-bottom: 0.5px solid var(--border);
+  font-size: 11.5px; color: var(--text-secondary);
 }
+.fer-resumo b { font-size: 17px; font-weight: 800; margin-right: 4px; letter-spacing: -0.02em; }
+.fer-resumo .verde b { color: var(--verde-text); }
+.fer-resumo .amber b { color: var(--amber-text); }
+.fer-resumo .blue  b { color: var(--blue-text); }
+/* Lista do mês continua no mesmo card, separada por um filete */
+.fer-lista-sec { margin-top: 14px; padding-top: 12px; border-top: 0.5px solid var(--border); }
+
 .ano-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
 .ano-nome { width: 78px; flex-shrink: 0; font-size: 10px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ano-track { flex: 1; height: 16px; background: var(--surface); border-radius: 5px; position: relative; }
