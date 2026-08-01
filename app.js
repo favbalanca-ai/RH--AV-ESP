@@ -447,29 +447,6 @@ function renderResumoFerias() {
   set('fer-prox', regs.filter(r => soDataCal(r.ini) > h0 && soDataCal(r.ini) <= em30).length)
 }
 
-// Reclassifica e move para a pasta FERIAS os recibos que foram parar em
-// FOLHA_PAGAMENTO (coluna TIPO vazia nas linhas antigas).
-async function corrigirArquivamentoFerias() {
-  const btn = document.getElementById('btn-corrigir-arq')
-  const rotulo = '<i class="ti ti-folder-symlink"></i> Corrigir arquivamento'
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Verificando...' }
-  mostrarLoading('Verificando arquivamento no Drive...')
-  const res = await chamarGAS({ acao: 'corrigir_arquivamento_ferias' })
-  esconderLoading()
-  if (btn) { btn.disabled = false; btn.innerHTML = rotulo }
-
-  if (!res || !res.ok || !res.data) return toast('❌ ' + ((res && res.erro) || 'Erro ao corrigir'), 'erro')
-  const d = res.data
-  if (!d.marcados && !d.movidos) {
-    toast('✅ Nada a corrigir — os recibos já estão na pasta certa', 'sucesso')
-  } else {
-    toast('✅ ' + d.movidos + ' PDF(s) movidos p/ FERIAS · ' + d.marcados + ' registro(s) reclassificados', 'sucesso')
-  }
-  if (d.erros && d.erros.length) {
-    console.warn('Arquivamento — pendências:', d.erros)
-    toast('⚠️ ' + d.erros.length + ' registro(s) não puderam ser movidos', 'erro')
-  }
-}
 function mudarMesCal(delta) {
   if (calView === 'ano') { calAno += delta; renderCalendario(); return }
   calMes += delta
@@ -521,7 +498,6 @@ function renderCalendario() {
     }
   }
   renderResumoFerias()
-  renderGantt()
   renderAno()
 }
 
@@ -624,11 +600,11 @@ function irHojeCal() {
 let calView = 'grid'
 function setCalView(v) {
   calView = v
-  const alvos = { grid: 'cal-mes', gantt: 'cal-gantt', ano: 'cal-ano', plano: 'cal-plano' }
+  const alvos = { grid: 'cal-mes', ano: 'cal-ano', plano: 'cal-plano' }
   Object.entries(alvos).forEach(([val, id]) => {
     const el = document.getElementById(id); if (el) el.style.display = v === val ? 'block' : 'none'
   })
-  ;[['cal-tab-grid', 'grid'], ['cal-tab-gantt', 'gantt'], ['cal-tab-ano', 'ano'], ['cal-tab-plano', 'plano']]
+  ;[['cal-tab-grid', 'grid'], ['cal-tab-ano', 'ano'], ['cal-tab-plano', 'plano']]
     .forEach(([id, val]) => { const b = document.getElementById(id); if (b) b.classList.toggle('ativo', v === val) })
   renderCalendario()
 }
@@ -653,39 +629,6 @@ function renderAno() {
       <div class="ano-track"><div class="ano-bar" style="left:${left}%;width:${width}%;background:${cor}"></div></div>
     </div>`
   }).join('')
-}
-
-function renderGantt() {
-  const el = document.getElementById('cal-gantt'); if (!el) return
-  const diasNoMes = new Date(calAno, calMes + 1, 0).getDate()
-  const mIni = new Date(calAno, calMes, 1), mFim = new Date(calAno, calMes + 1, 0)
-  const regs = feriasFiltradas().map(f => ({ token: f['REF_TOKEN'] || '', nome: f['NOME_FUNC'] || '?', status: f['STATUS'] || 'Pendente', ini: parseDataCal(f['INICIO']), fim: parseDataCal(f['FIM'] || f['INICIO']) }))
-  const noMes = regs.filter(r => r.ini && r.fim && r.fim >= mIni && r.ini <= mFim).sort((a, b) => a.ini - b.ini)
-  const semDatas = regs.filter(r => !r.ini)
-  let html = ''
-  if (noMes.length) {
-    html += noMes.map(r => {
-      const sD = r.ini < mIni ? 1 : r.ini.getDate()
-      const eD = r.fim > mFim ? diasNoMes : r.fim.getDate()
-      const left = (sD - 1) / diasNoMes * 100
-      const width = (eD - sD + 1) / diasNoMes * 100
-      const cor = corStatusFerias(r.status)
-      const lbl = ('0'+r.ini.getDate()).slice(-2)+'/'+('0'+(r.ini.getMonth()+1)).slice(-2)+'–'+('0'+r.fim.getDate()).slice(-2)+'/'+('0'+(r.fim.getMonth()+1)).slice(-2)
-      return `<div class="gantt-row" onclick="editarFerias('${esc(r.token)}')">
-        <div class="gantt-nome">${esc(r.nome)}</div>
-        <div class="gantt-track"><div class="gantt-bar" style="left:${left}%;width:${width}%;background:${cor}">${lbl}</div></div>
-      </div>`
-    }).join('')
-  } else {
-    html += '<p class="lista-vazia">Nenhuma férias neste mês</p>'
-  }
-  if (semDatas.length) {
-    html += '<div style="font-size:11px;font-weight:700;color:var(--amber-text);margin:12px 0 6px"><i class="ti ti-alert-triangle" style="vertical-align:-2px"></i> Sem datas — toque para definir</div>'
-    html += semDatas.map(r => `<div class="gantt-row" onclick="editarFerias('${esc(r.token)}')">
-      <div class="gantt-nome">${esc(r.nome)}</div>
-      <div class="gantt-track" style="justify-content:center;color:var(--text-hint);font-size:11px">definir período</div></div>`).join('')
-  }
-  el.innerHTML = html
 }
 
 // ═══════════════════════════════════════════════════════════════════

@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
-<link rel="stylesheet" href="style.css?v=20260731d">
+<link rel="stylesheet" href="style.css?v=20260801">
 <script src="https://apis.google.com/js/api.js"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
@@ -499,22 +499,13 @@
 
     <!-- CALENDÁRIO DE FÉRIAS -->
     <div id="pg-calendario" class="pagina">
-      <!-- Resumo: leitura rápida da situação das férias -->
-      <div class="ferias-resumo">
-        <div class="card-stat verde">
-          <i class="ti ti-beach stat-icone" aria-hidden="true"></i>
-          <span class="stat-num" id="fer-hoje">—</span><span class="stat-label">De férias hoje</span>
+      <!-- Aba inteira num só card: resumo, calendário e lista do mês -->
+      <div class="card">
+        <div class="fer-resumo">
+          <span class="verde"><b id="fer-hoje">—</b> de férias hoje</span>
+          <span class="amber"><b id="fer-pend">—</b> pendentes</span>
+          <span class="blue"><b id="fer-prox">—</b> próx. 30 dias</span>
         </div>
-        <div class="card-stat amarelo">
-          <i class="ti ti-clock stat-icone" style="color:var(--amber-text)" aria-hidden="true"></i>
-          <span class="stat-num" id="fer-pend">—</span><span class="stat-label">Pendentes</span>
-        </div>
-        <div class="card-stat">
-          <i class="ti ti-calendar-up stat-icone" aria-hidden="true"></i>
-          <span class="stat-num" id="fer-prox">—</span><span class="stat-label">Próximos 30 dias</span>
-        </div>
-      </div>
-      <div class="card mb-3">
         <!-- Barra de ferramentas no estilo Google Agenda -->
         <div class="gc-toolbar">
           <div class="gc-nav">
@@ -535,14 +526,12 @@
             </select>
             <div class="gc-views">
               <button id="cal-tab-grid"  onclick="setCalView('grid')"  class="gc-view ativo">Mês</button>
-              <button id="cal-tab-gantt" onclick="setCalView('gantt')" class="gc-view">Gantt</button>
               <button id="cal-tab-ano"   onclick="setCalView('ano')"   class="gc-view">Ano</button>
               <button id="cal-tab-plano" onclick="setCalView('plano')" class="gc-view">Planejar</button>
             </div>
           </div>
         </div>
         <div id="cal-mes" class="gc"></div>
-        <div id="cal-gantt" style="display:none"></div>
         <div id="cal-ano" style="display:none"></div>
         <div id="cal-plano" style="display:none"></div>
         <div class="gc-legenda">
@@ -551,21 +540,10 @@
           <span><i class="gc-ponto plan"></i> Planejadas</span>
           <span><i class="gc-ponto sim"></i> Simulação</span>
         </div>
-      </div>
-      <div class="card mb-3">
-        <div class="card-titulo"><i class="ti ti-beach" aria-hidden="true"></i> Férias do mês <span style="font-size:10px;font-weight:400;color:var(--text-hint);margin-left:auto">toque p/ ajustar</span></div>
-        <div id="cal-lista" class="lista"></div>
-      </div>
-      <div class="card">
-        <div class="card-titulo"><i class="ti ti-folder-cog" aria-hidden="true"></i> Arquivamento no Drive</div>
-        <p style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-bottom:10px">
-          Recibos de férias assinados antes desta correção podem ter sido guardados na pasta
-          <strong>FOLHA_PAGAMENTO</strong>. Isto reclassifica esses registros e move os PDFs para a pasta
-          <strong>FERIAS</strong> de cada funcionário. Pode rodar quantas vezes quiser.
-        </p>
-        <button onclick="corrigirArquivamentoFerias()" class="btn-secundario" id="btn-corrigir-arq" style="width:100%">
-          <i class="ti ti-folder-symlink" aria-hidden="true"></i> Corrigir arquivamento
-        </button>
+        <div class="fer-lista-sec">
+          <div class="card-titulo"><i class="ti ti-beach" aria-hidden="true"></i> Férias do mês <span style="font-size:10px;font-weight:400;color:var(--text-hint);margin-left:auto">toque p/ ajustar</span></div>
+          <div id="cal-lista" class="lista"></div>
+        </div>
       </div>
     </div>
 
@@ -581,7 +559,7 @@
   </nav>
 </div>
 
-<script src="app.js?v=20260731d"></script>
+<script src="app.js?v=20260801"></script>
 <script>
   // Registra o Service Worker (necessário para Web Share Target e cache offline)
   if ('serviceWorker' in navigator) {
