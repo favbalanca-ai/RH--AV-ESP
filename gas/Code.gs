@@ -452,16 +452,16 @@ function webhookZapSign(body) {
       const subF = subpastaDoTipo(tipoF)
       const link = salvarPdfNoDrive(folha['ID FUNC.'], folha['FUNCIONÁRIO'], subF, tipoF + '_' + comp + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(docToken))
       atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', docToken, { 'LINK DOC ASSINADO': link })
-      // Gera link de confirmação de pagamento para o empregador
+      // Ordem de pagamento do valor a receber (folha ou férias)
       try {
-        var funcId2  = folha['ID FUNC.']
-        var comp2    = String(folha['COMPETÊNCIA'] || '')
-        var valorLiq = folha['VALOR_LIQUIDO'] ? parseFloat(folha['VALOR_LIQUIDO']) : null
-        if (funcId2 && comp2) {
-          gerarLinkConfirmacaoPagamento({ func_id: funcId2, competencia: comp2, valor_liquido: valorLiq }, 'SISTEMA')
-          Logger.log('Link pagamento gerado via ZapSign para func ' + funcId2 + ' | ' + comp2)
-        }
-      } catch(ePagto) { Logger.log('Erro link pagamento ZapSign: ' + ePagto.message) }
+        gerarOrdemDeAssinatura({
+          func_id:       folha['ID FUNC.'],
+          competencia:   String(folha['COMPETÊNCIA'] || ''),
+          valor_liquido: folha['VALOR_LIQUIDO'] ? parseFloat(folha['VALOR_LIQUIDO']) : null,
+          origem:        tipoF,
+          ref_doc:       docToken,
+        }, 'SISTEMA')
+      } catch(ePagto) { Logger.log('Erro ordem de pagamento (webhook): ' + ePagto.message) }
     } catch(e) { logAcao('WEBHOOK', 'DRIVE_OPCIONAL', e.message) }
     if (tipoDaFolha(folha, docToken) === 'Ferias') confirmarFeriasAssinada(docToken)
     logAcao('WEBHOOK', 'ASSINATURA_FOLHA', 'Doc: ' + docToken)
@@ -632,6 +632,18 @@ function sincronizarPendentes() {
             const link = salvarPdfNoDrive(folha['ID FUNC.'], folha['FUNCIONÁRIO'], subF, tipoF + '_' + comp + '_' + token.substring(0,8) + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(token))
             atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', token, { 'LINK DOC ASSINADO': link })
           } catch(de) {}
+          // Mesma ordem de pagamento do webhook: quando a assinatura é
+          // detectada por aqui, o webhook não passou, e sem isto o valor
+          // nunca chegaria ao extrato. gerarOrdemDeAssinatura não duplica.
+          try {
+            gerarOrdemDeAssinatura({
+              func_id:       folha['ID FUNC.'],
+              competencia:   String(folha['COMPETÊNCIA'] || ''),
+              valor_liquido: folha['VALOR_LIQUIDO'] ? parseFloat(folha['VALOR_LIQUIDO']) : null,
+              origem:        tipoF,
+              ref_doc:       token,
+            }, 'SYNC')
+          } catch(ePag) { erros.push('Ordem ' + token.substring(0,8) + ': ' + ePag.message) }
           atualizados++
         } else if (status === 'refused') {
           atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', token, { 'STATUS': 'Recusado', 'DATA ASSINATURA': hoje })
@@ -1167,17 +1179,20 @@ function confirmarAssinatura(token, assinaturaBase64, pdfAssinadoExterno) {
 
   logAcao('SISTEMA', 'ASSINATURA_PROPRIA', 'Token: ' + token + ' | Func: ' + funcNome + ' | Drive: ' + linkDrive)
 
-  // Notificação automática ao empregador com link de confirmação de pagamento
+  // Ordem de pagamento do valor a receber. Ferias entra aqui junto com
+  // Folha e Ponto — antes ficava de fora e o valor das férias nunca
+  // chegava ao extrato do funcionário.
   try {
-    if (tipo === 'Folha' || tipo === 'Ponto') {
-      var valorLiquidoDoc = rowData[16] ? parseFloat(rowData[16]) : null
-      gerarLinkConfirmacaoPagamento({
+    if (tipo === 'Folha' || tipo === 'Ponto' || tipo === 'Ferias') {
+      gerarOrdemDeAssinatura({
         func_id:       funcId,
         competencia:   String(referencia),
-        valor_liquido: valorLiquidoDoc,
+        valor_liquido: rowData[16] ? parseFloat(rowData[16]) : null,
+        origem:        tipo,
+        ref_doc:       token,
       }, 'SISTEMA')
     }
-  } catch(eNotif) { Logger.log('Erro notif pagamento: ' + eNotif.message) }
+  } catch(eNotif) { Logger.log('Erro ordem de pagamento (assinatura própria): ' + eNotif.message) }
 
   return { ok: true, link_drive: linkDrive }
 }
@@ -2309,9 +2324,14 @@ function gerarLinkConfirmacaoPagamento(dados, usuario) {
   if (func['AGENCIA']) linhasPix.push('Agência: ' + func['AGENCIA'])
   if (func['CONTA'])   linhasPix.push('Conta: ' + func['CONTA'])
 
+  var origemLabel = dados.origem === 'Ferias' ? 'Férias'
+                  : dados.origem === 'Ponto'  ? 'Folha de Ponto'
+                  : 'Folha de Pagamento'
+
   var msg = '✅ *Autorização de Pagamento*\n\n' +
     '👤 *Funcionário:* ' + func['NOME_COMPLETO'] + '\n' +
     '💼 *Função:* ' + (func['FUNCAO'] || '') + '\n' +
+    '📄 *Referente a:* ' + origemLabel + '\n' +
     '📅 *Competência:* ' + dados.competencia + '\n' +
     '💰 *Valor líquido:* ' + valorFmt + '\n'
 
@@ -2342,6 +2362,91 @@ function gerarLinkConfirmacaoPagamento(dados, usuario) {
 
   logAcao(usuario, 'LINK_PAGAMENTO_GERADO', 'Func ' + func['ID'] + ' | ' + dados.competencia + ' | Token: ' + token)
   return { token: token, link: link, wa_link: waLink, mensagem: msg }
+}
+
+// ─── ORDEM DE PAGAMENTO A PARTIR DA ASSINATURA ─────────────────────
+// Toda folha ou férias assinada vira uma ordem de pagamento na aba
+// PAGAMENTOS — que é a mesma fonte do extrato do funcionário.
+// ORIGEM diz de onde veio o valor (Folha/Ferias/Ponto) e REF_DOC guarda o
+// token do documento assinado, que serve de chave contra duplicidade:
+// o webhook do ZapSign e a sincronização manual podem detectar a mesma
+// assinatura, e sem isso o funcionário ganharia duas ordens.
+function garantirColunasPagamento() {
+  inicializarAbaPagamentos()
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_PAGAMENTOS)
+  if (!sheet) return {}
+  var ultima = Math.max(1, sheet.getLastColumn())
+  var hdrs   = sheet.getRange(1, 1, 1, ultima).getValues()[0]
+  ;['ORIGEM', 'REF_DOC'].forEach(function (nome) {
+    if (hdrs.indexOf(nome) === -1) {
+      sheet.getRange(1, sheet.getLastColumn() + 1).setValue(nome)
+      hdrs.push(nome)
+      Logger.log('Coluna ' + nome + ' criada na aba ' + ABA_PAGAMENTOS)
+    }
+  })
+  return { origem: hdrs.indexOf('ORIGEM'), refDoc: hdrs.indexOf('REF_DOC') }
+}
+
+// Grava ORIGEM/REF_DOC na última linha inserida, pela coluna certa. O
+// appendRow das ordens é posicional e não conhece essas colunas novas.
+function definirOrigemUltimaOrdem(origem, refDoc) {
+  var idx = garantirColunasPagamento()
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_PAGAMENTOS)
+  var linha = sheet.getLastRow()
+  if (idx.origem >= 0) sheet.getRange(linha, idx.origem + 1).setValue(origem || 'Folha')
+  if (idx.refDoc >= 0) sheet.getRange(linha, idx.refDoc + 1).setValue(refDoc || '')
+}
+
+// Já existe ordem para este documento? Procura pelo token do documento e,
+// se ele não estiver disponível, cai para funcionário + competência + origem.
+function jaExisteOrdemPagamento(funcId, competencia, origem, refDoc) {
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_PAGAMENTOS)
+  if (!sheet) return false
+  var vals = sheet.getDataRange().getValues()
+  if (vals.length < 2) return false
+  var hdrs = vals[0]
+  var iFunc = hdrs.indexOf('ID_FUNC'), iComp = hdrs.indexOf('COMPETENCIA')
+  var iOrig = hdrs.indexOf('ORIGEM'),  iRef  = hdrs.indexOf('REF_DOC')
+  var iCanc = hdrs.indexOf('CANCELADO')
+  var alvo  = String(refDoc || '').trim()
+
+  for (var i = 1; i < vals.length; i++) {
+    if (iCanc >= 0 && String(vals[i][iCanc]).trim() === 'Sim') continue
+    if (alvo && iRef >= 0 && String(vals[i][iRef]).trim() === alvo) return true
+    if (!alvo && iFunc >= 0 && iComp >= 0) {
+      var mesmaOrigem = iOrig < 0 || String(vals[i][iOrig] || 'Folha') === String(origem || 'Folha')
+      if (String(vals[i][iFunc]) === String(funcId) &&
+          String(vals[i][iComp]) === String(competencia) && mesmaOrigem) return true
+    }
+  }
+  return false
+}
+
+// Ponto único de entrada: chamado pelos três caminhos que detectam uma
+// assinatura (webhook, sincronização manual e assinatura própria).
+function gerarOrdemDeAssinatura(dados, usuario) {
+  var funcId = dados.func_id
+  var comp   = String(dados.competencia || '')
+  var origem = dados.origem || 'Folha'
+  var refDoc = dados.ref_doc || ''
+  if (!funcId || !comp) return { ignorado: true, motivo: 'func_id ou competência ausente' }
+
+  garantirColunasPagamento()
+  if (jaExisteOrdemPagamento(funcId, comp, origem, refDoc)) {
+    return { ignorado: true, motivo: 'ordem já existente' }
+  }
+
+  var res = gerarLinkConfirmacaoPagamento({
+    func_id:       funcId,
+    competencia:   comp,
+    valor_liquido: dados.valor_liquido || null,
+    origem:        origem,
+  }, usuario || 'SISTEMA')
+
+  definirOrigemUltimaOrdem(origem, refDoc)
+  logAcao(usuario || 'SISTEMA', 'ORDEM_PAGAMENTO',
+    'Func ' + funcId + ' | ' + origem + ' ' + comp + ' | R$ ' + (dados.valor_liquido || '?'))
+  return res
 }
 
 function buscarPagamento(token) {

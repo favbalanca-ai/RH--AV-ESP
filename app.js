@@ -3033,14 +3033,21 @@ async function gerarExtrato() {
   })
 
   const itens = [
-    ...salarios.map(p => ({
-      tipo:  'salario',
-      data:  p['DATA_GERACAO'] || p['DATA_ASSINATURA'] || '',
-      desc:  'Salário ' + normalizarComp(p['COMPETENCIA'] || p['COMPETÊNCIA'] || ''),
-      valor: p['VALOR_LIQUIDO'] || 0,
-      status: p['STATUS'],
-      link:  p['COMPROVANTE_LINK'] || '',
-    })),
+    ...salarios.map(p => {
+      // ORIGEM diz de onde veio a ordem; linhas antigas não têm a coluna
+      const origem = p['ORIGEM'] || 'Folha'
+      const rotulo = origem === 'Ferias' ? 'Férias'
+                   : origem === 'Ponto'  ? 'Folha de ponto'
+                   : 'Salário'
+      return {
+        tipo:  origem === 'Ferias' ? 'ferias' : 'salario',
+        data:  p['DATA_GERACAO'] || p['DATA_ASSINATURA'] || '',
+        desc:  rotulo + ' ' + normalizarComp(p['COMPETENCIA'] || p['COMPETÊNCIA'] || ''),
+        valor: p['VALOR_LIQUIDO'] || 0,
+        status: p['STATUS'],
+        link:  p['COMPROVANTE_LINK'] || '',
+      }
+    }),
     ...adiantamentos.map(a => ({
       tipo:  'adiantamento',
       data:  a['DATA_PAGTO'] || '',
@@ -3057,22 +3064,26 @@ async function gerarExtrato() {
     return
   }
 
-  const totalSal   = salarios.reduce((s, p) => s + parseValorNum(p['VALOR_LIQUIDO']), 0)
+  const ehFerias    = p => (p['ORIGEM'] || 'Folha') === 'Ferias'
+  const soFerias    = salarios.filter(ehFerias)
+  const soFolha     = salarios.filter(p => !ehFerias(p))
+  const totalSal    = soFolha.reduce((s, p) => s + parseValorNum(p['VALOR_LIQUIDO']), 0)
+  const totalFerias = soFerias.reduce((s, p) => s + parseValorNum(p['VALOR_LIQUIDO']), 0)
   const totalAdiant = adiantamentos.reduce((s, a) => s + parseValorNum(a['VALOR']), 0)
-  const totalGeral = totalSal + totalAdiant
+  const totalGeral  = totalSal + totalFerias + totalAdiant
 
   lista.innerHTML = itens.map(it => `
     <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--border)">
       <div style="width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;
-        background:${it.tipo==='salario'?'var(--verde-claro)':'var(--blue-bg)'}">
-        ${it.tipo==='salario'?'💼':'💰'}
+        background:${it.tipo==='salario'?'var(--verde-claro)':it.tipo==='ferias'?'var(--amber-bg)':'var(--blue-bg)'}">
+        ${it.tipo==='salario'?'💼':it.tipo==='ferias'?'🌴':'💰'}
       </div>
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.desc}</div>
         <div style="font-size:10px;color:var(--text-secondary)">${it.data ? new Date(it.data).toLocaleDateString('pt-BR') : '—'}</div>
       </div>
       <div style="text-align:right;flex-shrink:0">
-        <div style="font-size:12px;font-weight:600;color:${it.tipo==='salario'?'var(--verde-text)':'var(--blue-text)'}">R$ ${formatarValor(it.valor)}</div>
+        <div style="font-size:12px;font-weight:600;color:${it.tipo==='salario'?'var(--verde-text)':it.tipo==='ferias'?'var(--amber-text)':'var(--blue-text)'}">R$ ${formatarValor(it.valor)}</div>
         <div style="font-size:9px;color:var(--text-secondary)">${it.status}</div>
         ${it.link ? `<a href="${it.link}" target="_blank" style="font-size:9px;color:var(--blue-text)">comprovante</a>` : ''}
       </div>
@@ -3081,9 +3092,13 @@ async function gerarExtrato() {
   totais.innerHTML = `
     <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">Totais do período</div>
     <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
-      <span style="color:var(--text-secondary)">💼 Salários (${salarios.length})</span>
+      <span style="color:var(--text-secondary)">💼 Salários (${soFolha.length})</span>
       <span style="font-weight:600;color:var(--verde-text)">R$ ${formatarValor(totalSal)}</span>
     </div>
+    ${soFerias.length ? `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+      <span style="color:var(--text-secondary)">🌴 Férias (${soFerias.length})</span>
+      <span style="font-weight:600;color:var(--amber-text)">R$ ${formatarValor(totalFerias)}</span>
+    </div>` : ''}
     <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
       <span style="color:var(--text-secondary)">💰 Adiantamentos (${adiantamentos.length})</span>
       <span style="font-weight:600;color:var(--blue-text)">R$ ${formatarValor(totalAdiant)}</span>
