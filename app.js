@@ -2231,7 +2231,10 @@ async function identificarFuncionariosAutomatico() {
       if (d.func_id) {
         func = funcionarios.find(f => String(f['ID']) === String(d.func_id))
         if (func) {
-          func._metodo = 'ia'
+          // Empregador do documento diverge do cadastrado: o casamento pode
+          // estar errado, então pede conferência em vez de aceitar calado.
+          func._metodo = d.empregador_confere === false ? 'conferir' : 'ia'
+          func._empregadorDoc = d.empregador || ''
           paginasFracionadas[i].funcId    = String(func['ID'])
           paginasFracionadas[i].nome      = func['NOME_COMPLETO']
           paginasFracionadas[i].telefone  = func['TELEFONE'] || ''
@@ -2268,7 +2271,7 @@ async function identificarFuncionariosAutomatico() {
 
 function renderCardIdentificado(i, func, metodo) {
   const card = document.getElementById('fpc-' + i); if (!card) return
-  card.className = 'frac-page-card identificado'
+  card.className = 'frac-page-card ' + (metodo === 'conferir' ? 'manual' : 'identificado')
   document.getElementById('fpc-num-' + i).innerHTML = `<i class="ti ti-file-text" style="font-size:11px;vertical-align:-1px"></i> Página ${paginasFracionadas[i].pagina}`
   document.getElementById('fpc-func-' + i).innerHTML = `
     <div class="fpc-func">
@@ -2276,7 +2279,11 @@ function renderCardIdentificado(i, func, metodo) {
       <div style="flex:1;min-width:0">
         <div class="fpc-nome">${esc(func['NOME_COMPLETO'])}</div>
         <div class="fpc-sub">${esc(func['FUNCAO']||'')} · ${esc(func['UNIDADE']||'')}</div>
-        ${metodo === 'ia' || metodo === 'auto' ? `<div class="fpc-auto"><i class="ti ti-robot" style="font-size:9px"></i> Identificado pela IA</div>` : metodo === 'cache' ? `<div class="fpc-auto"><i class="ti ti-history" style="font-size:9px"></i> Mapeamento salvo — confirme</div>` : '<div class="fpc-manual-tag">Selecionado manualmente</div>'}
+        ${metodo === 'conferir'
+            ? `<div class="fpc-conferir"><i class="ti ti-alert-triangle" style="font-size:9px"></i> Empregador do documento (${esc(func._empregadorDoc || '?')}) difere do cadastro (${esc(func['EMPREGADOR'] || '—')}) — confira</div>`
+            : metodo === 'ia' || metodo === 'auto' ? `<div class="fpc-auto"><i class="ti ti-robot" style="font-size:9px"></i> Identificado pela IA</div>`
+            : metodo === 'cache' ? `<div class="fpc-auto"><i class="ti ti-history" style="font-size:9px"></i> Mapeamento salvo — confirme</div>`
+            : '<div class="fpc-manual-tag">Selecionado manualmente</div>'}
       </div>
       <button class="btn-trocar-func" onclick="renderCardManual(${i})"><i class="ti ti-switch-horizontal" style="font-size:11px"></i> Trocar</button>
     </div>`

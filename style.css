@@ -656,6 +656,7 @@ html { overflow-x: hidden; }
 .fpc-sub     { font-size: 10px; color: var(--text-secondary); margin-top: 1px; }
 .fpc-auto    { font-size: 10px; color: var(--verde-text); display: flex; align-items: center; gap: 3px; margin-top: 2px; }
 .fpc-manual-tag { font-size: 10px; color: var(--amber-text); font-weight: 700; }
+.fpc-conferir { font-size: 9.5px; color: var(--amber-text); font-weight: 700; line-height: 1.35; margin-top: 2px; }
 .frac-select-manual {
   width: 100%; margin-top: 8px;
   border: 0.5px solid rgba(133,79,11,0.4); border-radius: var(--radius-sm);

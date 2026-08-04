@@ -401,7 +401,7 @@ function enviarFolha(dados, usuario) {
   if (!func) throw new Error('Funcionário não encontrado')
   const hoje = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy')
   const pdf = dados.pdf_base64 || gerarCapaFolhaPdf(func, dados.competencia, usuario)
-  const nomeDoc = 'Folha_' + dados.competencia.replace(/\//g,'-') + '_' + (func['NOME_CURTO'] || func['NOME_COMPLETO'])
+  const nomeDoc = nomeDocumentoAssinatura(dados.tipo || 'Folha', dados.competencia, func['NOME_COMPLETO'])
   const zap = enviarParaZapSign(pdf, nomeDoc, func['NOME_COMPLETO'], func['TELEFONE'])
   adicionarLinha(CONFIG.ABAS.FOLHA, [
     dados.func_id,        // A: ID FUNC.
@@ -475,6 +475,39 @@ function webhookZapSign(body) {
 // ─── Envio para ZapSign ──────────────────────────────────────────
 // FIX: normaliza telefone (remove o 55 inicial, pois phone_country já é '55'),
 // valida DDD+número e expõe o HTTP code no erro.
+// Nome do documento no ZapSign. Ele volta no assunto do e-mail de assinatura
+// ("<Nome> assinou o documento <DocName>"), e é por ele que o arquivamento no
+// servidor físico identifica tipo e competência. Antes ia 'Folha_' cravado em
+// tudo — inclusive férias e ponto — e o tipo só existia dentro do PDF.
+// Formato segue a convenção do arquivo: AAAA.MM-MES.NOME COMPLETO.TIPO
+var MESES_ARQ = ['JANEIRO','FEVEREIRO','MARCO','ABRIL','MAIO','JUNHO',
+                 'JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO']
+
+function nomeDocumentoAssinatura(tipo, competencia, nomeCompleto) {
+  var t = String(tipo || 'Folha').toUpperCase()
+  if (t === 'FERIAS') t = 'FERIAS'
+  else if (t === 'PONTO') t = 'PONTO'
+  else if (t === 'EPI') t = 'EPI'
+  else t = 'RECIBO'   // folha de pagamento = Recibo de Pagamento no arquivo
+
+  var comp = String(competencia || '')
+  var ano = '', mes = ''
+  var m = comp.match(/^([A-Za-zçÇãÃéÉ]+)\s*\/\s*(\d{4})$/)   // "Julho/2026"
+  if (m) {
+    var nome = m[1].toUpperCase()
+      .replace(/[ÁÀÂÃ]/g,'A').replace(/[ÉÊ]/g,'E').replace(/Ç/g,'C').replace(/Í/g,'I').replace(/[ÓÔÕ]/g,'O')
+    var idx = MESES_ARQ.indexOf(nome)
+    if (idx >= 0) { ano = m[2]; mes = ('0' + (idx + 1)).slice(-2) + '-' + MESES_ARQ[idx] }
+  }
+  if (!ano) {
+    var n = comp.match(/(\d{2})\/(\d{4})/)                    // "07/2026"
+    if (n) { ano = n[2]; mes = n[1] + '-' + (MESES_ARQ[parseInt(n[1],10)-1] || '') }
+  }
+
+  var base = ano ? ano + '.' + mes : (comp.replace(/[\/\\]/g, '-') || 'SEM-COMPETENCIA')
+  return base + '.' + String(nomeCompleto || '').toUpperCase() + '.' + t
+}
+
 function enviarParaZapSign(pdfBase64, nomeDoc, nomeSignatario, telefone) {
   var tel = String(telefone || '').replace(/\D/g, '')
   if (tel.length >= 12 && tel.substring(0, 2) === '55') tel = tel.substring(2)
@@ -777,7 +810,7 @@ function processarPaginaFolha(dados, usuario) {
   let zapToken = '', zapSignUrl = '', zapSignerToken = ''
   if (dados.enviar_zapsign) {
     try {
-      const zap = enviarParaZapSign(dados.pdf_base64, 'Folha_' + compLimpo + '_' + func['NOME_COMPLETO'].split(' ')[0], func['NOME_COMPLETO'], func['TELEFONE'])
+      const zap = enviarParaZapSign(dados.pdf_base64, nomeDocumentoAssinatura(tipo, comp, func['NOME_COMPLETO']), func['NOME_COMPLETO'], func['TELEFONE'])
       zapToken = zap.token; zapSignUrl = zap.signUrl; zapSignerToken = zap.signerToken
     } catch(e) { logAcao(usuario, 'ERRO_ZAPSIGN', e.message); throw e }
   }
@@ -901,18 +934,32 @@ function identificarDocumentoComIA(dados) {
     func = funcionarios.find(function(f) { return parseInt(f['ID']) === cod })
   }
 
+  // O empregador (produtor) que consta no documento é a 2ª chave: cada
+  // funcionário pertence a um produtor, então ele desempata homônimos e
+  // denuncia um casamento errado que o nome sozinho deixaria passar.
+  var doDocumento = funcionarios
+  if (resultado.empregador) {
+    var comMesmoEmpregador = funcionarios.filter(function(f) {
+      return mesmoEmpregador(f['EMPREGADOR'], resultado.empregador)
+    })
+    if (comMesmoEmpregador.length) doDocumento = comMesmoEmpregador
+  }
+
   if (!func && resultado.nome_funcionario) {
     // 1) Casamento preciso por 2+ partes do nome — evita pegar o empregador
     //    (comum em avisos/recibos de férias, onde a razão social aparece em destaque).
-    func = encontrarFuncionarioPorNome(resultado.nome_funcionario, funcionarios)
+    //    Busca primeiro entre os do mesmo produtor.
+    func = encontrarFuncionarioPorNome(resultado.nome_funcionario, doDocumento)
+      || encontrarFuncionarioPorNome(resultado.nome_funcionario, funcionarios)
 
     // 2) Fallback pelo primeiro nome, só quando houver UM único funcionário com
     //    esse primeiro nome (evita atribuir a pessoa errada em nomes repetidos).
+    //    Restringir ao produtor do documento resolve casos que antes eram ambíguos.
     if (!func) {
       var primeiro = String(resultado.nome_funcionario).toUpperCase()
         .split(' ').filter(function(p) { return p.length > 2 })[0] || ''
       if (primeiro) {
-        var candidatos = funcionarios.filter(function(f) {
+        var candidatos = doDocumento.filter(function(f) {
           return String(f['NOME_COMPLETO'] || '').toUpperCase().split(' ').indexOf(primeiro) !== -1
         })
         if (candidatos.length === 1) func = candidatos[0]
@@ -920,18 +967,49 @@ function identificarDocumentoComIA(dados) {
     }
   }
 
+  // Confere: o produtor do documento bate com o cadastrado para esse funcionário?
+  // Divergência não descarta o casamento, mas derruba a confiança para o app
+  // pedir confirmação em vez de aceitar calado.
+  var confereEmpregador = null
+  if (func && resultado.empregador && func['EMPREGADOR']) {
+    confereEmpregador = mesmoEmpregador(func['EMPREGADOR'], resultado.empregador)
+  }
+
   return {
     func_id:        func ? func['ID']            : null,
     func_nome:      func ? func['NOME_COMPLETO'] : resultado.nome_funcionario || '',
     func_telefone:  func ? func['TELEFONE']      : '',
+    func_empregador: func ? (func['EMPREGADOR'] || '') : '',
     tipo_documento: resultado.tipo_documento     || 'Folha',
     competencia:    resultado.competencia        || '',
     empregador:     resultado.empregador         || '',
+    empregador_confere: confereEmpregador,
     valor_liquido:  resultado.valor_liquido      || null,
     ferias_inicio:  resultado.ferias_inicio      || null,
     ferias_fim:     resultado.ferias_fim         || null,
-    ia_confianca:   func ? 'alto' : 'baixo',
+    ia_confianca:   !func ? 'baixo' : (confereEmpregador === false ? 'medio' : 'alto'),
   }
+}
+
+// Compara empregador do cadastro com o extraído do PDF. A razão social vem
+// escrita de formas diferentes ("JOAQUIM GATTO COSSUL" vs "Joaquim G. Cossul
+// - Fazenda X"), então compara pelos sobrenomes significativos em comum.
+function mesmoEmpregador(cadastro, documento) {
+  var norm = function(s) {
+    return String(s || '').toUpperCase()
+      .replace(/[ÁÀÂÃÄ]/g,'A').replace(/[ÉÈÊË]/g,'E').replace(/[ÍÌÎÏ]/g,'I')
+      .replace(/[ÓÒÔÕÖ]/g,'O').replace(/[ÚÙÛÜ]/g,'U').replace(/[Ç]/g,'C')
+      .replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim()
+  }
+  var a = norm(cadastro), b = norm(documento)
+  if (!a || !b) return null
+  if (a === b || a.indexOf(b) !== -1 || b.indexOf(a) !== -1) return true
+
+  var partesA = a.split(' ').filter(function(p) { return p.length > 3 })
+  var partesB = b.split(' ').filter(function(p) { return p.length > 3 })
+  if (!partesA.length || !partesB.length) return null
+  var comuns = partesA.filter(function(p) { return partesB.indexOf(p) !== -1 })
+  return comuns.length >= 2
 }
 
 function diagnosticarDocumentoZapSign() {
