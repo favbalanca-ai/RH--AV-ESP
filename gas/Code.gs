@@ -93,6 +93,8 @@ function doPost(e) {
       case 'listar_ferias':              return respOk(listarFerias())
       case 'atualizar_ferias':           return respOk(atualizarFerias(body.dados))
       case 'corrigir_arquivamento_ferias': return respOk(corrigirArquivamentoFerias())
+      case 'listar_para_arquivo':        return respOk(listarParaArquivo(body.dados))
+      case 'confirmar_arquivamento':     return respOk(confirmarArquivamentoFisico(body.dados, usuario))
       case 'salvar_plano_ferias':        return respOk(salvarPlanoFerias(body.dados, usuario))
       case 'excluir_plano_ferias':       return respOk(excluirPlanoFerias(body.dados, usuario))
       case 'listar_pagamentos_func':        return respOk(listarPagamentos(body.dados))
@@ -475,37 +477,37 @@ function webhookZapSign(body) {
 // ─── Envio para ZapSign ──────────────────────────────────────────
 // FIX: normaliza telefone (remove o 55 inicial, pois phone_country já é '55'),
 // valida DDD+número e expõe o HTTP code no erro.
-// Nome do documento no ZapSign. Ele volta no assunto do e-mail de assinatura
-// ("<Nome> assinou o documento <DocName>"), e é por ele que o arquivamento no
-// servidor físico identifica tipo e competência. Antes ia 'Folha_' cravado em
-// tudo — inclusive férias e ponto — e o tipo só existia dentro do PDF.
-// Formato segue a convenção do arquivo: AAAA.MM-MES.NOME COMPLETO.TIPO
+// Nome do documento no ZapSign. Ele volta como nome do PDF anexado no e-mail
+// de assinatura, e é por ele que o arquivamento no servidor físico identifica
+// tipo e competência. Antes ia 'Folha_' cravado em tudo — férias e ponto
+// inclusive — e o tipo só existia dentro do PDF, obrigando a classificar por
+// OCR. Agora sai no MESMO padrão do arquivo em Y:\RH-2:
+//   AAAA.MM.NOME COMPLETO.TIPO      (o mês por extenso é só o nome da PASTA)
+// Assim o nome que chega por e-mail já é o nome final do arquivo.
 var MESES_ARQ = ['JANEIRO','FEVEREIRO','MARCO','ABRIL','MAIO','JUNHO',
                  'JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO']
 
 function nomeDocumentoAssinatura(tipo, competencia, nomeCompleto) {
   var t = String(tipo || 'Folha').toUpperCase()
-  if (t === 'FERIAS') t = 'FERIAS'
-  else if (t === 'PONTO') t = 'PONTO'
-  else if (t === 'EPI') t = 'EPI'
-  else t = 'RECIBO'   // folha de pagamento = Recibo de Pagamento no arquivo
+  if (t !== 'FERIAS' && t !== 'PONTO' && t !== 'EPI') t = 'RECIBO'  // folha = RECIBO no arquivo
 
   var comp = String(competencia || '')
   var ano = '', mes = ''
-  var m = comp.match(/^([A-Za-zçÇãÃéÉ]+)\s*\/\s*(\d{4})$/)   // "Julho/2026"
+  var m = comp.match(/^([A-Za-zçÇãÃéÉíÍóÓ]+)\s*\/\s*(\d{4})$/)   // "Julho/2026"
   if (m) {
-    var nome = m[1].toUpperCase()
-      .replace(/[ÁÀÂÃ]/g,'A').replace(/[ÉÊ]/g,'E').replace(/Ç/g,'C').replace(/Í/g,'I').replace(/[ÓÔÕ]/g,'O')
-    var idx = MESES_ARQ.indexOf(nome)
-    if (idx >= 0) { ano = m[2]; mes = ('0' + (idx + 1)).slice(-2) + '-' + MESES_ARQ[idx] }
+    var nomeMes = m[1].toUpperCase()
+      .replace(/[ÁÀÂÃ]/g,'A').replace(/[ÉÊ]/g,'E').replace(/Ç/g,'C')
+      .replace(/Í/g,'I').replace(/[ÓÔÕ]/g,'O')
+    var idx = MESES_ARQ.indexOf(nomeMes)
+    if (idx >= 0) { ano = m[2]; mes = ('0' + (idx + 1)).slice(-2) }
   }
   if (!ano) {
-    var n = comp.match(/(\d{2})\/(\d{4})/)                    // "07/2026"
-    if (n) { ano = n[2]; mes = n[1] + '-' + (MESES_ARQ[parseInt(n[1],10)-1] || '') }
+    var n = comp.match(/(\d{2})\/(\d{4})/)                        // "07/2026"
+    if (n) { ano = n[2]; mes = n[1] }
   }
 
   var base = ano ? ano + '.' + mes : (comp.replace(/[\/\\]/g, '-') || 'SEM-COMPETENCIA')
-  return base + '.' + String(nomeCompleto || '').toUpperCase() + '.' + t
+  return base + '.' + String(nomeCompleto || '').toUpperCase().trim() + '.' + t
 }
 
 function enviarParaZapSign(pdfBase64, nomeDoc, nomeSignatario, telefone) {
@@ -2525,6 +2527,148 @@ function gerarOrdemDeAssinatura(dados, usuario) {
   logAcao(usuario || 'SISTEMA', 'ORDEM_PAGAMENTO',
     'Func ' + funcId + ' | ' + origem + ' ' + comp + ' | R$ ' + (dados.valor_liquido || '?'))
   return res
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PONTE COM O ARQUIVO FÍSICO (Y:\RH-2)
+// O app sabe tudo do documento porque foi ele que enviou: funcionário,
+// tipo, competência, valor. O script do servidor lia o e-mail do ZapSign e
+// tinha de redescobrir isso por OCR. Aqui ele pergunta direto, arquiva com
+// o nome já pronto, e confirma de volta — fechando o ciclo num lugar só.
+// ═══════════════════════════════════════════════════════════════════
+
+// Colunas que registram o arquivamento físico. Criadas sozinhas, como as
+// demais, para não depender de migração manual na planilha.
+function garantirColunasArquivoFisico() {
+  var sheet = getSheet(CONFIG.ABAS.FOLHA)
+  if (!sheet) return {}
+  var hdrs = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0]
+  ;['ARQUIVO_FISICO', 'DATA_ARQUIVO_FISICO', 'IMPRESSO'].forEach(function (nome) {
+    if (hdrs.indexOf(nome) === -1) {
+      sheet.getRange(1, sheet.getLastColumn() + 1).setValue(nome)
+      hdrs.push(nome)
+    }
+  })
+  return { caminho: hdrs.indexOf('ARQUIVO_FISICO'),
+           data: hdrs.indexOf('DATA_ARQUIVO_FISICO'),
+           impresso: hdrs.indexOf('IMPRESSO') }
+}
+
+// Documentos assinados prontos para arquivar no servidor. Devolve tudo o que
+// o script precisa — inclusive o nome final do arquivo — para ele não ter de
+// abrir o PDF nem adivinhar nada.
+function listarParaArquivo(dados) {
+  garantirColunasArquivoFisico()
+  var desde = dados && dados.desde ? parseDataFlex(dados.desde) : null
+  var incluirJaArquivados = !!(dados && dados.incluir_arquivados)
+  var feriasTokens = tokensDeFerias()
+  var itens = []
+
+  // ── Folha / Ponto / Férias ──
+  lerAbaComoObjetos(CONFIG.ABAS.FOLHA).forEach(function (f) {
+    if (String(f['STATUS'] || '').trim() !== 'Assinado') return
+    var link = String(f['LINK DOC ASSINADO'] || '').trim()
+    if (!link) return                                   // ainda não tem PDF assinado
+    if (!incluirJaArquivados && String(f['ARQUIVO_FISICO'] || '').trim()) return
+
+    var dataAss = parseDataFlex(f['DATA ASSINATURA'])
+    if (desde && dataAss && dataAss < desde) return
+
+    var token = String(f['ZAPSIGN_DOC'] || '').trim()
+    var tipo  = tipoDaFolha(f, token, feriasTokens)
+    var comp  = String(f['COMPETÊNCIA'] || '')
+    itens.push({
+      token:         token,
+      origem_aba:    'FOLHA',
+      func_id:       f['ID FUNC.'],
+      nome:          f['FUNCIONÁRIO'],
+      empregador:    empregadorDoFuncionario(f['ID FUNC.']),
+      tipo:          tipo,                              // Folha | Ponto | Ferias
+      tipo_arquivo:  tipoArquivo(tipo),                 // RECIBO | PONTO | FERIAS
+      competencia:   comp,
+      ano_mes:       anoMesDeCompetencia(comp),
+      dia:           null,
+      valor_liquido: f['VALOR_LIQUIDO'] || null,
+      data_assinatura: f['DATA ASSINATURA'] || '',
+      nome_arquivo:  nomeDocumentoAssinatura(tipo, comp, f['FUNCIONÁRIO']) + '.pdf',
+      link_pdf:      link,
+      arquivado:     String(f['ARQUIVO_FISICO'] || '').trim() || null,
+    })
+  })
+
+  // ── EPI (recibo próprio, arquivado por dia) ──
+  lerAbaComoObjetos(CONFIG.ABAS.EPI_ENTREGAS).forEach(function (e) {
+    if (String(e['ASSINADO?'] || '').trim() !== 'Sim') return
+    var link = String(e['LINK DOC ASSINADO'] || '').trim()
+    if (!link) return
+    var d = parseDataFlex(e['DATA ASSINATURA'] || e['DATA ENTREGA'])
+    if (desde && d && d < desde) return
+    if (!d) return
+    var ano = d.getFullYear(), mes = d.getMonth() + 1, dia = d.getDate()
+    var pad = function (n) { return ('0' + n).slice(-2) }
+    itens.push({
+      token:        String(e['ZAPSIGN_DOC'] || '').trim(),
+      origem_aba:   'EPI',
+      func_id:      e['ID FUNC.'],
+      nome:         e['FUNCIONÁRIO'],
+      empregador:   empregadorDoFuncionario(e['ID FUNC.']),
+      tipo:         'EPI',
+      tipo_arquivo: 'EPI',
+      competencia:  pad(mes) + '/' + ano,
+      ano_mes:      { ano: ano, mes: mes },
+      dia:          dia,
+      valor_liquido: null,
+      data_assinatura: e['DATA ASSINATURA'] || '',
+      nome_arquivo: ano + '.' + pad(mes) + '.' + pad(dia) + '.'
+                    + String(e['FUNCIONÁRIO'] || '').toUpperCase().trim() + '.EPI.pdf',
+      link_pdf:     link,
+      arquivado:    null,
+    })
+  })
+
+  return { total: itens.length, documentos: itens }
+}
+
+function tipoArquivo(tipo) {
+  return tipo === 'Ferias' ? 'FERIAS' : tipo === 'Ponto' ? 'PONTO'
+       : tipo === 'EPI' ? 'EPI' : 'RECIBO'
+}
+
+// Lê o cadastro inteiro, não só os ativos: documento de quem já foi desligado
+// continua no arquivo e não pode perder o empregador.
+function empregadorDoFuncionario(funcId) {
+  if (!funcId) return ''
+  var f = lerAbaComoObjetos(CONFIG.ABAS.FUNCIONARIOS)
+    .find(function (x) { return String(x['ID']) === String(funcId) })
+  return f ? String(f['EMPREGADOR'] || '').split(' - ')[0].trim() : ''
+}
+
+function anoMesDeCompetencia(comp) {
+  var nome = nomeDocumentoAssinatura('Folha', comp, 'X')   // reusa o parser de competência
+  var m = String(nome).match(/^(\d{4})\.(\d{2})\./)
+  return m ? { ano: parseInt(m[1], 10), mes: parseInt(m[2], 10) } : null
+}
+
+// O servidor avisa que arquivou (e imprimiu) — fecha o ciclo na planilha.
+function confirmarArquivamentoFisico(dados, usuario) {
+  var token = dados && dados.token
+  if (!token) throw new Error('token não informado')
+  var idx = garantirColunasArquivoFisico()
+  var sheet = getSheet(CONFIG.ABAS.FOLHA)
+  var vals = sheet.getDataRange().getValues()
+  var iTok = vals[0].indexOf('ZAPSIGN_DOC')
+  if (iTok < 0) throw new Error('Coluna ZAPSIGN_DOC não encontrada')
+  var hoje = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm')
+
+  for (var i = 1; i < vals.length; i++) {
+    if (String(vals[i][iTok]).trim() !== String(token).trim()) continue
+    if (idx.caminho  >= 0) sheet.getRange(i + 1, idx.caminho + 1).setValue(dados.caminho || '')
+    if (idx.data     >= 0) sheet.getRange(i + 1, idx.data + 1).setValue(hoje)
+    if (idx.impresso >= 0) sheet.getRange(i + 1, idx.impresso + 1).setValue(dados.impresso ? 'Sim' : 'Não')
+    logAcao(usuario || 'SERVIDOR', 'ARQUIVO_FISICO', token + ' | ' + (dados.caminho || ''))
+    return { ok: true }
+  }
+  throw new Error('Documento não encontrado para o token ' + token)
 }
 
 function buscarPagamento(token) {
