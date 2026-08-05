@@ -2151,7 +2151,9 @@ async function processarFracionamento() {
     esconderLoading()
     btn.disabled = false; btn.innerHTML = '<i class="ti ti-scissors"></i> Separar PDF'
     document.getElementById('frac-step-wrap').style.display = 'block'
-    document.getElementById('frac-resumo').textContent = competencia + ' · ' + total + ' página(s) separadas'
+    const resumoEl = document.getElementById('frac-resumo')
+    resumoEl.dataset.base = competencia + ' · ' + total + ' página(s) separadas'
+    resumoEl.textContent  = resumoEl.dataset.base
     renderPaginasFracionadas()
     atualizarBtnTodos()
     toast('🔍 Identificando funcionários...', '')
@@ -2183,7 +2185,38 @@ function renderPaginasFracionadas() {
           Identificando automaticamente...
         </div>
       </div>
+      <div id="fpc-valor-${i}"></div>
     </div>`).join('')
+}
+
+// ── Valor líquido da página ───────────────────────────────────────
+// É o valor que vira a ordem de pagamento quando o funcionário assina. A IA
+// erra em holerite de layout incomum, e antes disso não aparecia em lugar
+// nenhum: o valor sumia calado e a ordem saía "(verificar holerite)". Agora
+// fica à vista e editável antes do envio.
+function renderValorPagina(i) {
+  const el = document.getElementById('fpc-valor-' + i); if (!el) return
+  const p  = paginasFracionadas[i]
+  const v  = p.valorLiquido
+  const tem = v !== null && v !== undefined && v !== '' && !isNaN(parseFloat(v))
+  el.innerHTML = `
+    <div class="fpc-valor ${tem ? '' : 'vazio'}">
+      <span class="fpc-valor-lbl">${tem ? '<i class="ti ti-cash"></i> Líquido' : '<i class="ti ti-alert-triangle"></i> Sem valor'}</span>
+      <span class="fpc-valor-pre">R$</span>
+      <input type="text" inputmode="decimal" class="fpc-valor-in" id="fpc-valor-in-${i}"
+             value="${tem ? formatarValor(v) : ''}" placeholder="0,00"
+             onchange="definirValorPagina(${i}, this.value)"
+             onblur="definirValorPagina(${i}, this.value)">
+      ${tem && p.valorOrigem === 'ia' ? '<span class="fpc-valor-tag">pela IA</span>' : ''}
+    </div>`
+}
+
+function definirValorPagina(i, texto) {
+  const n = parseValorNum(texto)
+  paginasFracionadas[i].valorLiquido = n > 0 ? n : null
+  paginasFracionadas[i].valorOrigem  = n > 0 ? 'manual' : ''
+  renderValorPagina(i)
+  atualizarBtnTodos()
 }
 
 // ── Mapeamento salvo ──────────────────────────────────────────────
@@ -2222,8 +2255,9 @@ async function identificarFuncionariosAutomatico() {
 
       if (tipoIA && paginasFracionadas[i].tipoDoc !== 'Ferias') paginasFracionadas[i].tipoDoc = tipoIA
       if (compIA) paginasFracionadas[i].competencia  = compIA
-      if (d.valor_liquido) {
+      if (d.valor_liquido !== null && d.valor_liquido !== undefined && d.valor_liquido !== '') {
         paginasFracionadas[i].valorLiquido = d.valor_liquido
+        paginasFracionadas[i].valorOrigem  = 'ia'
       }
       if (d.ferias_inicio) paginasFracionadas[i].feriasInicio = d.ferias_inicio
       if (d.ferias_fim)    paginasFracionadas[i].feriasFim    = d.ferias_fim
@@ -2258,6 +2292,7 @@ async function identificarFuncionariosAutomatico() {
     } else {
       renderCardManual(i)
     }
+    renderValorPagina(i)
     atualizarBtnTodos()
   }
 
@@ -2335,6 +2370,7 @@ function selecionarFuncManual(i, funcId) {
   paginasFracionadas[i].funcao   = func['FUNCAO']
   paginasFracionadas[i].telefone = func['TELEFONE']
   renderCardIdentificado(i, func, 'manual')
+  renderValorPagina(i)
   atualizarBtnTodos()
 }
 
@@ -2495,6 +2531,19 @@ function atualizarBtnTodos() {
   if (!btn || !lbl) return
   lbl.textContent = pendentes > 0 ? 'Enviar ' + pendentes + ' pendente(s) via WhatsApp' : 'Todos enviados ✅'
   btn.disabled = pendentes === 0
+
+  // Aviso de valor faltando: sem ele a ordem de pagamento sai sem o líquido,
+  // e o empregador só descobre na hora de pagar.
+  const semValor = paginasFracionadas.filter(p =>
+    p.funcId && p.status === 'pronto' && !(parseValorNum(p.valorLiquido) > 0)).length
+  const res = document.getElementById('frac-resumo')
+  if (res) {
+    const base = res.dataset.base || res.textContent
+    res.dataset.base = base
+    res.innerHTML = semValor > 0
+      ? esc(base) + ` · <span style="color:var(--amber-text)"><i class="ti ti-alert-triangle" style="font-size:10px;vertical-align:-1px"></i> ${semValor} sem valor líquido</span>`
+      : esc(base)
+  }
 }
 
 // ─── SELECTS OCULTOS ──────────────────────────────────────────────
@@ -2579,7 +2628,14 @@ function parseValorNum(v) {
   if (typeof v === 'number') return v
   const s = String(v == null ? '' : v).trim().replace(/R\$\s*/g, '')
   if (!s) return 0
-  const n = s.indexOf(',') === -1 ? parseFloat(s) : parseFloat(s.replace(/\./g, '').replace(',', '.'))
+  let t = s
+  if (t.indexOf(',') !== -1) t = t.replace(/\./g, '').replace(',', '.')
+  else {
+    // "3.565" (3 digitos depois do unico ponto) e milhar, nao decimal.
+    const partes = t.split('.')
+    if (partes.length > 2 || (partes.length === 2 && partes[1].length === 3)) t = partes.join('')
+  }
+  const n = parseFloat(t)
   return isNaN(n) ? 0 : n
 }
 

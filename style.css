@@ -657,6 +657,28 @@ html { overflow-x: hidden; }
 .fpc-auto    { font-size: 10px; color: var(--verde-text); display: flex; align-items: center; gap: 3px; margin-top: 2px; }
 .fpc-manual-tag { font-size: 10px; color: var(--amber-text); font-weight: 700; }
 .fpc-conferir { font-size: 9.5px; color: var(--amber-text); font-weight: 700; line-height: 1.35; margin-top: 2px; }
+/* Valor líquido da página — o número que vira a ordem de pagamento. Fica
+   sempre visível e editável: a IA erra em holerite de layout incomum. */
+.fpc-valor {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin-top: 8px; padding-top: 8px; border-top: 0.5px solid var(--border);
+}
+.fpc-valor-lbl {
+  font-size: 10px; font-weight: 700; color: var(--verde-text);
+  display: flex; align-items: center; gap: 3px;
+}
+.fpc-valor.vazio .fpc-valor-lbl { color: var(--amber-text); }
+.fpc-valor-pre  { font-size: 11px; color: var(--text-secondary); margin-left: auto; }
+.fpc-valor-in {
+  width: 96px; text-align: right; font-family: inherit; font-size: 12px;
+  font-weight: 700; color: var(--text-primary); background: var(--card-bg);
+  border: 0.5px solid var(--border); border-radius: var(--radius-sm);
+  padding: 5px 8px; outline: none;
+}
+.fpc-valor-in:focus { border-color: var(--verde-text); }
+.fpc-valor.vazio .fpc-valor-in { border-color: rgba(133,79,11,0.45); background: var(--amber-bg); }
+.fpc-valor-tag { font-size: 9px; color: var(--text-hint); font-weight: 700; }
+
 .frac-select-manual {
   width: 100%; margin-top: 8px;
   border: 0.5px solid rgba(133,79,11,0.4); border-radius: var(--radius-sm);
