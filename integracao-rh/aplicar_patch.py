@@ -174,17 +174,81 @@ def conferir(caminho):
     return tudo_ok
 
 
+def procurar(nome=ALVO):
+    """Procura o arquivo no computador. Devolve a lista do que achou.
+
+    Olha primeiro onde é provável (pasta atual, pasta deste script, Área de
+    Trabalho, Documentos, Downloads), e só depois varre o disco — pulando
+    Windows e Program Files, onde ele não estaria."""
+    achados, vistos = [], set()
+
+    def registrar(p):
+        try:
+            real = os.path.realpath(p)
+        except Exception:
+            return
+        if real not in vistos and os.path.isfile(real):
+            vistos.add(real)
+            achados.append(real)
+
+    inicio = os.path.expanduser("~")
+    provaveis = [
+        os.getcwd(),
+        os.path.dirname(os.path.abspath(__file__)),
+        os.path.join(inicio, "Desktop"), os.path.join(inicio, "Área de Trabalho"),
+        os.path.join(inicio, "Documents"), os.path.join(inicio, "Documentos"),
+        os.path.join(inicio, "Downloads"),
+        r"C:\RH", r"C:\Scripts", r"C:\rh-2", r"Y:\RH-2",
+    ]
+    for pasta in provaveis:
+        registrar(os.path.join(pasta, nome))
+    if achados:
+        return achados
+
+    print(f"Procurando o {nome} no computador (pode levar um minuto)...")
+    pular = {"windows", "program files", "program files (x86)", "programdata",
+             "$recycle.bin", "appdata", "node_modules", ".git", "onedrivetemp"}
+    raizes = [inicio, "C:\\"] if os.name == "nt" else [inicio]
+    for raiz in raizes:
+        if not os.path.isdir(raiz):
+            continue
+        for pasta, subpastas, arquivos in os.walk(raiz, topdown=True):
+            subpastas[:] = [d for d in subpastas
+                            if d.lower() not in pular and not d.startswith(".")]
+            if nome in arquivos:
+                registrar(os.path.join(pasta, nome))
+        if achados:
+            break
+    return achados
+
+
 def main():
     aplicar = "--aplicar" in sys.argv
-    caminho = ALVO
+    caminho = None
     for a in sys.argv[1:]:
         if not a.startswith("--"):
             caminho = a
 
+    if caminho is None:
+        achados = procurar()
+        if not achados:
+            sys.exit(
+                f"Nao achei o {ALVO} em lugar nenhum do computador.\n\n"
+                f"Se voce sabe onde ele esta, passe a pasta:\n"
+                f"    python aplicar_patch.py C:\\caminho\\{ALVO}\n\n"
+                f"Para descobrir onde esta: abra o Explorador de Arquivos,\n"
+                f"clique em 'Este Computador' e busque por {ALVO}.")
+        if len(achados) > 1:
+            print(f"Achei {len(achados)} arquivos com esse nome:\n")
+            for i, p in enumerate(achados, 1):
+                print(f"  {i}. {p}")
+            sys.exit("\nEscolha qual e o certo e rode passando o caminho dele:\n"
+                     f"    python aplicar_patch.py \"{achados[0]}\" --aplicar")
+        caminho = achados[0]
+        print(f"Achei: {caminho}\n")
+
     if not os.path.exists(caminho):
-        sys.exit(f"Nao achei o {caminho} nesta pasta.\n"
-                 f"Rode o script na mesma pasta do {ALVO}, ou passe o caminho:\n"
-                 f"    python aplicar_patch.py C:\\caminho\\{ALVO}")
+        sys.exit(f"Nao existe o arquivo: {caminho}")
 
     with open(caminho, encoding="utf-8") as fh:
         texto = fh.read()
