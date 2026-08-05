@@ -200,19 +200,38 @@ def procurar(nome=ALVO):
         os.path.join(inicio, "Downloads"),
         r"C:\RH", r"C:\Scripts", r"C:\rh-2", r"Y:\RH-2",
     ]
+    # Google Drive para Desktop monta como "Meu Drive"/"My Drive" dentro da
+    # letra que o usuário escolheu — G: é o padrão, mas pode ser qualquer uma.
+    for letra in "GHIJKLMNOPQRSTUVWXYZDEF":
+        for meu in ("Meu Drive", "My Drive"):
+            provaveis.append(os.path.join(f"{letra}:\\", meu))
+            provaveis.append(os.path.join(f"{letra}:\\", meu, "RH"))
+    provaveis.append(os.path.join(inicio, "Google Drive"))
+
     for pasta in provaveis:
         registrar(os.path.join(pasta, nome))
     if achados:
         return achados
 
-    print(f"Procurando o {nome} no computador (pode levar um minuto)...")
+    print(f"Procurando o {nome} nas unidades do computador...")
+    print("(pode levar alguns minutos se houver pasta de rede ou do Drive)\n")
     pular = {"windows", "program files", "program files (x86)", "programdata",
-             "$recycle.bin", "appdata", "node_modules", ".git", "onedrivetemp"}
-    raizes = [inicio, "C:\\"] if os.name == "nt" else [inicio]
+             "$recycle.bin", "appdata", "node_modules", ".git", "onedrivetemp",
+             "system volume information", "winsxs"}
+
+    raizes = [inicio]
+    if os.name == "nt":
+        # Toda unidade montada: C:, o Y: do RH, a letra do Google Drive.
+        for letra in "CDEFGHIJKLMNOPQRSTUVWXYZ":
+            raiz = f"{letra}:\\"
+            if os.path.isdir(raiz):
+                raizes.append(raiz)
+
     for raiz in raizes:
         if not os.path.isdir(raiz):
             continue
-        for pasta, subpastas, arquivos in os.walk(raiz, topdown=True):
+        print(f"  ...{raiz}")
+        for pasta, subpastas, arquivos in os.walk(raiz, topdown=True, onerror=lambda e: None):
             subpastas[:] = [d for d in subpastas
                             if d.lower() not in pular and not d.startswith(".")]
             if nome in arquivos:
