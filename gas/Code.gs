@@ -483,27 +483,58 @@ function webhookZapSign(body) {
 var MESES_ARQ = ['JANEIRO','FEVEREIRO','MARCO','ABRIL','MAIO','JUNHO',
                  'JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO']
 
+var MESES_NOME = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+
+// Nome do documento no ZapSign: <Tipo>_<Mês>-<Ano>_<NOME COMPLETO>
+//
+//   Folha_Julho-2026_JOSE NILSON ANTONIO LIMA
+//   Ferias_Julho-2026_JOSE NILSON ANTONIO LIMA
+//   Ponto_Julho-2026_CARLOS EDUARDO SOUZA
+//
+// Antes o app mandava 'Folha_...' para TODO documento — férias e ponto
+// inclusive — e o tipo só existia dentro do PDF, obrigando o script de RH a
+// descobri-lo por OCR. Agora o tipo vem no prefixo.
+//
+// O formato é de propósito o MESMO que o baixar_rh_email.py já entende sem
+// alteração nenhuma: o parse_docname dele testa startswith("FOLHA_"),
+// startswith("PONTO") e startswith("FERIAS"), e tira mês/ano do padrão
+// <MES>-<ANO>. Ou seja, o servidor ganha o tipo de graça, sem patch.
+//
+// 'Folha' continua devolvendo a família FOLHA? lá, e o classifica_conteudo
+// decide entre recibo, contracheque e comprovante lendo o PDF — que é o
+// comportamento de hoje. Férias e ponto passam a ser definitivos pelo nome.
 function nomeDocumentoAssinatura(tipo, competencia, nomeCompleto) {
-  var t = String(tipo || 'Folha').toUpperCase()
-  if (t !== 'FERIAS' && t !== 'PONTO' && t !== 'EPI') t = 'RECIBO'  // folha = RECIBO no arquivo
+  var t = String(tipo || 'Folha').trim().toUpperCase()
+  var prefixo = t === 'FERIAS' || t === 'FÉRIAS' ? 'Ferias'
+              : t === 'PONTO'  ? 'Ponto'
+              : 'Folha'
 
   var comp = String(competencia || '')
-  var ano = '', mes = ''
-  var m = comp.match(/^([A-Za-zçÇãÃéÉíÍóÓ]+)\s*\/\s*(\d{4})$/)   // "Julho/2026"
+  var ano = '', idxMes = -1
+  var m = comp.match(/^([A-Za-zçÇãÃéÉêÊíÍóÓôÔõÕ]+)\s*\/\s*(\d{4})$/)  // "Julho/2026"
   if (m) {
     var nomeMes = m[1].toUpperCase()
-      .replace(/[ÁÀÂÃ]/g,'A').replace(/[ÉÊ]/g,'E').replace(/Ç/g,'C')
+      .replace(/[ÁÀÂÃ]/g,'A').replace(/[ÉÈÊ]/g,'E').replace(/Ç/g,'C')
       .replace(/Í/g,'I').replace(/[ÓÔÕ]/g,'O')
-    var idx = MESES_ARQ.indexOf(nomeMes)
-    if (idx >= 0) { ano = m[2]; mes = ('0' + (idx + 1)).slice(-2) }
+    var i = MESES_ARQ.indexOf(nomeMes)
+    if (i >= 0) { ano = m[2]; idxMes = i }
   }
   if (!ano) {
-    var n = comp.match(/(\d{2})\/(\d{4})/)                        // "07/2026"
-    if (n) { ano = n[2]; mes = n[1] }
+    var n = comp.match(/(\d{2})\/(\d{4})/)                            // "07/2026"
+    if (n) {
+      var mm = parseInt(n[1], 10)
+      if (mm >= 1 && mm <= 12) { ano = n[2]; idxMes = mm - 1 }
+    }
   }
 
-  var base = ano ? ano + '.' + mes : (comp.replace(/[\/\\]/g, '-') || 'SEM-COMPETENCIA')
-  return base + '.' + String(nomeCompleto || '').toUpperCase().trim() + '.' + t
+  var nome = String(nomeCompleto || '').toUpperCase().trim()
+  if (idxMes < 0) {
+    // Sem competência reconhecida não dá para montar <Mês>-<Ano>. Manda sem,
+    // que o servidor manda para revisar — melhor do que inventar uma data.
+    return prefixo + '_' + (comp.replace(/[\/\\]/g, '-') || 'SEM-COMPETENCIA') + '_' + nome
+  }
+  return prefixo + '_' + MESES_NOME[idxMes] + '-' + ano + '_' + nome
 }
 
 function enviarParaZapSign(pdfBase64, nomeDoc, nomeSignatario, telefone) {
@@ -801,7 +832,7 @@ function processarPaginaFolha(dados, usuario) {
   const subpasta = subpastaDoTipo(tipo)
   const func = encontrarFuncionarioPorNome(dados.nome_funcionario, funcionarios)
   if (!func) throw new Error('Funcionário não encontrado: ' + dados.nome_funcionario)
-  const nomeArq = nomeDocumentoAssinatura(tipo, comp, func['NOME_COMPLETO']) + '.PENDENTE.pdf'
+  const nomeArq = nomeDocumentoAssinatura(tipo, comp, func['NOME_COMPLETO']) + '_PENDENTE.pdf'
   let linkDrive = ''
   try { linkDrive = salvarPdfNoDrive(func['ID'], func['NOME_COMPLETO'], subpasta, nomeArq, dados.pdf_base64) }
   catch(e) { logAcao(usuario, 'ERRO_DRIVE', e.message) }
@@ -1451,7 +1482,7 @@ function processarPaginaProprio(dados, usuario) {
   var compLimpo = String(comp || '').replace(/\//g, '-')
   var tipo     = dados.tipo || 'Folha'
   var subpasta = subpastaDoTipo(tipo)
-  var nomeArq  = nomeDocumentoAssinatura(tipo, comp, func['NOME_COMPLETO']) + '.PENDENTE.pdf'
+  var nomeArq  = nomeDocumentoAssinatura(tipo, comp, func['NOME_COMPLETO']) + '_PENDENTE.pdf'
 
   var linkDrive = ''
   try {
