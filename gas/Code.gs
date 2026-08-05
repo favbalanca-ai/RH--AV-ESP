@@ -401,21 +401,19 @@ function enviarFolha(dados, usuario) {
   if (!func) throw new Error('Funcionário não encontrado')
   const hoje = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy')
   const pdf = dados.pdf_base64 || gerarCapaFolhaPdf(func, dados.competencia, usuario)
-  const nomeDoc = 'Folha_' + dados.competencia.replace(/\//g,'-') + '_' + (func['NOME_CURTO'] || func['NOME_COMPLETO'])
+  const nomeDoc = nomeDocumentoAssinatura(dados.tipo || 'Folha', dados.competencia, func['NOME_COMPLETO'])
   const zap = enviarParaZapSign(pdf, nomeDoc, func['NOME_COMPLETO'], func['TELEFONE'])
-  adicionarLinha(CONFIG.ABAS.FOLHA, [
-    dados.func_id,        // A: ID FUNC.
-    func['NOME_COMPLETO'],// B: FUNCIONÁRIO
-    dados.competencia,    // C: COMPETÊNCIA
-    hoje,                 // D: DATA ENVIO
-    'Pendente',           // E: STATUS
-    '',                   // F: DATA ASSINATURA
-    zap.token || '',      // G: ZAPSIGN_DOC
-    '',                   // H: LINK PDF ORIGINAL
-    '',                   // I: LINK DOC ASSINADO
-    'Signer: ' + (zap.signerToken || ''), // J: OBSERVAÇÕES
-    dados.valor_liquido || '', // K: VALOR_LIQUIDO
-  ])
+  adicionarLinhaFolha({
+    'ID FUNC.':       dados.func_id,
+    'FUNCIONÁRIO':    func['NOME_COMPLETO'],
+    'COMPETÊNCIA':    dados.competencia,
+    'DATA ENVIO':     hoje,
+    'STATUS':         'Pendente',
+    'ZAPSIGN_DOC':    zap.token || '',
+    'OBSERVAÇÕES':    'Signer: ' + (zap.signerToken || ''),
+    'VALOR_LIQUIDO':  valorNumerico(dados.valor_liquido),
+    'TIPO':           dados.tipo || 'Folha',
+  })
   try { salvarPdfNoDrive(dados.func_id, func['NOME_COMPLETO'], 'FOLHA_PAGAMENTO', nomeDoc + '_PENDENTE.pdf', pdf) }
   catch(e) { logAcao(usuario, 'ERRO_DRIVE', e.message) }
   logAcao(usuario, 'ENVIO_FOLHA', 'Func ' + dados.func_id + ' | ' + dados.competencia + ' | ZapSign: ' + zap.token)
@@ -452,16 +450,16 @@ function webhookZapSign(body) {
       const subF = subpastaDoTipo(tipoF)
       const link = salvarPdfNoDrive(folha['ID FUNC.'], folha['FUNCIONÁRIO'], subF, tipoF + '_' + comp + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(docToken))
       atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', docToken, { 'LINK DOC ASSINADO': link })
-      // Gera link de confirmação de pagamento para o empregador
+      // Ordem de pagamento do valor a receber (folha ou férias)
       try {
-        var funcId2  = folha['ID FUNC.']
-        var comp2    = String(folha['COMPETÊNCIA'] || '')
-        var valorLiq = folha['VALOR_LIQUIDO'] ? parseFloat(folha['VALOR_LIQUIDO']) : null
-        if (funcId2 && comp2) {
-          gerarLinkConfirmacaoPagamento({ func_id: funcId2, competencia: comp2, valor_liquido: valorLiq }, 'SISTEMA')
-          Logger.log('Link pagamento gerado via ZapSign para func ' + funcId2 + ' | ' + comp2)
-        }
-      } catch(ePagto) { Logger.log('Erro link pagamento ZapSign: ' + ePagto.message) }
+        gerarOrdemDeAssinatura({
+          func_id:       folha['ID FUNC.'],
+          competencia:   String(folha['COMPETÊNCIA'] || ''),
+          valor_liquido: folha['VALOR_LIQUIDO'] ? parseFloat(folha['VALOR_LIQUIDO']) : null,
+          origem:        tipoF,
+          ref_doc:       docToken,
+        }, 'SISTEMA')
+      } catch(ePagto) { Logger.log('Erro ordem de pagamento (webhook): ' + ePagto.message) }
     } catch(e) { logAcao('WEBHOOK', 'DRIVE_OPCIONAL', e.message) }
     if (tipoDaFolha(folha, docToken) === 'Ferias') confirmarFeriasAssinada(docToken)
     logAcao('WEBHOOK', 'ASSINATURA_FOLHA', 'Doc: ' + docToken)
@@ -475,6 +473,39 @@ function webhookZapSign(body) {
 // ─── Envio para ZapSign ──────────────────────────────────────────
 // FIX: normaliza telefone (remove o 55 inicial, pois phone_country já é '55'),
 // valida DDD+número e expõe o HTTP code no erro.
+// Nome do documento no ZapSign. Ele volta como nome do PDF anexado no e-mail
+// de assinatura, e é por ele que o arquivamento no servidor físico identifica
+// tipo e competência. Antes ia 'Folha_' cravado em tudo — férias e ponto
+// inclusive — e o tipo só existia dentro do PDF, obrigando a classificar por
+// OCR. Agora sai no MESMO padrão do arquivo em Y:\RH-2:
+//   AAAA.MM.NOME COMPLETO.TIPO      (o mês por extenso é só o nome da PASTA)
+// Assim o nome que chega por e-mail já é o nome final do arquivo.
+var MESES_ARQ = ['JANEIRO','FEVEREIRO','MARCO','ABRIL','MAIO','JUNHO',
+                 'JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO']
+
+function nomeDocumentoAssinatura(tipo, competencia, nomeCompleto) {
+  var t = String(tipo || 'Folha').toUpperCase()
+  if (t !== 'FERIAS' && t !== 'PONTO' && t !== 'EPI') t = 'RECIBO'  // folha = RECIBO no arquivo
+
+  var comp = String(competencia || '')
+  var ano = '', mes = ''
+  var m = comp.match(/^([A-Za-zçÇãÃéÉíÍóÓ]+)\s*\/\s*(\d{4})$/)   // "Julho/2026"
+  if (m) {
+    var nomeMes = m[1].toUpperCase()
+      .replace(/[ÁÀÂÃ]/g,'A').replace(/[ÉÊ]/g,'E').replace(/Ç/g,'C')
+      .replace(/Í/g,'I').replace(/[ÓÔÕ]/g,'O')
+    var idx = MESES_ARQ.indexOf(nomeMes)
+    if (idx >= 0) { ano = m[2]; mes = ('0' + (idx + 1)).slice(-2) }
+  }
+  if (!ano) {
+    var n = comp.match(/(\d{2})\/(\d{4})/)                        // "07/2026"
+    if (n) { ano = n[2]; mes = n[1] }
+  }
+
+  var base = ano ? ano + '.' + mes : (comp.replace(/[\/\\]/g, '-') || 'SEM-COMPETENCIA')
+  return base + '.' + String(nomeCompleto || '').toUpperCase().trim() + '.' + t
+}
+
 function enviarParaZapSign(pdfBase64, nomeDoc, nomeSignatario, telefone) {
   var tel = String(telefone || '').replace(/\D/g, '')
   if (tel.length >= 12 && tel.substring(0, 2) === '55') tel = tel.substring(2)
@@ -632,6 +663,18 @@ function sincronizarPendentes() {
             const link = salvarPdfNoDrive(folha['ID FUNC.'], folha['FUNCIONÁRIO'], subF, tipoF + '_' + comp + '_' + token.substring(0,8) + '_ASSINADO.pdf', baixarPdfAssinadoZapSign(token))
             atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', token, { 'LINK DOC ASSINADO': link })
           } catch(de) {}
+          // Mesma ordem de pagamento do webhook: quando a assinatura é
+          // detectada por aqui, o webhook não passou, e sem isto o valor
+          // nunca chegaria ao extrato. gerarOrdemDeAssinatura não duplica.
+          try {
+            gerarOrdemDeAssinatura({
+              func_id:       folha['ID FUNC.'],
+              competencia:   String(folha['COMPETÊNCIA'] || ''),
+              valor_liquido: folha['VALOR_LIQUIDO'] ? parseFloat(folha['VALOR_LIQUIDO']) : null,
+              origem:        tipoF,
+              ref_doc:       token,
+            }, 'SYNC')
+          } catch(ePag) { erros.push('Ordem ' + token.substring(0,8) + ': ' + ePag.message) }
           atualizados++
         } else if (status === 'refused') {
           atualizarCelulasPorId(CONFIG.ABAS.FOLHA, 'ZAPSIGN_DOC', token, { 'STATUS': 'Recusado', 'DATA ASSINATURA': hoje })
@@ -758,20 +801,29 @@ function processarPaginaFolha(dados, usuario) {
   const subpasta = subpastaDoTipo(tipo)
   const func = encontrarFuncionarioPorNome(dados.nome_funcionario, funcionarios)
   if (!func) throw new Error('Funcionário não encontrado: ' + dados.nome_funcionario)
-  const nomeArq = tipo + '_' + compLimpo + '_' + (func['NOME_CURTO'] || func['NOME_COMPLETO'].split(' ')[0]) + '.pdf'
+  const nomeArq = nomeDocumentoAssinatura(tipo, comp, func['NOME_COMPLETO']) + '.PENDENTE.pdf'
   let linkDrive = ''
   try { linkDrive = salvarPdfNoDrive(func['ID'], func['NOME_COMPLETO'], subpasta, nomeArq, dados.pdf_base64) }
   catch(e) { logAcao(usuario, 'ERRO_DRIVE', e.message) }
   let zapToken = '', zapSignUrl = '', zapSignerToken = ''
   if (dados.enviar_zapsign) {
     try {
-      const zap = enviarParaZapSign(dados.pdf_base64, 'Folha_' + compLimpo + '_' + func['NOME_COMPLETO'].split(' ')[0], func['NOME_COMPLETO'], func['TELEFONE'])
+      const zap = enviarParaZapSign(dados.pdf_base64, nomeDocumentoAssinatura(tipo, comp, func['NOME_COMPLETO']), func['NOME_COMPLETO'], func['TELEFONE'])
       zapToken = zap.token; zapSignUrl = zap.signUrl; zapSignerToken = zap.signerToken
     } catch(e) { logAcao(usuario, 'ERRO_ZAPSIGN', e.message); throw e }
   }
-  garantirColunaTipoFolha()
-  adicionarLinha(CONFIG.ABAS.FOLHA, [func['ID'], func['NOME_COMPLETO'], comp, hoje, zapToken ? 'Pendente' : 'Salvo', '', zapToken, linkDrive, '', zapSignerToken ? 'Signer: ' + zapSignerToken : 'Fracionado', dados.valor_liquido || '', tipo])
-  definirTipoUltimaLinhaFolha(tipo)
+  adicionarLinhaFolha({
+    'ID FUNC.':          func['ID'],
+    'FUNCIONÁRIO':       func['NOME_COMPLETO'],
+    'COMPETÊNCIA':       comp,
+    'DATA ENVIO':        hoje,
+    'STATUS':            zapToken ? 'Pendente' : 'Salvo',
+    'ZAPSIGN_DOC':       zapToken,
+    'LINK PDF ORIGINAL': linkDrive,
+    'OBSERVAÇÕES':       zapSignerToken ? 'Signer: ' + zapSignerToken : 'Fracionado',
+    'VALOR_LIQUIDO':     valorNumerico(dados.valor_liquido),
+    'TIPO':              tipo,
+  })
   if (tipo === 'Ferias' && zapToken) registrarFeriasPendente(func['ID'], func['NOME_COMPLETO'], dados.ferias_inicio, dados.ferias_fim, comp, zapToken)
   logAcao(usuario, 'FOLHA_INDIVIDUAL', 'Func ' + func['ID'] + ' | ' + comp)
   return { func_id: func['ID'], nome: func['NOME_COMPLETO'], link_drive: linkDrive, zapsign: zapToken, sign_url: zapSignUrl }
@@ -889,18 +941,32 @@ function identificarDocumentoComIA(dados) {
     func = funcionarios.find(function(f) { return parseInt(f['ID']) === cod })
   }
 
+  // O empregador (produtor) que consta no documento é a 2ª chave: cada
+  // funcionário pertence a um produtor, então ele desempata homônimos e
+  // denuncia um casamento errado que o nome sozinho deixaria passar.
+  var doDocumento = funcionarios
+  if (resultado.empregador) {
+    var comMesmoEmpregador = funcionarios.filter(function(f) {
+      return mesmoEmpregador(f['EMPREGADOR'], resultado.empregador)
+    })
+    if (comMesmoEmpregador.length) doDocumento = comMesmoEmpregador
+  }
+
   if (!func && resultado.nome_funcionario) {
     // 1) Casamento preciso por 2+ partes do nome — evita pegar o empregador
     //    (comum em avisos/recibos de férias, onde a razão social aparece em destaque).
-    func = encontrarFuncionarioPorNome(resultado.nome_funcionario, funcionarios)
+    //    Busca primeiro entre os do mesmo produtor.
+    func = encontrarFuncionarioPorNome(resultado.nome_funcionario, doDocumento)
+      || encontrarFuncionarioPorNome(resultado.nome_funcionario, funcionarios)
 
     // 2) Fallback pelo primeiro nome, só quando houver UM único funcionário com
     //    esse primeiro nome (evita atribuir a pessoa errada em nomes repetidos).
+    //    Restringir ao produtor do documento resolve casos que antes eram ambíguos.
     if (!func) {
       var primeiro = String(resultado.nome_funcionario).toUpperCase()
         .split(' ').filter(function(p) { return p.length > 2 })[0] || ''
       if (primeiro) {
-        var candidatos = funcionarios.filter(function(f) {
+        var candidatos = doDocumento.filter(function(f) {
           return String(f['NOME_COMPLETO'] || '').toUpperCase().split(' ').indexOf(primeiro) !== -1
         })
         if (candidatos.length === 1) func = candidatos[0]
@@ -908,18 +974,51 @@ function identificarDocumentoComIA(dados) {
     }
   }
 
+  // Confere: o produtor do documento bate com o cadastrado para esse funcionário?
+  // Divergência não descarta o casamento, mas derruba a confiança para o app
+  // pedir confirmação em vez de aceitar calado.
+  var confereEmpregador = null
+  if (func && resultado.empregador && func['EMPREGADOR']) {
+    confereEmpregador = mesmoEmpregador(func['EMPREGADOR'], resultado.empregador)
+  }
+
   return {
     func_id:        func ? func['ID']            : null,
     func_nome:      func ? func['NOME_COMPLETO'] : resultado.nome_funcionario || '',
     func_telefone:  func ? func['TELEFONE']      : '',
+    func_empregador: func ? (func['EMPREGADOR'] || '') : '',
     tipo_documento: resultado.tipo_documento     || 'Folha',
     competencia:    resultado.competencia        || '',
     empregador:     resultado.empregador         || '',
-    valor_liquido:  resultado.valor_liquido      || null,
+    empregador_confere: confereEmpregador,
+    // A IA às vezes devolve "R$ 3.565,07" apesar do pedido de decimal puro.
+    // Normaliza aqui: o app e a planilha só veem número.
+    valor_liquido:  valorNumerico(resultado.valor_liquido) || null,
     ferias_inicio:  resultado.ferias_inicio      || null,
     ferias_fim:     resultado.ferias_fim         || null,
-    ia_confianca:   func ? 'alto' : 'baixo',
+    ia_confianca:   !func ? 'baixo' : (confereEmpregador === false ? 'medio' : 'alto'),
   }
+}
+
+// Compara empregador do cadastro com o extraído do PDF. A razão social vem
+// escrita de formas diferentes ("JOAQUIM GATTO COSSUL" vs "Joaquim G. Cossul
+// - Fazenda X"), então compara pelos sobrenomes significativos em comum.
+function mesmoEmpregador(cadastro, documento) {
+  var norm = function(s) {
+    return String(s || '').toUpperCase()
+      .replace(/[ÁÀÂÃÄ]/g,'A').replace(/[ÉÈÊË]/g,'E').replace(/[ÍÌÎÏ]/g,'I')
+      .replace(/[ÓÒÔÕÖ]/g,'O').replace(/[ÚÙÛÜ]/g,'U').replace(/[Ç]/g,'C')
+      .replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim()
+  }
+  var a = norm(cadastro), b = norm(documento)
+  if (!a || !b) return null
+  if (a === b || a.indexOf(b) !== -1 || b.indexOf(a) !== -1) return true
+
+  var partesA = a.split(' ').filter(function(p) { return p.length > 3 })
+  var partesB = b.split(' ').filter(function(p) { return p.length > 3 })
+  if (!partesA.length || !partesB.length) return null
+  var comuns = partesA.filter(function(p) { return partesB.indexOf(p) !== -1 })
+  return comuns.length >= 2
 }
 
 function diagnosticarDocumentoZapSign() {
@@ -1167,17 +1266,20 @@ function confirmarAssinatura(token, assinaturaBase64, pdfAssinadoExterno) {
 
   logAcao('SISTEMA', 'ASSINATURA_PROPRIA', 'Token: ' + token + ' | Func: ' + funcNome + ' | Drive: ' + linkDrive)
 
-  // Notificação automática ao empregador com link de confirmação de pagamento
+  // Ordem de pagamento do valor a receber. Ferias entra aqui junto com
+  // Folha e Ponto — antes ficava de fora e o valor das férias nunca
+  // chegava ao extrato do funcionário.
   try {
-    if (tipo === 'Folha' || tipo === 'Ponto') {
-      var valorLiquidoDoc = rowData[16] ? parseFloat(rowData[16]) : null
-      gerarLinkConfirmacaoPagamento({
+    if (tipo === 'Folha' || tipo === 'Ponto' || tipo === 'Ferias') {
+      gerarOrdemDeAssinatura({
         func_id:       funcId,
         competencia:   String(referencia),
-        valor_liquido: valorLiquidoDoc,
+        valor_liquido: rowData[16] ? parseFloat(rowData[16]) : null,
+        origem:        tipo,
+        ref_doc:       token,
       }, 'SISTEMA')
     }
-  } catch(eNotif) { Logger.log('Erro notif pagamento: ' + eNotif.message) }
+  } catch(eNotif) { Logger.log('Erro ordem de pagamento (assinatura própria): ' + eNotif.message) }
 
   return { ok: true, link_drive: linkDrive }
 }
@@ -1349,29 +1451,24 @@ function processarPaginaProprio(dados, usuario) {
   var compLimpo = String(comp || '').replace(/\//g, '-')
   var tipo     = dados.tipo || 'Folha'
   var subpasta = subpastaDoTipo(tipo)
-  var nomeArq  = tipo + '_' + compLimpo + '_' + (func['NOME_CURTO'] || func['NOME_COMPLETO'].split(' ')[0]) + '_PENDENTE.pdf'
-  garantirColunaTipoFolha()
+  var nomeArq  = nomeDocumentoAssinatura(tipo, comp, func['NOME_COMPLETO']) + '.PENDENTE.pdf'
 
   var linkDrive = ''
   try {
     linkDrive = salvarPdfNoDrive(func['ID'], func['NOME_COMPLETO'], subpasta, nomeArq, dados.pdf_base64)
   } catch(e) { logAcao(usuario, 'ERRO_DRIVE', e.message) }
 
-  adicionarLinha(CONFIG.ABAS.FOLHA, [
-    func['ID'],           // A: ID FUNC.
-    func['NOME_COMPLETO'],// B: FUNCIONÁRIO
-    comp,                 // C: COMPETÊNCIA
-    hoje,                 // D: DATA ENVIO
-    'Aguardando Assinatura', // E: STATUS
-    '',                   // F: DATA ASSINATURA
-    '',                   // G: ZAPSIGN_DOC
-    linkDrive,            // H: LINK PDF ORIGINAL
-    '',                   // I: LINK DOC ASSINADO
-    'Assinatura Própria — ' + tipo, // J: OBSERVAÇÕES
-    dados.valor_liquido || '', // K: VALOR_LIQUIDO
-    tipo,                 // L: TIPO
-  ])
-  definirTipoUltimaLinhaFolha(tipo)
+  adicionarLinhaFolha({
+    'ID FUNC.':          func['ID'],
+    'FUNCIONÁRIO':       func['NOME_COMPLETO'],
+    'COMPETÊNCIA':       comp,
+    'DATA ENVIO':        hoje,
+    'STATUS':            'Aguardando Assinatura',
+    'LINK PDF ORIGINAL': linkDrive,
+    'OBSERVAÇÕES':       'Assinatura Própria — ' + tipo,
+    'VALOR_LIQUIDO':     valorNumerico(dados.valor_liquido),
+    'TIPO':              tipo,
+  })
 
   var linkData = gerarLinkAssinatura({
     tipo:         tipo,
@@ -1816,14 +1913,7 @@ function gerarMensagemPagamento(dados) {
     var folha = folhasFunc.find(function(f) { return f['VALOR_LIQUIDO'] && String(f['VALOR_LIQUIDO']).trim() !== '' })
                || folhasFunc[folhasFunc.length - 1] || null
 
-    function normalizarValor(v) {
-      if (!v) return ''
-      var s = String(v).trim()
-      s = s.replace(/R\$\s*/g, '').trim()
-      if (s.indexOf(',') === -1 && s.indexOf('.') !== -1) return s
-      if (s.indexOf(',') !== -1) return s.replace(/\./g,'').replace(',','.')
-      return s
-    }
+    var normalizarValor = function (v) { return String(valorNumerico(v)) }
     var valorLiquido = dados.valor_liquido ? normalizarValor(String(dados.valor_liquido)) : ''
     if (!valorLiquido && folha) {
       valorLiquido = normalizarValor(String(folha['VALOR_LIQUIDO'] || ''))
@@ -2128,37 +2218,129 @@ function adicionarColunasFuncionarios() {
   return 'OK'
 }
 
-// ─── Coluna TIPO na aba FOLHA_PAGAMENTO ────────────────────────────
-// É ela que decide a pasta do assinado (Ferias -> FERIAS). Antes dependia de
-// rodar adicionarColunaTipoFolha() na mão; se isso não fosse feito, TIPO vinha
-// vazio e TODO documento assinado — inclusive férias — caía em FOLHA_PAGAMENTO.
-// Agora a coluna é criada sozinha na hora de gravar.
-function garantirColunaTipoFolha() {
-  var sheet = getSheet(CONFIG.ABAS.FOLHA)
-  if (!sheet) return -1
-  var ultima = Math.max(1, sheet.getLastColumn())
-  var hdrs   = sheet.getRange(1, 1, 1, ultima).getValues()[0]
-  var iTipo  = hdrs.indexOf('TIPO')
-  if (iTipo === -1) {
-    sheet.getRange(1, ultima + 1).setValue('TIPO')
-    Logger.log('Coluna TIPO criada na aba ' + CONFIG.ABAS.FOLHA)
-    return ultima // índice 0-based da coluna recém-criada
+// ─── Colunas da aba FOLHA_PAGAMENTO ────────────────────────────────
+// A aba foi criada à mão e o app escrevia nela com appendRow POSICIONAL. Numa
+// planilha com menos cabeçalhos do que valores gravados, o excedente ia parar
+// em colunas ÓRFÃS (dados sem cabeçalho): o valor caía na coluna K sem ninguém
+// chamá-la de VALOR_LIQUIDO, e como o lerAbaComoObjetos indexa por NOME, o
+// número existia na planilha mas era invisível para o app. Daí a ordem de
+// pagamento sair com "(consultar holerite)" e o extrato sem valor.
+//
+// Agora: cabeçalho garantido antes de gravar, e gravação por nome de coluna.
+var COLUNAS_FOLHA = ['ID FUNC.', 'FUNCIONÁRIO', 'COMPETÊNCIA', 'DATA ENVIO',
+                     'STATUS', 'DATA ASSINATURA', 'ZAPSIGN_DOC',
+                     'LINK PDF ORIGINAL', 'LINK DOC ASSINADO', 'OBSERVAÇÕES',
+                     'VALOR_LIQUIDO', 'TIPO']
+
+// Só estas duas são CRIADAS quando faltam. As outras dez o app já lê por nome
+// e sempre estiveram na aba; mexer nelas arriscaria duplicar uma coluna numa
+// planilha que grafou o cabeçalho de outro jeito.
+
+// Procura uma coluna sem cabeçalho cujo conteúdo inteiro passe no teste. É
+// assim que o histórico já gravado é recuperado em vez de virar coluna nova
+// no fim (o que deixaria os valores antigos perdidos para sempre).
+function acharColunaOrfa(sheet, hdrs, valida) {
+  var vals = sheet.getDataRange().getValues()
+  for (var c = 0; c < hdrs.length; c++) {
+    if (String(hdrs[c]).trim() !== '') continue
+    var bons = 0, ruim = false
+    for (var r = 1; r < vals.length && !ruim; r++) {
+      var v = vals[r][c]
+      if (v === '' || v === null || v === undefined) continue
+      if (valida(v)) bons++
+      else ruim = true
+    }
+    if (!ruim && bons > 0) return c
   }
-  return iTipo
+  return -1
 }
 
-// Grava o TIPO da última linha inserida pela COLUNA CERTA (por nome de
-// cabeçalho). O appendRow é posicional: se a ordem das colunas da planilha
-// mudar, o tipo ia parar em outra coluna e o arquivamento errava a pasta.
-function definirTipoUltimaLinhaFolha(tipo) {
-  var iTipo = garantirColunaTipoFolha()
-  if (iTipo < 0) return
+var TIPOS_FOLHA_VALIDOS = ['FOLHA', 'FERIAS', 'FÉRIAS', 'PONTO', 'EPI']
+
+function garantirColunasFolha() {
   var sheet = getSheet(CONFIG.ABAS.FOLHA)
-  sheet.getRange(sheet.getLastRow(), iTipo + 1).setValue(tipo || 'Folha')
+  if (!sheet) return []
+  var ultima = Math.max(1, sheet.getLastColumn())
+  var hdrs = sheet.getRange(1, 1, 1, ultima).getValues()[0]
+    .map(function (h) { return String(h).trim() })
+
+  var orfaDe = {
+    'TIPO': function (v) {
+      return TIPOS_FOLHA_VALIDOS.indexOf(String(v).trim().toUpperCase()) !== -1
+    },
+    'VALOR_LIQUIDO': function (v) { return valorNumerico(v) !== '' },
+  }
+
+  Object.keys(orfaDe).forEach(function (nome) {
+    if (hdrs.indexOf(nome) !== -1) return
+    var c = acharColunaOrfa(sheet, hdrs, orfaDe[nome])
+    if (c >= 0) {
+      sheet.getRange(1, c + 1).setValue(nome)
+      hdrs[c] = nome
+      Logger.log('Cabeçalho ' + nome + ' recuperado na coluna ' + (c + 1) +
+                 ' da aba ' + CONFIG.ABAS.FOLHA)
+    } else {
+      sheet.getRange(1, hdrs.length + 1).setValue(nome)
+      hdrs.push(nome)
+      Logger.log('Coluna ' + nome + ' criada na aba ' + CONFIG.ABAS.FOLHA)
+    }
+  })
+  return hdrs
+}
+
+// Insere na FOLHA_PAGAMENTO escrevendo por NOME de cabeçalho, nunca por
+// posição. Recebe um objeto {'VALOR_LIQUIDO': 3565.07, ...}.
+function adicionarLinhaFolha(obj) {
+  var hdrs  = garantirColunasFolha()
+  var sheet = getSheet(CONFIG.ABAS.FOLHA)
+  var linha = [], porNome = {}
+
+  // 1) Pelo NOME do cabeçalho — é assim que a leitura acontece.
+  hdrs.forEach(function (h, i) {
+    var k = String(h).trim()
+    if (Object.prototype.hasOwnProperty.call(obj, k)) { linha[i] = obj[k]; porNome[k] = true }
+  })
+
+  // 2) Cabeçalho grafado de outro jeito ('OBS' no lugar de 'OBSERVAÇÕES'):
+  //    cai na posição canônica, que é como a aba sempre foi escrita. Não
+  //    regride nada e evita criar coluna duplicada.
+  COLUNAS_FOLHA.forEach(function (nome, iCanon) {
+    if (porNome[nome] || !Object.prototype.hasOwnProperty.call(obj, nome)) return
+    if (iCanon < hdrs.length && linha[iCanon] === undefined) linha[iCanon] = obj[nome]
+  })
+
+  for (var i = 0; i < hdrs.length; i++) if (linha[i] === undefined) linha[i] = ''
+  sheet.appendRow(linha)
+  return linha
+}
+
+// "R$ 3.565,07", "3.565,07", "3565,07" e 3565.07 viram todos o número 3565.07.
+// Grava-se número na planilha, não texto: assim soma, filtra e formata sem
+// depender de quem escreveu.
+function valorNumerico(v) {
+  if (v === null || v === undefined || v === '') return ''
+  if (typeof v === 'number') return isNaN(v) ? '' : v
+  var s = String(v).replace(/R\$/gi, '').replace(/\s/g, '').trim()
+  if (!s) return ''
+  if (s.indexOf(',') !== -1) {
+    s = s.replace(/\./g, '').replace(',', '.')
+  } else {
+    var pontos = s.split('.')
+    // "3.565" (3 dígitos depois do único ponto) é milhar, não decimal.
+    if (pontos.length > 2 || (pontos.length === 2 && pontos[1].length === 3)) {
+      s = pontos.join('')
+    }
+  }
+  var n = parseFloat(s)
+  return isNaN(n) ? '' : n
+}
+
+function garantirColunaTipoFolha() {
+  return garantirColunasFolha().indexOf('TIPO')
 }
 
 function adicionarColunaTipoFolha() {
-  garantirColunaTipoFolha()
+  garantirColunasFolha()
   return 'OK'
 }
 
@@ -2229,11 +2411,13 @@ function confirmarNotificacao(dados, usuario) {
     if (String(vals[i][idIdx]) === String(dados.id)) {
       var hoje = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm')
 
-      if (dados.valor_liquido) {
-        sheet.getRange(i+1, hdrs.indexOf('VALOR_LIQUIDO')+1).setValue(dados.valor_liquido)
+      var valorNum = valorNumerico(dados.valor_liquido)
+      if (valorNum !== '') {
+        sheet.getRange(i+1, hdrs.indexOf('VALOR_LIQUIDO')+1).setValue(valorNum)
         var msgAtual = String(vals[i][hdrs.indexOf('MSG_EMPREGADOR')] || '')
-        var valorFmt = 'R$ ' + parseFloat(dados.valor_liquido).toLocaleString('pt-BR', {minimumFractionDigits:2})
+        var valorFmt = 'R$ ' + Number(valorNum).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})
         msgAtual = msgAtual.replace('(consultar holerite)', valorFmt)
+                           .replace('(verificar holerite)', valorFmt)
         sheet.getRange(i+1, hdrs.indexOf('MSG_EMPREGADOR')+1).setValue(msgAtual)
 
         var waLink = String(vals[i][hdrs.indexOf('WA_LINK_EMPREGADOR')] || '')
@@ -2299,8 +2483,9 @@ function gerarLinkConfirmacaoPagamento(dados, usuario) {
     dados.competencia = compNorm
   }
 
-  var valorFmt = dados.valor_liquido
-    ? 'R$ ' + parseFloat(dados.valor_liquido).toLocaleString('pt-BR', {minimumFractionDigits:2})
+  var valorNum = valorNumerico(dados.valor_liquido)
+  var valorFmt = valorNum !== ''
+    ? 'R$ ' + Number(valorNum).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})
     : '(verificar holerite)'
 
   var linhasPix = []
@@ -2309,9 +2494,14 @@ function gerarLinkConfirmacaoPagamento(dados, usuario) {
   if (func['AGENCIA']) linhasPix.push('Agência: ' + func['AGENCIA'])
   if (func['CONTA'])   linhasPix.push('Conta: ' + func['CONTA'])
 
+  var origemLabel = dados.origem === 'Ferias' ? 'Férias'
+                  : dados.origem === 'Ponto'  ? 'Folha de Ponto'
+                  : 'Folha de Pagamento'
+
   var msg = '✅ *Autorização de Pagamento*\n\n' +
     '👤 *Funcionário:* ' + func['NOME_COMPLETO'] + '\n' +
     '💼 *Função:* ' + (func['FUNCAO'] || '') + '\n' +
+    '📄 *Referente a:* ' + origemLabel + '\n' +
     '📅 *Competência:* ' + dados.competencia + '\n' +
     '💰 *Valor líquido:* ' + valorFmt + '\n'
 
@@ -2332,7 +2522,7 @@ function gerarLinkConfirmacaoPagamento(dados, usuario) {
   }
 
   sheet.appendRow([
-    id, func['ID'], func['NOME_COMPLETO'], compStr, dados.valor_liquido || '',
+    id, func['ID'], func['NOME_COMPLETO'], compStr, valorNum,
     hoje, 'Aguardando Pagamento',
     waLink, msg,
     '', '',
@@ -2342,6 +2532,91 @@ function gerarLinkConfirmacaoPagamento(dados, usuario) {
 
   logAcao(usuario, 'LINK_PAGAMENTO_GERADO', 'Func ' + func['ID'] + ' | ' + dados.competencia + ' | Token: ' + token)
   return { token: token, link: link, wa_link: waLink, mensagem: msg }
+}
+
+// ─── ORDEM DE PAGAMENTO A PARTIR DA ASSINATURA ─────────────────────
+// Toda folha ou férias assinada vira uma ordem de pagamento na aba
+// PAGAMENTOS — que é a mesma fonte do extrato do funcionário.
+// ORIGEM diz de onde veio o valor (Folha/Ferias/Ponto) e REF_DOC guarda o
+// token do documento assinado, que serve de chave contra duplicidade:
+// o webhook do ZapSign e a sincronização manual podem detectar a mesma
+// assinatura, e sem isso o funcionário ganharia duas ordens.
+function garantirColunasPagamento() {
+  inicializarAbaPagamentos()
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_PAGAMENTOS)
+  if (!sheet) return {}
+  var ultima = Math.max(1, sheet.getLastColumn())
+  var hdrs   = sheet.getRange(1, 1, 1, ultima).getValues()[0]
+  ;['ORIGEM', 'REF_DOC'].forEach(function (nome) {
+    if (hdrs.indexOf(nome) === -1) {
+      sheet.getRange(1, sheet.getLastColumn() + 1).setValue(nome)
+      hdrs.push(nome)
+      Logger.log('Coluna ' + nome + ' criada na aba ' + ABA_PAGAMENTOS)
+    }
+  })
+  return { origem: hdrs.indexOf('ORIGEM'), refDoc: hdrs.indexOf('REF_DOC') }
+}
+
+// Grava ORIGEM/REF_DOC na última linha inserida, pela coluna certa. O
+// appendRow das ordens é posicional e não conhece essas colunas novas.
+function definirOrigemUltimaOrdem(origem, refDoc) {
+  var idx = garantirColunasPagamento()
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_PAGAMENTOS)
+  var linha = sheet.getLastRow()
+  if (idx.origem >= 0) sheet.getRange(linha, idx.origem + 1).setValue(origem || 'Folha')
+  if (idx.refDoc >= 0) sheet.getRange(linha, idx.refDoc + 1).setValue(refDoc || '')
+}
+
+// Já existe ordem para este documento? Procura pelo token do documento e,
+// se ele não estiver disponível, cai para funcionário + competência + origem.
+function jaExisteOrdemPagamento(funcId, competencia, origem, refDoc) {
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_PAGAMENTOS)
+  if (!sheet) return false
+  var vals = sheet.getDataRange().getValues()
+  if (vals.length < 2) return false
+  var hdrs = vals[0]
+  var iFunc = hdrs.indexOf('ID_FUNC'), iComp = hdrs.indexOf('COMPETENCIA')
+  var iOrig = hdrs.indexOf('ORIGEM'),  iRef  = hdrs.indexOf('REF_DOC')
+  var iCanc = hdrs.indexOf('CANCELADO')
+  var alvo  = String(refDoc || '').trim()
+
+  for (var i = 1; i < vals.length; i++) {
+    if (iCanc >= 0 && String(vals[i][iCanc]).trim() === 'Sim') continue
+    if (alvo && iRef >= 0 && String(vals[i][iRef]).trim() === alvo) return true
+    if (!alvo && iFunc >= 0 && iComp >= 0) {
+      var mesmaOrigem = iOrig < 0 || String(vals[i][iOrig] || 'Folha') === String(origem || 'Folha')
+      if (String(vals[i][iFunc]) === String(funcId) &&
+          String(vals[i][iComp]) === String(competencia) && mesmaOrigem) return true
+    }
+  }
+  return false
+}
+
+// Ponto único de entrada: chamado pelos três caminhos que detectam uma
+// assinatura (webhook, sincronização manual e assinatura própria).
+function gerarOrdemDeAssinatura(dados, usuario) {
+  var funcId = dados.func_id
+  var comp   = String(dados.competencia || '')
+  var origem = dados.origem || 'Folha'
+  var refDoc = dados.ref_doc || ''
+  if (!funcId || !comp) return { ignorado: true, motivo: 'func_id ou competência ausente' }
+
+  garantirColunasPagamento()
+  if (jaExisteOrdemPagamento(funcId, comp, origem, refDoc)) {
+    return { ignorado: true, motivo: 'ordem já existente' }
+  }
+
+  var res = gerarLinkConfirmacaoPagamento({
+    func_id:       funcId,
+    competencia:   comp,
+    valor_liquido: dados.valor_liquido || null,
+    origem:        origem,
+  }, usuario || 'SISTEMA')
+
+  definirOrigemUltimaOrdem(origem, refDoc)
+  logAcao(usuario || 'SISTEMA', 'ORDEM_PAGAMENTO',
+    'Func ' + funcId + ' | ' + origem + ' ' + comp + ' | R$ ' + (dados.valor_liquido || '?'))
+  return res
 }
 
 function buscarPagamento(token) {

@@ -2151,7 +2151,9 @@ async function processarFracionamento() {
     esconderLoading()
     btn.disabled = false; btn.innerHTML = '<i class="ti ti-scissors"></i> Separar PDF'
     document.getElementById('frac-step-wrap').style.display = 'block'
-    document.getElementById('frac-resumo').textContent = competencia + ' · ' + total + ' página(s) separadas'
+    const resumoEl = document.getElementById('frac-resumo')
+    resumoEl.dataset.base = competencia + ' · ' + total + ' página(s) separadas'
+    resumoEl.textContent  = resumoEl.dataset.base
     renderPaginasFracionadas()
     atualizarBtnTodos()
     toast('🔍 Identificando funcionários...', '')
@@ -2183,7 +2185,38 @@ function renderPaginasFracionadas() {
           Identificando automaticamente...
         </div>
       </div>
+      <div id="fpc-valor-${i}"></div>
     </div>`).join('')
+}
+
+// ── Valor líquido da página ───────────────────────────────────────
+// É o valor que vira a ordem de pagamento quando o funcionário assina. A IA
+// erra em holerite de layout incomum, e antes disso não aparecia em lugar
+// nenhum: o valor sumia calado e a ordem saía "(verificar holerite)". Agora
+// fica à vista e editável antes do envio.
+function renderValorPagina(i) {
+  const el = document.getElementById('fpc-valor-' + i); if (!el) return
+  const p  = paginasFracionadas[i]
+  const v  = p.valorLiquido
+  const tem = v !== null && v !== undefined && v !== '' && !isNaN(parseFloat(v))
+  el.innerHTML = `
+    <div class="fpc-valor ${tem ? '' : 'vazio'}">
+      <span class="fpc-valor-lbl">${tem ? '<i class="ti ti-cash"></i> Líquido' : '<i class="ti ti-alert-triangle"></i> Sem valor'}</span>
+      <span class="fpc-valor-pre">R$</span>
+      <input type="text" inputmode="decimal" class="fpc-valor-in" id="fpc-valor-in-${i}"
+             value="${tem ? formatarValor(v) : ''}" placeholder="0,00"
+             onchange="definirValorPagina(${i}, this.value)"
+             onblur="definirValorPagina(${i}, this.value)">
+      ${tem && p.valorOrigem === 'ia' ? '<span class="fpc-valor-tag">pela IA</span>' : ''}
+    </div>`
+}
+
+function definirValorPagina(i, texto) {
+  const n = parseValorNum(texto)
+  paginasFracionadas[i].valorLiquido = n > 0 ? n : null
+  paginasFracionadas[i].valorOrigem  = n > 0 ? 'manual' : ''
+  renderValorPagina(i)
+  atualizarBtnTodos()
 }
 
 // ── Mapeamento salvo ──────────────────────────────────────────────
@@ -2222,8 +2255,9 @@ async function identificarFuncionariosAutomatico() {
 
       if (tipoIA && paginasFracionadas[i].tipoDoc !== 'Ferias') paginasFracionadas[i].tipoDoc = tipoIA
       if (compIA) paginasFracionadas[i].competencia  = compIA
-      if (d.valor_liquido) {
+      if (d.valor_liquido !== null && d.valor_liquido !== undefined && d.valor_liquido !== '') {
         paginasFracionadas[i].valorLiquido = d.valor_liquido
+        paginasFracionadas[i].valorOrigem  = 'ia'
       }
       if (d.ferias_inicio) paginasFracionadas[i].feriasInicio = d.ferias_inicio
       if (d.ferias_fim)    paginasFracionadas[i].feriasFim    = d.ferias_fim
@@ -2231,7 +2265,10 @@ async function identificarFuncionariosAutomatico() {
       if (d.func_id) {
         func = funcionarios.find(f => String(f['ID']) === String(d.func_id))
         if (func) {
-          func._metodo = 'ia'
+          // Empregador do documento diverge do cadastrado: o casamento pode
+          // estar errado, então pede conferência em vez de aceitar calado.
+          func._metodo = d.empregador_confere === false ? 'conferir' : 'ia'
+          func._empregadorDoc = d.empregador || ''
           paginasFracionadas[i].funcId    = String(func['ID'])
           paginasFracionadas[i].nome      = func['NOME_COMPLETO']
           paginasFracionadas[i].telefone  = func['TELEFONE'] || ''
@@ -2255,6 +2292,7 @@ async function identificarFuncionariosAutomatico() {
     } else {
       renderCardManual(i)
     }
+    renderValorPagina(i)
     atualizarBtnTodos()
   }
 
@@ -2268,7 +2306,7 @@ async function identificarFuncionariosAutomatico() {
 
 function renderCardIdentificado(i, func, metodo) {
   const card = document.getElementById('fpc-' + i); if (!card) return
-  card.className = 'frac-page-card identificado'
+  card.className = 'frac-page-card ' + (metodo === 'conferir' ? 'manual' : 'identificado')
   document.getElementById('fpc-num-' + i).innerHTML = `<i class="ti ti-file-text" style="font-size:11px;vertical-align:-1px"></i> Página ${paginasFracionadas[i].pagina}`
   document.getElementById('fpc-func-' + i).innerHTML = `
     <div class="fpc-func">
@@ -2276,7 +2314,11 @@ function renderCardIdentificado(i, func, metodo) {
       <div style="flex:1;min-width:0">
         <div class="fpc-nome">${esc(func['NOME_COMPLETO'])}</div>
         <div class="fpc-sub">${esc(func['FUNCAO']||'')} · ${esc(func['UNIDADE']||'')}</div>
-        ${metodo === 'ia' || metodo === 'auto' ? `<div class="fpc-auto"><i class="ti ti-robot" style="font-size:9px"></i> Identificado pela IA</div>` : metodo === 'cache' ? `<div class="fpc-auto"><i class="ti ti-history" style="font-size:9px"></i> Mapeamento salvo — confirme</div>` : '<div class="fpc-manual-tag">Selecionado manualmente</div>'}
+        ${metodo === 'conferir'
+            ? `<div class="fpc-conferir"><i class="ti ti-alert-triangle" style="font-size:9px"></i> Empregador do documento (${esc(func._empregadorDoc || '?')}) difere do cadastro (${esc(func['EMPREGADOR'] || '—')}) — confira</div>`
+            : metodo === 'ia' || metodo === 'auto' ? `<div class="fpc-auto"><i class="ti ti-robot" style="font-size:9px"></i> Identificado pela IA</div>`
+            : metodo === 'cache' ? `<div class="fpc-auto"><i class="ti ti-history" style="font-size:9px"></i> Mapeamento salvo — confirme</div>`
+            : '<div class="fpc-manual-tag">Selecionado manualmente</div>'}
       </div>
       <button class="btn-trocar-func" onclick="renderCardManual(${i})"><i class="ti ti-switch-horizontal" style="font-size:11px"></i> Trocar</button>
     </div>`
@@ -2328,6 +2370,7 @@ function selecionarFuncManual(i, funcId) {
   paginasFracionadas[i].funcao   = func['FUNCAO']
   paginasFracionadas[i].telefone = func['TELEFONE']
   renderCardIdentificado(i, func, 'manual')
+  renderValorPagina(i)
   atualizarBtnTodos()
 }
 
@@ -2488,6 +2531,19 @@ function atualizarBtnTodos() {
   if (!btn || !lbl) return
   lbl.textContent = pendentes > 0 ? 'Enviar ' + pendentes + ' pendente(s) via WhatsApp' : 'Todos enviados ✅'
   btn.disabled = pendentes === 0
+
+  // Aviso de valor faltando: sem ele a ordem de pagamento sai sem o líquido,
+  // e o empregador só descobre na hora de pagar.
+  const semValor = paginasFracionadas.filter(p =>
+    p.funcId && p.status === 'pronto' && !(parseValorNum(p.valorLiquido) > 0)).length
+  const res = document.getElementById('frac-resumo')
+  if (res) {
+    const base = res.dataset.base || res.textContent
+    res.dataset.base = base
+    res.innerHTML = semValor > 0
+      ? esc(base) + ` · <span style="color:var(--amber-text)"><i class="ti ti-alert-triangle" style="font-size:10px;vertical-align:-1px"></i> ${semValor} sem valor líquido</span>`
+      : esc(base)
+  }
 }
 
 // ─── SELECTS OCULTOS ──────────────────────────────────────────────
@@ -2572,7 +2628,14 @@ function parseValorNum(v) {
   if (typeof v === 'number') return v
   const s = String(v == null ? '' : v).trim().replace(/R\$\s*/g, '')
   if (!s) return 0
-  const n = s.indexOf(',') === -1 ? parseFloat(s) : parseFloat(s.replace(/\./g, '').replace(',', '.'))
+  let t = s
+  if (t.indexOf(',') !== -1) t = t.replace(/\./g, '').replace(',', '.')
+  else {
+    // "3.565" (3 digitos depois do unico ponto) e milhar, nao decimal.
+    const partes = t.split('.')
+    if (partes.length > 2 || (partes.length === 2 && partes[1].length === 3)) t = partes.join('')
+  }
+  const n = parseFloat(t)
   return isNaN(n) ? 0 : n
 }
 
@@ -3033,14 +3096,21 @@ async function gerarExtrato() {
   })
 
   const itens = [
-    ...salarios.map(p => ({
-      tipo:  'salario',
-      data:  p['DATA_GERACAO'] || p['DATA_ASSINATURA'] || '',
-      desc:  'Salário ' + normalizarComp(p['COMPETENCIA'] || p['COMPETÊNCIA'] || ''),
-      valor: p['VALOR_LIQUIDO'] || 0,
-      status: p['STATUS'],
-      link:  p['COMPROVANTE_LINK'] || '',
-    })),
+    ...salarios.map(p => {
+      // ORIGEM diz de onde veio a ordem; linhas antigas não têm a coluna
+      const origem = p['ORIGEM'] || 'Folha'
+      const rotulo = origem === 'Ferias' ? 'Férias'
+                   : origem === 'Ponto'  ? 'Folha de ponto'
+                   : 'Salário'
+      return {
+        tipo:  origem === 'Ferias' ? 'ferias' : 'salario',
+        data:  p['DATA_GERACAO'] || p['DATA_ASSINATURA'] || '',
+        desc:  rotulo + ' ' + normalizarComp(p['COMPETENCIA'] || p['COMPETÊNCIA'] || ''),
+        valor: p['VALOR_LIQUIDO'] || 0,
+        status: p['STATUS'],
+        link:  p['COMPROVANTE_LINK'] || '',
+      }
+    }),
     ...adiantamentos.map(a => ({
       tipo:  'adiantamento',
       data:  a['DATA_PAGTO'] || '',
@@ -3057,22 +3127,26 @@ async function gerarExtrato() {
     return
   }
 
-  const totalSal   = salarios.reduce((s, p) => s + parseValorNum(p['VALOR_LIQUIDO']), 0)
+  const ehFerias    = p => (p['ORIGEM'] || 'Folha') === 'Ferias'
+  const soFerias    = salarios.filter(ehFerias)
+  const soFolha     = salarios.filter(p => !ehFerias(p))
+  const totalSal    = soFolha.reduce((s, p) => s + parseValorNum(p['VALOR_LIQUIDO']), 0)
+  const totalFerias = soFerias.reduce((s, p) => s + parseValorNum(p['VALOR_LIQUIDO']), 0)
   const totalAdiant = adiantamentos.reduce((s, a) => s + parseValorNum(a['VALOR']), 0)
-  const totalGeral = totalSal + totalAdiant
+  const totalGeral  = totalSal + totalFerias + totalAdiant
 
   lista.innerHTML = itens.map(it => `
     <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--border)">
       <div style="width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;
-        background:${it.tipo==='salario'?'var(--verde-claro)':'var(--blue-bg)'}">
-        ${it.tipo==='salario'?'💼':'💰'}
+        background:${it.tipo==='salario'?'var(--verde-claro)':it.tipo==='ferias'?'var(--amber-bg)':'var(--blue-bg)'}">
+        ${it.tipo==='salario'?'💼':it.tipo==='ferias'?'🌴':'💰'}
       </div>
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.desc}</div>
         <div style="font-size:10px;color:var(--text-secondary)">${it.data ? new Date(it.data).toLocaleDateString('pt-BR') : '—'}</div>
       </div>
       <div style="text-align:right;flex-shrink:0">
-        <div style="font-size:12px;font-weight:600;color:${it.tipo==='salario'?'var(--verde-text)':'var(--blue-text)'}">R$ ${formatarValor(it.valor)}</div>
+        <div style="font-size:12px;font-weight:600;color:${it.tipo==='salario'?'var(--verde-text)':it.tipo==='ferias'?'var(--amber-text)':'var(--blue-text)'}">R$ ${formatarValor(it.valor)}</div>
         <div style="font-size:9px;color:var(--text-secondary)">${it.status}</div>
         ${it.link ? `<a href="${it.link}" target="_blank" style="font-size:9px;color:var(--blue-text)">comprovante</a>` : ''}
       </div>
@@ -3081,9 +3155,13 @@ async function gerarExtrato() {
   totais.innerHTML = `
     <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">Totais do período</div>
     <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
-      <span style="color:var(--text-secondary)">💼 Salários (${salarios.length})</span>
+      <span style="color:var(--text-secondary)">💼 Salários (${soFolha.length})</span>
       <span style="font-weight:600;color:var(--verde-text)">R$ ${formatarValor(totalSal)}</span>
     </div>
+    ${soFerias.length ? `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+      <span style="color:var(--text-secondary)">🌴 Férias (${soFerias.length})</span>
+      <span style="font-weight:600;color:var(--amber-text)">R$ ${formatarValor(totalFerias)}</span>
+    </div>` : ''}
     <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
       <span style="color:var(--text-secondary)">💰 Adiantamentos (${adiantamentos.length})</span>
       <span style="font-weight:600;color:var(--blue-text)">R$ ${formatarValor(totalAdiant)}</span>
