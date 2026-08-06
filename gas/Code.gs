@@ -851,7 +851,8 @@ function processarPaginaFolha(dados, usuario) {
     'STATUS':            zapToken ? 'Pendente' : 'Salvo',
     'ZAPSIGN_DOC':       zapToken,
     'LINK PDF ORIGINAL': linkDrive,
-    'OBSERVAÇÕES':       zapSignerToken ? 'Signer: ' + zapSignerToken : 'Fracionado',
+    'OBSERVAÇÕES':       (zapSignerToken ? 'Signer: ' + zapSignerToken : 'Fracionado') +
+                         (dados.inclui_ponto ? ' | Ponto junto' : ''),
     'VALOR_LIQUIDO':     valorNumerico(dados.valor_liquido),
     'TIPO':              tipo,
   })
@@ -1496,7 +1497,8 @@ function processarPaginaProprio(dados, usuario) {
     'DATA ENVIO':        hoje,
     'STATUS':            'Aguardando Assinatura',
     'LINK PDF ORIGINAL': linkDrive,
-    'OBSERVAÇÕES':       'Assinatura Própria — ' + tipo,
+    'OBSERVAÇÕES':       'Assinatura Própria — ' + tipo +
+                         (dados.inclui_ponto ? ' | Ponto junto' : ''),
     'VALOR_LIQUIDO':     valorNumerico(dados.valor_liquido),
     'TIPO':              tipo,
   })

@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
-<link rel="stylesheet" href="style.css?v=20260805">
+<link rel="stylesheet" href="style.css?v=20260806">
 <script src="https://apis.google.com/js/api.js"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
@@ -343,6 +343,24 @@
         </div>
         <div id="pdf-selecionado" style="display:none;margin-top:8px;font-size:11px;color:var(--verde-text);font-weight:600;padding:6px 10px;background:var(--verde-claro);border-radius:var(--radius-sm)"></div>
       </div>
+
+      <!-- Juntar o ponto na MESMA assinatura: o ZapSign cobra por documento,
+           não por página, então folha + ponto num arquivo só custa metade. -->
+      <div class="card mb-3" id="card-ponto-junto">
+        <div class="card-titulo"><i class="ti ti-clock-hour-4" aria-hidden="true"></i> Folha de ponto <span style="font-weight:400;color:var(--text-hint)">— opcional</span></div>
+        <p style="font-size:11px;color:var(--text-secondary);margin:-4px 0 8px">
+          Suba também o PDF do ponto e o app junta cada funcionário num documento
+          só — <strong>1 assinatura em vez de 2</strong>. O pareamento é pelo
+          funcionário, então a ordem das páginas não precisa bater.
+        </p>
+        <label style="display:block">
+          <input type="file" id="input-pdf-ponto" accept="application/pdf" style="display:none">
+          <div class="btn-primario w-full" style="font-size:12px;background:var(--surface);color:var(--text-primary);border:0.5px solid var(--border)">
+            <i class="ti ti-upload" aria-hidden="true"></i> Upload do ponto
+          </div>
+        </label>
+        <div id="ponto-selecionado" style="display:none;margin-top:8px;font-size:11px;color:var(--verde-text);font-weight:600;padding:6px 10px;background:var(--verde-claro);border-radius:var(--radius-sm)"></div>
+      </div>
       <button onclick="processarFracionamento()" class="btn-primario w-full" id="btn-fracionar" style="margin-bottom:10px">
         <i class="ti ti-scissors" aria-hidden="true"></i> Separar PDF
       </button>
@@ -559,7 +577,7 @@
   </nav>
 </div>
 
-<script src="app.js?v=20260805"></script>
+<script src="app.js?v=20260806"></script>
 <script>
   // Registra o Service Worker (necessário para Web Share Target e cache offline)
   if ('serviceWorker' in navigator) {

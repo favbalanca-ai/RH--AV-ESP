@@ -990,3 +990,14 @@ html { overflow-x: hidden; }
     box-shadow: var(--shadow-pop);
   }
 }
+
+/* Selo do que vai dentro do documento enviado ao ZapSign. Folha + ponto num
+   arquivo só é o que economiza a assinatura — o cobrado é o documento. */
+.fpc-anexo {
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+  margin-top: 8px; padding: 6px 9px; border-radius: var(--radius-sm);
+  font-size: 10.5px; font-weight: 600; line-height: 1.35;
+  background: var(--verde-claro); color: var(--verde-text);
+}
+.fpc-anexo.aviso { background: var(--amber-bg); color: var(--amber-text); }
+.fpc-anexo i { font-size: 12px; }

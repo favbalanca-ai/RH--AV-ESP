@@ -56,6 +56,24 @@ descartada: obrigava a mexer no servidor para ganhar pouco — o nome final em
 do nome do anexo, então ele já sai certo dos dois jeitos. O patch está no
 histórico do repositório (`b5483fd`) se um dia fizer sentido.
 
+## O recibo pode vir com o ponto dentro
+
+Para economizar assinatura — o ZapSign cobra por **documento**, não por
+página — o app junta a folha e o ponto do mesmo funcionário num arquivo só.
+Quando isso acontece, o anexo `Folha_Julho-2026_NOME` tem **2 páginas**:
+
+| Página | Conteúdo |
+|---|---|
+| 1 | recibo / holerite |
+| 2 | folha de ponto |
+
+A página 1 é sempre a folha, de propósito: é ela que o `classifica_conteudo`
+lê para decidir a pasta. O documento inteiro arquiva em
+`03. Folha de Pagamento\Recibos` — o ponto vai junto como comprovação anexa,
+e `04. Ponto` fica sem arquivo próprio nesse mês.
+
+Nada muda no script: continua sendo um e-mail, um anexo, um arquivo.
+
 ## A cópia não assinada (fica só no Drive)
 
 Ao enviar para assinatura, o app guarda o PDF cru na pasta do funcionário:

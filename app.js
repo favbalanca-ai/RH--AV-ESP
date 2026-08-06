@@ -51,6 +51,9 @@ let funcionarios = [], estoque = [], itensEpiSel = []
 let funcEpiSelecionado = null
 let paginaAtual = 'inicio', todosExames = []
 let paginasFracionadas = []
+// Páginas do PDF de ponto, ainda soltas. Viram anexo da folha do mesmo
+// funcionário no parearPonto() — o que sobrar sem par vira card próprio.
+let paginasPonto = []
 // FIX #3: tipoDocAtual agora é atualizado pelos radio buttons via setTipoDoc()
 let tipoDocAtual = 'Folha'
 
@@ -112,6 +115,22 @@ document.addEventListener('DOMContentLoaded', () => {
       const total  = pdfDoc.getPageCount()
       if (preview) preview.innerHTML = '<i class="ti ti-file-check" style="vertical-align:-2px"></i> ' + total + ' página(s) — 1 funcionário por página'
     } catch(err) { if (preview) preview.textContent = '❌ Erro: ' + err.message }
+  })
+
+  const inputPonto = document.getElementById('input-pdf-ponto')
+  if (inputPonto) inputPonto.addEventListener('change', async e => {
+    const file = e.target.files[0]
+    const el = document.getElementById('ponto-selecionado')
+    if (!el) return
+    if (!file) { el.style.display = 'none'; return }
+    el.style.display = 'block'
+    el.textContent = '⏳ Lendo o ponto...'
+    try {
+      const PDFLib = await carregarPdfLib()
+      const doc = await PDFLib.PDFDocument.load(await file.arrayBuffer())
+      el.innerHTML = '<i class="ti ti-paperclip" style="vertical-align:-2px"></i> '
+        + file.name + ' — ' + doc.getPageCount() + ' página(s) para juntar na folha'
+    } catch(err) { el.textContent = '❌ Erro: ' + err.message }
   })
 })
 
@@ -2122,8 +2141,44 @@ function mostrarModalNotificacao(mensagens, editavel) {
   document.body.appendChild(modal)
 }
 
+// Separa um PDF em uma página por documento. Devolve os pedaços em base64.
+async function separarPaginas(file, PDFLib, rotulo) {
+  const pdfDoc = await PDFLib.PDFDocument.load(await file.arrayBuffer())
+  const total  = pdfDoc.getPageCount()
+  const saida  = []
+  for (let i = 0; i < total; i++) {
+    mostrarLoading(`Separando ${rotulo} — página ${i + 1} de ${total}...`)
+    const novoDoc = await PDFLib.PDFDocument.create()
+    const [pag]   = await novoDoc.copyPages(pdfDoc, [i])
+    novoDoc.addPage(pag)
+    saida.push({ pagina: i + 1, pdfBase64: arrayBufferToBase64(await novoDoc.save()) })
+  }
+  return saida
+}
+
+// Cola dois PDFs de uma página num só. É o que economiza a assinatura: o
+// ZapSign cobra por DOCUMENTO, não por página.
+async function juntarPdfs(listaBase64) {
+  const PDFLib = await carregarPdfLib()
+  const doc = await PDFLib.PDFDocument.create()
+  for (const b64 of listaBase64) {
+    const origem = await PDFLib.PDFDocument.load(base64ParaArrayBuffer(b64))
+    const pags   = await doc.copyPages(origem, origem.getPageIndices())
+    pags.forEach(p => doc.addPage(p))
+  }
+  return arrayBufferToBase64(await doc.save())
+}
+
+function base64ParaArrayBuffer(b64) {
+  const bin = atob(b64)
+  const buf = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i)
+  return buf.buffer
+}
+
 async function processarFracionamento() {
   const file        = document.getElementById('input-pdf-frac').files[0]
+  const filePonto   = document.getElementById('input-pdf-ponto')?.files[0] || null
   const competencia = document.getElementById('sel-comp-frac').value
   if (!file) return toast('❌ Selecione o PDF', 'erro')
   if (!competencia) return toast('❌ Selecione a competência antes de separar', 'erro')
@@ -2138,21 +2193,28 @@ async function processarFracionamento() {
   mostrarLoading('Carregando pdf-lib...')
   try {
     const PDFLib = await carregarPdfLib()
-    const pdfDoc = await PDFLib.PDFDocument.load(await file.arrayBuffer())
-    const total  = pdfDoc.getPageCount()
-    paginasFracionadas = []
-    for (let i = 0; i < total; i++) {
-      mostrarLoading('Separando página ' + (i+1) + ' de ' + total + '...')
-      const novoDoc = await PDFLib.PDFDocument.create()
-      const [pag]   = await novoDoc.copyPages(pdfDoc, [i])
-      novoDoc.addPage(pag)
-      paginasFracionadas.push({ pagina:i+1, funcId:'', nome:'', funcao:'', telefone:'', pdfBase64:arrayBufferToBase64(await novoDoc.save()), status:'pronto', signUrl:'', competencia, tipoDoc: tipoDocAtual })
-    }
+    const doTipo = await separarPaginas(file, PDFLib, tipoDocAtual === 'Ponto' ? 'o ponto' : 'a folha')
+    paginasFracionadas = doTipo.map(p => ({
+      pagina: p.pagina, funcId:'', nome:'', funcao:'', telefone:'',
+      pdfBase64: p.pdfBase64, status:'pronto', signUrl:'', competencia,
+      tipoDoc: tipoDocAtual,
+    }))
+
+    // O ponto vira uma lista à parte; o pareamento com a folha só acontece
+    // depois da identificação, porque a chave é o FUNCIONÁRIO — a ordem das
+    // páginas nos dois PDFs não precisa bater.
+    paginasPonto = filePonto
+      ? (await separarPaginas(filePonto, PDFLib, 'o ponto')).map(p => ({
+          pagina: p.pagina, pdfBase64: p.pdfBase64, funcId:'', nome:'', usada:false,
+        }))
+      : []
+
     esconderLoading()
     btn.disabled = false; btn.innerHTML = '<i class="ti ti-scissors"></i> Separar PDF'
     document.getElementById('frac-step-wrap').style.display = 'block'
     const resumoEl = document.getElementById('frac-resumo')
-    resumoEl.dataset.base = competencia + ' · ' + total + ' página(s) separadas'
+    resumoEl.dataset.base = competencia + ' · ' + paginasFracionadas.length + ' página(s) separadas'
+      + (paginasPonto.length ? ' + ' + paginasPonto.length + ' de ponto' : '')
     resumoEl.textContent  = resumoEl.dataset.base
     renderPaginasFracionadas()
     atualizarBtnTodos()
@@ -2185,8 +2247,25 @@ function renderPaginasFracionadas() {
           Identificando automaticamente...
         </div>
       </div>
+      <div id="fpc-anexo-${i}"></div>
       <div id="fpc-valor-${i}"></div>
     </div>`).join('')
+}
+
+// Selo do que vai dentro do documento enviado. Sem ele, o usuário não teria
+// como saber que o ponto entrou junto — nem que uma assinatura foi poupada.
+function renderAnexoPonto(i) {
+  const el = document.getElementById('fpc-anexo-' + i); if (!el) return
+  const p = paginasFracionadas[i]
+  if (p.soPonto) {
+    el.innerHTML = `<div class="fpc-anexo aviso"><i class="ti ti-alert-triangle"></i>
+      Só ponto — sem folha deste funcionário no PDF</div>`
+  } else if (p.ponto) {
+    el.innerHTML = `<div class="fpc-anexo"><i class="ti ti-paperclip"></i>
+      Folha + ponto (pág. ${p.ponto.pagina}) num documento só · <strong>1 assinatura</strong></div>`
+  } else {
+    el.innerHTML = ''
+  }
 }
 
 // ── Valor líquido da página ───────────────────────────────────────
@@ -2293,15 +2372,92 @@ async function identificarFuncionariosAutomatico() {
       renderCardManual(i)
     }
     renderValorPagina(i)
+    renderAnexoPonto(i)
     atualizarBtnTodos()
   }
 
   if (identificados > 0) salvarMapeamento(competencia)
 
+  if (paginasPonto.length) await identificarPonto()
+
   toast(identificados === paginasFracionadas.length
     ? '🤖 IA identificou todos os ' + identificados + ' funcionários!'
     : '🤖 ' + identificados + ' identificados · ' + (paginasFracionadas.length - identificados) + ' selecione manualmente',
     identificados > 0 ? 'sucesso' : '')
+}
+
+// ── Ponto na mesma assinatura ─────────────────────────────────────
+// Identifica de quem é cada página do ponto e junta na folha do mesmo
+// funcionário. Um documento só no ZapSign = uma assinatura só cobrada.
+async function identificarPonto() {
+  toast('🔍 Identificando o ponto...', '')
+  const promessas = paginasPonto.map(p =>
+    chamarGAS({ acao: 'identificar_com_ia', dados: { pdf_base64: p.pdfBase64 } }).catch(() => null))
+
+  for (let i = 0; i < promessas.length; i++) {
+    const res = await promessas[i]
+    const d = res && res.ok ? res.data : null
+    if (d && d.func_id) {
+      const f = funcionarios.find(x => String(x['ID']) === String(d.func_id))
+      if (f) { paginasPonto[i].funcId = String(f['ID']); paginasPonto[i].nome = f['NOME_COMPLETO'] }
+    }
+  }
+  await parearPonto()
+}
+
+// Junta, por funcionário, a página de ponto na folha. Idempotente: pode
+// rodar de novo depois de o usuário corrigir uma identificação à mão.
+async function parearPonto() {
+  if (!paginasPonto.length) return
+  paginasPonto.forEach(p => { p.usada = false })
+
+  for (const p of paginasFracionadas) {
+    // Já enviado é imutável: o que entrou no documento entrou. Mas o ponto
+    // dele continua reservado — sem isso ele voltaria a aparecer como órfão,
+    // e alguém mandaria de novo o que já foi assinado.
+    if (p.status === 'enviado') {
+      if (p.ponto) p.ponto.usada = true
+      continue
+    }
+    p.ponto = null; p.pdfEnvio = null
+    if (!p.funcId) continue
+    const par = paginasPonto.find(q => !q.usada && q.funcId && String(q.funcId) === String(p.funcId))
+    if (!par) continue
+    par.usada = true
+    p.ponto = par
+    // Folha primeiro, ponto depois: a página 1 é a que o classifica_conteudo
+    // do servidor lê para decidir a pasta do arquivo.
+    p.pdfEnvio = await juntarPdfs([p.pdfBase64, par.pdfBase64])
+  }
+
+  // Ponto sem folha correspondente não some calado — vira card próprio, para
+  // ser enviado separado (aí sim com assinatura própria).
+  const orfaos = paginasPonto.filter(q => !q.usada)
+  paginasFracionadas = paginasFracionadas.filter(p => !p.soPonto)
+  orfaos.forEach(q => {
+    const f = q.funcId ? funcionarios.find(x => String(x['ID']) === String(q.funcId)) : null
+    paginasFracionadas.push({
+      pagina: q.pagina, funcId: q.funcId || '', nome: q.nome || '',
+      funcao: f ? f['FUNCAO'] : '', telefone: f ? f['TELEFONE'] : '',
+      pdfBase64: q.pdfBase64, status: 'pronto', signUrl: '',
+      competencia: paginasFracionadas[0]?.competencia || '',
+      tipoDoc: 'Ponto', soPonto: true,
+    })
+  })
+
+  renderPaginasFracionadas()
+  paginasFracionadas.forEach((p, i) => {
+    const f = p.funcId ? funcionarios.find(x => String(x['ID']) === String(p.funcId)) : null
+    if (f) renderCardIdentificado(i, f, p._metodo || 'auto')
+    else renderCardManual(i)
+    renderValorPagina(i)
+    renderAnexoPonto(i)
+  })
+  atualizarBtnTodos()
+
+  const juntados = paginasFracionadas.filter(p => p.ponto).length
+  if (juntados) toast(`📎 ${juntados} ponto(s) juntado(s) — ${juntados} assinatura(s) economizada(s)`, 'sucesso')
+  if (orfaos.length) toast(`⚠️ ${orfaos.length} página(s) de ponto sem folha correspondente`, 'aviso')
 }
 
 function renderCardIdentificado(i, func, metodo) {
@@ -2371,12 +2527,16 @@ function selecionarFuncManual(i, funcId) {
   paginasFracionadas[i].telefone = func['TELEFONE']
   renderCardIdentificado(i, func, 'manual')
   renderValorPagina(i)
-  atualizarBtnTodos()
+  // A folha mudou de dono: o ponto que estava junto pode não ser mais dele.
+  if (paginasPonto.length) parearPonto()
+  else { renderAnexoPonto(i); atualizarBtnTodos() }
 }
 
 function visualizarPagina(idx) {
   const p = paginasFracionadas[idx]; if (!p || !p.pdfBase64) return toast('❌ PDF indisponível', 'erro')
-  const url = URL.createObjectURL(new Blob([Uint8Array.from(atob(p.pdfBase64), c => c.charCodeAt(0))], { type: 'application/pdf' }))
+  // Mostra o documento COMO SERÁ ASSINADO — com o ponto junto, se houver.
+  const b64 = p.pdfEnvio || p.pdfBase64
+  const url = URL.createObjectURL(new Blob([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], { type: 'application/pdf' }))
   window.open(url, '_blank')
   setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
@@ -2412,7 +2572,7 @@ async function enviarPaginaZapSign(idx) {
   const btn = document.getElementById('btn-zap-' + idx)
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>'
   mostrarLoading('Enviando para ' + p.nome.split(' ')[0] + '...')
-  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfBase64, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true, tipo: p.tipoDoc || tipoDocAtual, valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null } })
+  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfEnvio || p.pdfBase64, inclui_ponto: !!p.ponto, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true, tipo: p.tipoDoc || tipoDocAtual, valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null } })
   esconderLoading()
   if (res && res.ok) {
     paginasFracionadas[idx].status  = 'enviado'
@@ -2457,7 +2617,7 @@ async function enviarTodasPendentes(metodo) {
       mostrarLoading('Gerando link ' + (links.length + 1) + '/' + pendentes.length + ' — ' + p.nome.split(' ')[0])
       const res = await chamarGAS({
         acao: 'processar_pagina_proprio',
-        dados: { pdf_base64: p.pdfBase64, tipo: p.tipoDoc || tipoDocAtual,
+        dados: { pdf_base64: p.pdfEnvio || p.pdfBase64, inclui_ponto: !!p.ponto, tipo: p.tipoDoc || tipoDocAtual,
                  competencia: p.competencia, func_id: p.funcId, func_nome: p.nome, pagina: p.pagina,
                  valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null }
       })
