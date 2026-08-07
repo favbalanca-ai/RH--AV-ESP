@@ -171,6 +171,12 @@ async function sincronizarManual() {
     // Sempre recarrega o painel: o ↻ é a forma de recuperar os números quando
     // o carregamento inicial falhou, não só quando houve assinatura nova.
     carregarDashboard()
+    // O empregador pode ter pago pelo celular, fora do app. O ↻ é o momento
+    // em que a lista de "aguardando" tem chance de encolher.
+    if (paginaAtual === 'pagamento') {
+      carregarNotifPendentes()
+      if (funcPgtoSelecionado) carregarHistoricoPagamentos()
+    }
   } else { toast('❌ Erro na sincronização', 'erro') }
 }
 
@@ -2861,6 +2867,7 @@ function selecionarFuncPgto(funcId) {
 
   carregarResumoPgto()
   carregarHistoricoPagamentos()
+  carregarAnaliseFolha()
   gerarExtrato()
 }
 
@@ -3177,6 +3184,176 @@ async function registrarAdiantamento() {
   } else toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// ANÁLISE DA FOLHA — o que compõe o salário, mês a mês
+// ═══════════════════════════════════════════════════════════════════
+// O líquido sozinho não explica nada: se subiu R$ 400 num mês, foi hora
+// extra, periculosidade ou reajuste? As verbas extraídas do holerite
+// respondem isso sem reabrir PDF nenhum.
+let analiseAtual = null
+let analiseVista = 'resumo'
+
+async function carregarAnaliseFolha() {
+  if (!funcPgtoSelecionado) return
+  const card = document.getElementById('card-analise-folha')
+  const corpo = document.getElementById('analise-corpo')
+  if (!card || !corpo) return
+  card.style.display = 'block'
+  corpo.innerHTML = '<p class="lista-vazia">Carregando...</p>'
+
+  const ano = document.getElementById('sel-ano-pgto')?.value || ''
+  document.getElementById('analise-ano-label').textContent = ano ? ' · ' + ano : ''
+
+  const res = await chamarGAS({ acao: 'historico_folha',
+                                dados: { func_id: funcPgtoSelecionado['ID'], ano } })
+  if (!res || !res.ok) {
+    corpo.innerHTML = '<p class="lista-vazia">Não consegui carregar a análise</p>'
+    return
+  }
+  analiseAtual = res.data
+  renderAnalise()
+}
+
+function verAnalise(vista) {
+  analiseVista = vista
+  ;['resumo', 'meses'].forEach(v => {
+    const b = document.getElementById('af-aba-' + v)
+    if (b) b.className = 'af-aba' + (v === vista ? ' ativa' : '')
+  })
+  renderAnalise()
+}
+
+function renderAnalise() {
+  const corpo = document.getElementById('analise-corpo')
+  if (!corpo || !analiseAtual) return
+  const a = analiseAtual
+
+  if (!a.meses.length) {
+    corpo.innerHTML = '<p class="lista-vazia">Nenhuma folha registrada neste período</p>'
+    return
+  }
+  corpo.innerHTML = (analiseVista === 'resumo' ? analiseResumo(a) : analiseMeses(a)) + analiseRodape(a)
+}
+
+// Quando nenhum holerite passou pela extração, o card não pode só ficar
+// vazio: tem que dizer o que fazer.
+function analiseRodape(a) {
+  if (!a.sem_verbas) return ''
+  const todos = a.sem_verbas === a.meses.length
+  return `
+    <div class="af-pendente">
+      <div>
+        <strong>${a.sem_verbas} ${a.sem_verbas === 1 ? 'holerite ainda não analisado' : 'holerites ainda não analisados'}</strong>
+        <div>${todos
+          ? 'As folhas enviadas antes desta atualização não tiveram as verbas extraídas.'
+          : 'Alguns meses entram no líquido mas não no detalhamento por verba.'}
+          Posso reler os PDFs guardados no Drive.</div>
+      </div>
+      <button class="af-btn" id="btn-reanalisar" onclick="reanalisarHistorico()">Analisar agora</button>
+    </div>`
+}
+
+function analiseResumo(a) {
+  const proventos = a.categorias.filter(c => c.tipo !== 'desconto')
+  const descontos = a.categorias.filter(c => c.tipo === 'desconto')
+  const teto = Math.max(...a.categorias.map(c => c.total), 1)
+  const nMeses = a.meses.length
+
+  const linha = c => `
+    <div class="af-verba">
+      <div class="af-verba-topo">
+        <span class="af-verba-nome">${esc(c.rotulo)}</span>
+        <span class="af-verba-valor">R$ ${formatarValor(c.total)}</span>
+      </div>
+      <div class="af-barra"><div class="af-barra-in ${c.tipo === 'desconto' ? 'neg' : ''}" style="width:${Math.round(c.total / teto * 100)}%"></div></div>
+      <div class="af-verba-sub">
+        ${c.meses} de ${nMeses} ${nMeses === 1 ? 'mês' : 'meses'}
+        · média R$ ${formatarValor(c.total / c.meses)}
+      </div>
+    </div>`
+
+  return `
+    <div class="af-totais">
+      <div class="af-total"><span>Proventos</span><strong>R$ ${formatarValor(a.total_proventos)}</strong></div>
+      <div class="af-total"><span>Descontos</span><strong class="neg">R$ ${formatarValor(a.total_descontos)}</strong></div>
+      <div class="af-total destaque"><span>Líquido</span><strong>R$ ${formatarValor(a.total_liquido)}</strong></div>
+    </div>
+    ${proventos.length ? `<div class="af-secao">Proventos</div>${proventos.map(linha).join('')}` : ''}
+    ${descontos.length ? `<div class="af-secao">Descontos</div>${descontos.map(linha).join('')}` : ''}`
+}
+
+function analiseMeses(a) {
+  return a.meses.slice().reverse().map((m, idx) => {
+    const i = a.meses.length - 1 - idx
+    const detalhe = m.verbas.length ? `
+      <div class="af-mes-detalhe" id="af-det-${i}" hidden>
+        ${m.verbas.map(v => `
+          <div class="af-item ${v.tipo === 'desconto' ? 'neg' : ''}">
+            <span class="af-item-desc">${esc(v.descricao)}${v.referencia ? ` <span class="af-ref">${esc(v.referencia)}</span>` : ''}</span>
+            <span class="af-item-valor">${v.tipo === 'desconto' ? '−' : ''}R$ ${formatarValor(v.valor)}</span>
+          </div>`).join('')}
+      </div>` : ''
+    return `
+    <div class="af-mes">
+      <button class="af-mes-topo" onclick="alternarMes(${i})" aria-expanded="false" id="af-btn-${i}"
+              ${m.verbas.length ? '' : 'disabled'}>
+        <span class="af-mes-nome">${esc(normalizarComp(m.competencia))}</span>
+        ${m.sem_verbas
+          ? '<span class="af-tag">sem detalhamento</span>'
+          : `<span class="af-mes-cols">
+               <span class="af-mes-col">+${formatarValor(m.proventos)}</span>
+               <span class="af-mes-col neg">−${formatarValor(m.descontos)}</span>
+             </span>`}
+        <span class="af-mes-liq">R$ ${formatarValor(m.valor_liquido)}</span>
+        ${m.verbas.length ? '<i class="ti ti-chevron-down af-seta"></i>' : ''}
+      </button>
+      ${detalhe}
+    </div>`
+  }).join('')
+}
+
+function alternarMes(i) {
+  const det = document.getElementById('af-det-' + i)
+  const btn = document.getElementById('af-btn-' + i)
+  if (!det || !btn) return
+  const aberto = !det.hidden
+  det.hidden = aberto
+  btn.setAttribute('aria-expanded', String(!aberto))
+  btn.classList.toggle('aberto', !aberto)
+}
+
+// Relê os PDFs do Drive em lotes — o Apps Script corta a execução em 6 min,
+// então o backend devolve quantos faltam e a gente volta até zerar.
+async function reanalisarHistorico() {
+  if (!funcPgtoSelecionado) return
+  const btn = document.getElementById('btn-reanalisar')
+  if (btn) { btn.disabled = true; btn.textContent = 'Analisando...' }
+
+  let total = 0, voltas = 0
+  while (voltas++ < 30) {
+    mostrarLoading(`Lendo holerites... ${total} analisado(s)`)
+    const res = await chamarGAS({ acao: 'reanalisar_folhas',
+                                  dados: { func_id: funcPgtoSelecionado['ID'], limite: 4 } })
+    if (!res || !res.ok) {
+      esconderLoading()
+      toast('❌ ' + ((res && res.erro) || 'Erro na análise'), 'erro')
+      break
+    }
+    total += res.data.processados
+    if (res.data.erros?.length) console.warn('Reanálise:', res.data.erros)
+    // Nada processado e ainda há pendentes = todos falharam; insistir seria laço infinito.
+    if (!res.data.restantes || !res.data.processados) {
+      if (res.data.restantes && !res.data.processados) {
+        toast(`⚠️ ${res.data.restantes} holerite(s) não puderam ser lidos`, 'aviso')
+      }
+      break
+    }
+  }
+  esconderLoading()
+  if (total) toast(`✅ ${total} holerite(s) analisado(s)`, 'sucesso')
+  await carregarAnaliseFolha()
+}
+
 async function carregarHistoricoPagamentos() {
   if (!funcPgtoSelecionado) return
   const res  = await chamarGAS({ acao: 'listar_pagamentos', dados: { func_id: funcPgtoSelecionado['ID'] } })
@@ -3334,25 +3511,71 @@ async function gerarExtrato() {
   corpo.style.display = ''
 }
 
+// Ordens de pagamento em aberto. Inclui as já notificadas: "Notificado"
+// significa que o empregador foi avisado, não que pagou — mostrar só
+// "Aguardando Pagamento" esvaziava o painel no instante do aviso, que é
+// justamente quando ele passa a importar.
 async function carregarNotifPendentes() {
-  const res  = await chamarGAS({ acao: 'listar_pagamentos', dados: { status: 'Aguardando Pagamento' } })
   const card = document.getElementById('card-notif-pendentes')
   const el   = document.getElementById('lista-notif-pendentes')
   if (!card || !el) return
-  if (!res || !res.ok || !res.data?.length) { card.style.display = 'none'; return }
+
+  const res = await chamarGAS({ acao: 'listar_pagamentos' })
+  if (!res || !res.ok || !Array.isArray(res.data)) { card.style.display = 'none'; return }
+
+  const pendentes = res.data.filter(p =>
+    ['Aguardando Pagamento', 'Notificado'].includes(String(p['STATUS'] || '').trim()) &&
+    String(p['CANCELADO'] || '').trim() !== 'Sim')
+
+  if (!pendentes.length) { card.style.display = 'none'; return }
   card.style.display = 'block'
-  el.innerHTML = res.data.map(p => `
-    <div style="background:var(--amber-bg);border:0.5px solid rgba(133,79,11,0.2);border-radius:var(--radius-md);padding:10px;margin-bottom:6px;display:flex;align-items:center;gap:10px">
-      <div class="avatar" style="background:rgba(133,79,11,0.15);color:var(--amber-text)">${getIniciais(p['NOME_FUNC']||'?')}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p['NOME_FUNC'])}</div>
-        <div style="font-size:10px;color:var(--amber-text)">${esc(normalizarComp(p['COMPETENCIA']||''))}${p['VALOR_LIQUIDO']?' · R$ '+formatarValor(p['VALOR_LIQUIDO']):''}</div>
+
+  const total = pendentes.reduce((s, p) => s + parseValorNum(p['VALOR_LIQUIDO']), 0)
+  const tituloEl = document.getElementById('notif-pendentes-titulo')
+  if (tituloEl) {
+    tituloEl.textContent = pendentes.length + (pendentes.length === 1 ? ' pendente' : ' pendentes')
+      + (total > 0 ? ' · R$ ' + formatarValor(total) : '')
+  }
+
+  el.innerHTML = pendentes.map(p => {
+    const avisado = String(p['STATUS']).trim() === 'Notificado'
+    const valor = parseValorNum(p['VALOR_LIQUIDO'])
+    return `
+    <div class="np-item">
+      <div class="np-av">${getIniciais(p['NOME_FUNC'] || '?')}</div>
+      <div class="np-info">
+        <div class="np-nome">${esc(p['NOME_FUNC'] || '')}</div>
+        <div class="np-sub">
+          ${esc(normalizarComp(p['COMPETENCIA'] || ''))}
+          ${p['ORIGEM'] && p['ORIGEM'] !== 'Folha' ? ' · ' + esc(p['ORIGEM']) : ''}
+          ${valor > 0 ? ' · R$ ' + formatarValor(valor) : ''}
+        </div>
+        <span class="np-estado ${avisado ? 'avisado' : ''}">${avisado ? 'Avisado, aguardando pagamento' : 'Ainda não avisado'}</span>
       </div>
-      ${p['WA_LINK_EMPREGADOR']
-        ? `<a href="${p['WA_LINK_EMPREGADOR']}" target="_blank" title="Reenviar"
-             style="background:#22C55E;color:#fff;border-radius:8px;padding:7px 9px;font-size:13px;text-decoration:none;display:flex;align-items:center;flex-shrink:0">
-             <i class="ti ti-brand-whatsapp"></i>
-           </a>`
-        : '<span class="badge ba" style="flex-shrink:0">Aguardando</span>'}
-    </div>`).join('')
+      <div class="np-acoes">
+        ${p['WA_LINK_EMPREGADOR']
+          ? `<a href="${p['WA_LINK_EMPREGADOR']}" target="_blank" class="np-wa" title="${avisado ? 'Cobrar' : 'Avisar'} pelo WhatsApp">
+               <i class="ti ti-brand-whatsapp"></i>
+             </a>`
+          : ''}
+        <button class="np-pago" onclick="marcarComoPago('${esc(String(p['ID']))}', '${esc(String(p['NOME_FUNC'] || ''))}')"
+                title="Marcar como pago">
+          <i class="ti ti-check"></i> Pago
+        </button>
+      </div>
+    </div>`
+  }).join('')
+}
+
+// Nem todo pagamento passa pelo link: dinheiro, Pix pelo banco, transferência
+// na mão. Sem isto a ordem ficava "aguardando" para sempre.
+async function marcarComoPago(id, nome) {
+  if (!confirm(`Confirmar que o pagamento de ${nome || 'este funcionário'} já foi feito?`)) return
+  mostrarLoading('Registrando...')
+  const res = await chamarGAS({ acao: 'marcar_pago', dados: { id } })
+  esconderLoading()
+  if (!res || !res.ok) return toast('❌ ' + ((res && res.erro) || 'Erro ao registrar'), 'erro')
+  toast(res.data?.ja_estava ? 'Já estava marcado como pago' : '✅ Pagamento registrado', 'sucesso')
+  await carregarNotifPendentes()
+  if (funcPgtoSelecionado) carregarHistoricoPagamentos()
 }

@@ -101,6 +101,9 @@ function doPost(e) {
       case 'cancelar_notificacao':        return respOk(cancelarNotificacao(body.dados, usuario))
       case 'processar_pagina_folha':      return respOk(processarPaginaFolha(body.dados, usuario))
       case 'identificar_funcionario_pdf': return respOk(identificarFuncionarioPdf(body.dados))
+      case 'historico_folha':             return respOk(historicoFolha(body.dados))
+      case 'marcar_pago':                 return respOk(marcarPago(body.dados, usuario))
+      case 'reanalisar_folhas':           return respOk(reanalisarFolhas(body.dados, usuario))
       default: return respErro('Ação desconhecida: ' + acao)
     }
   } catch (err) {
@@ -413,6 +416,7 @@ function enviarFolha(dados, usuario) {
     'OBSERVAÇÕES':    'Signer: ' + (zap.signerToken || ''),
     'VALOR_LIQUIDO':  valorNumerico(dados.valor_liquido),
     'TIPO':           dados.tipo || 'Folha',
+    'VERBAS':         verbasParaCelula(normalizarVerbas(dados.verbas)),
   })
   try { salvarPdfNoDrive(dados.func_id, func['NOME_COMPLETO'], 'FOLHA_PAGAMENTO', nomeDoc + '_PENDENTE.pdf', pdf) }
   catch(e) { logAcao(usuario, 'ERRO_DRIVE', e.message) }
@@ -855,6 +859,7 @@ function processarPaginaFolha(dados, usuario) {
                          (dados.inclui_ponto ? ' | Ponto junto' : ''),
     'VALOR_LIQUIDO':     valorNumerico(dados.valor_liquido),
     'TIPO':              tipo,
+    'VERBAS':            verbasParaCelula(normalizarVerbas(dados.verbas)),
   })
   if (tipo === 'Ferias' && zapToken) registrarFeriasPendente(func['ID'], func['NOME_COMPLETO'], dados.ferias_inicio, dados.ferias_fim, comp, zapToken)
   logAcao(usuario, 'FOLHA_INDIVIDUAL', 'Func ' + func['ID'] + ' | ' + comp)
@@ -917,11 +922,38 @@ function identificarDocumentoComIA(dados) {
   var pdfBase64 = dados.pdf_base64
   if (!pdfBase64) throw new Error('PDF não fornecido')
 
-  var prompt = 'Analise este documento brasileiro (holerite/folha/ferias) e extraia em JSON puro (sem markdown): nome_funcionario (nome completo do trabalhador, nao do empregador), codigo_funcionario (numero matricula), tipo_documento (Folha para holerite ou contracheque, Ponto para folha de ponto, Ferias para aviso ou recibo de ferias, EPI para recibo EPI), competencia (mes e ano referencia ex: Abril/2026), empregador (razao social ou nome do empregador), valor_liquido (valor liquido a receber pelo funcionario — procure por: Valor Liquido, Liquido, Valor a Receber, Net Pay — retorne apenas o numero decimal ex: 3565.07 sem R$ ou ponto de milhar), ferias_inicio e ferias_fim (SE for documento de ferias, as datas de inicio e fim do periodo de gozo das ferias no formato YYYY-MM-DD; caso contrario null). Retorne APENAS o JSON sem nenhum texto antes ou depois. Exemplo: {"nome_funcionario":"Joao Silva","codigo_funcionario":"27","tipo_documento":"Ferias","competencia":"Julho/2026","empregador":"Fazenda","valor_liquido":3565.07,"ferias_inicio":"2026-07-05","ferias_fim":"2026-07-24"}'
+  // As VERBAS são o que permite analisar o histórico depois: sem elas só
+  // sobra o líquido, e não dá para saber se subiu por hora extra, por
+  // periculosidade ou por reajuste.
+  var prompt = 'Analise este documento brasileiro (holerite/folha/ferias) e extraia em JSON puro (sem markdown): '
+    + 'nome_funcionario (nome completo do trabalhador, nao do empregador), '
+    + 'codigo_funcionario (numero matricula), '
+    + 'tipo_documento (Folha para holerite ou contracheque, Ponto para folha de ponto, Ferias para aviso ou recibo de ferias, EPI para recibo EPI), '
+    + 'competencia (mes e ano referencia ex: Abril/2026), '
+    + 'empregador (razao social ou nome do empregador), '
+    + 'valor_liquido (valor liquido a receber pelo funcionario — procure por: Valor Liquido, Liquido, Valor a Receber, Net Pay — apenas o numero decimal ex: 3565.07 sem R$ ou ponto de milhar), '
+    + 'total_proventos e total_descontos (os totais impressos no rodape, como numero decimal; null se nao houver), '
+    + 'verbas (LISTA de TODAS as linhas de provento e desconto da tabela do holerite, na ordem em que aparecem, cada uma com: '
+    +   'codigo (o codigo/rubrica da linha, string, null se nao houver), '
+    +   'descricao (o texto exatamente como impresso, ex: "HORAS EXTRAS 50%", "ADICIONAL PERICULOSIDADE"), '
+    +   'referencia (a coluna de referencia/quantidade como texto, ex: "12,50", "30,00", "40%"; null se vazia), '
+    +   'valor (numero decimal positivo), '
+    +   'tipo ("provento" para o que soma ao salario, "desconto" para o que subtrai — INSS, IRRF, vale, adiantamento e faltas sao desconto)). '
+    + 'Se for documento de ponto ou EPI, verbas deve ser lista vazia. '
+    + 'NAO invente linhas: liste so o que estiver impresso. '
+    + 'ferias_inicio e ferias_fim (SE for documento de ferias, as datas de inicio e fim do periodo de gozo no formato YYYY-MM-DD; caso contrario null). '
+    + 'Retorne APENAS o JSON sem nenhum texto antes ou depois. '
+    + 'Exemplo: {"nome_funcionario":"Joao Silva","codigo_funcionario":"27","tipo_documento":"Folha","competencia":"Julho/2026",'
+    + '"empregador":"Fazenda","valor_liquido":3565.07,"total_proventos":4200.00,"total_descontos":634.93,'
+    + '"verbas":[{"codigo":"001","descricao":"SALARIO BASE","referencia":"30,00","valor":2500.00,"tipo":"provento"},'
+    + '{"codigo":"102","descricao":"HORAS EXTRAS 50%","referencia":"12,50","valor":425.30,"tipo":"provento"},'
+    + '{"codigo":"110","descricao":"ADICIONAL PERICULOSIDADE","referencia":"30%","valor":750.00,"tipo":"provento"},'
+    + '{"codigo":"901","descricao":"INSS","referencia":"9,00","valor":378.00,"tipo":"desconto"}],'
+    + '"ferias_inicio":null,"ferias_fim":null}'
 
   var payload = {
     model: 'claude-sonnet-4-6', // FIX: 'claude-opus-4-6' não é um ID válido
-    max_tokens: 300,
+    max_tokens: 3000,   // uma folha com muitas rubricas nao cabe em 300
     messages: [{
       role: 'user',
       content: [{
@@ -1026,6 +1058,9 @@ function identificarDocumentoComIA(dados) {
     // A IA às vezes devolve "R$ 3.565,07" apesar do pedido de decimal puro.
     // Normaliza aqui: o app e a planilha só veem número.
     valor_liquido:  valorNumerico(resultado.valor_liquido) || null,
+    total_proventos: valorNumerico(resultado.total_proventos) || null,
+    total_descontos: valorNumerico(resultado.total_descontos) || null,
+    verbas:         normalizarVerbas(resultado.verbas),
     ferias_inicio:  resultado.ferias_inicio      || null,
     ferias_fim:     resultado.ferias_fim         || null,
     ia_confianca:   !func ? 'baixo' : (confereEmpregador === false ? 'medio' : 'alto'),
@@ -1501,6 +1536,7 @@ function processarPaginaProprio(dados, usuario) {
                          (dados.inclui_ponto ? ' | Ponto junto' : ''),
     'VALOR_LIQUIDO':     valorNumerico(dados.valor_liquido),
     'TIPO':              tipo,
+    'VERBAS':            verbasParaCelula(normalizarVerbas(dados.verbas)),
   })
 
   var linkData = gerarLinkAssinatura({
@@ -2263,7 +2299,7 @@ function adicionarColunasFuncionarios() {
 var COLUNAS_FOLHA = ['ID FUNC.', 'FUNCIONÁRIO', 'COMPETÊNCIA', 'DATA ENVIO',
                      'STATUS', 'DATA ASSINATURA', 'ZAPSIGN_DOC',
                      'LINK PDF ORIGINAL', 'LINK DOC ASSINADO', 'OBSERVAÇÕES',
-                     'VALOR_LIQUIDO', 'TIPO']
+                     'VALOR_LIQUIDO', 'TIPO', 'VERBAS']
 
 // Só estas duas são CRIADAS quando faltam. As outras dez o app já lê por nome
 // e sempre estiveram na aba; mexer nelas arriscaria duplicar uma coluna numa
@@ -2297,16 +2333,18 @@ function garantirColunasFolha() {
   var hdrs = sheet.getRange(1, 1, 1, ultima).getValues()[0]
     .map(function (h) { return String(h).trim() })
 
+  // VERBAS é coluna nova, então não tem órfã para adotar — só é criada.
   var orfaDe = {
     'TIPO': function (v) {
       return TIPOS_FOLHA_VALIDOS.indexOf(String(v).trim().toUpperCase()) !== -1
     },
     'VALOR_LIQUIDO': function (v) { return valorNumerico(v) !== '' },
+    'VERBAS': null,
   }
 
   Object.keys(orfaDe).forEach(function (nome) {
     if (hdrs.indexOf(nome) !== -1) return
-    var c = acharColunaOrfa(sheet, hdrs, orfaDe[nome])
+    var c = orfaDe[nome] ? acharColunaOrfa(sheet, hdrs, orfaDe[nome]) : -1
     if (c >= 0) {
       sheet.getRange(1, c + 1).setValue(nome)
       hdrs[c] = nome
@@ -2366,6 +2404,185 @@ function valorNumerico(v) {
   }
   var n = parseFloat(s)
   return isNaN(n) ? '' : n
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// VERBAS DO HOLERITE — o que sustenta a análise do histórico
+// ═══════════════════════════════════════════════════════════════════
+// Cada linha da tabela do holerite (salário base, horas extras,
+// periculosidade, INSS...) vira um item. Guardadas em JSON na coluna VERBAS
+// da FOLHA_PAGAMENTO, permitem responder "quanto ele fez de hora extra no
+// ano" sem reabrir PDF nenhum.
+
+// A descrição vem escrita de um jeito em cada folha ("H.EXTRA 50%",
+// "HORAS EXTRAS 50", "HE 50%"). A categoria normaliza isso para agrupar.
+var CATEGORIAS_VERBA = [
+  { cat: 'HORA_EXTRA',     rotulo: 'Horas extras',      padrao: /(HORAS?|HRS?)[^A-Z]{0,4}EXTRAS?|^HE\b|H\.?\s?EXTRA|EXTRAORDINARIA/ },
+  { cat: 'PERICULOSIDADE', rotulo: 'Periculosidade',    padrao: /PERICULOSID|PERIC\b/ },
+  { cat: 'INSALUBRIDADE',  rotulo: 'Insalubridade',     padrao: /INSALUBRID|INSALUB\b/ },
+  { cat: 'NOTURNO',        rotulo: 'Adicional noturno', padrao: /NOTURN/ },
+  { cat: 'DSR',            rotulo: 'DSR',               padrao: /\bDSR\b|DESCANSO SEMANAL|REPOUSO SEMANAL/ },
+  { cat: 'DECIMO',         rotulo: '13º salário',       padrao: /13|DECIMO TERCEIRO|GRATIFICACAO NATALINA/ },
+  { cat: 'FERIAS',         rotulo: 'Férias',            padrao: /FERIAS|ABONO PECUNIARIO|1\/3 CONSTITUCIONAL|TERCO CONSTITUCIONAL/ },
+  { cat: 'PRODUCAO',       rotulo: 'Produção / prêmio', padrao: /PRODUCAO|PRODUTIVID|PREMIO|COMISSAO|BONUS|GRATIFICACAO(?! NATALINA)/ },
+  { cat: 'SALARIO',        rotulo: 'Salário base',      padrao: /SALARIO(?!.*FAMILIA)|ORDENADO|VENCIMENTO|DIARIA/ },
+  { cat: 'SAL_FAMILIA',    rotulo: 'Salário-família',   padrao: /SALARIO[- ]?FAMILIA/ },
+  { cat: 'INSS',           rotulo: 'INSS',              padrao: /\bINSS\b|PREVIDENCIA/ },
+  { cat: 'IRRF',           rotulo: 'IRRF',              padrao: /\bIRRF\b|IMPOSTO DE RENDA|\bIR\b/ },
+  { cat: 'FGTS',           rotulo: 'FGTS',              padrao: /\bFGTS\b/ },
+  { cat: 'VALE',           rotulo: 'Vales e adiantamentos', padrao: /\bVALE\b|ADIANTAMENTO|EMPRESTIMO|CONSIGNADO|FARMACIA|MERCADO/ },
+  { cat: 'FALTAS',         rotulo: 'Faltas e atrasos',  padrao: /FALTA|ATRASO|DESCONTO DE DIAS/ },
+  { cat: 'CONTRIBUICAO',   rotulo: 'Contribuições',     padrao: /SINDICAL|CONTRIBUICAO|MENSALIDADE|ASSISTENCIAL/ },
+]
+
+function semAcento(s) {
+  return String(s || '').toUpperCase()
+    .replace(/[ÁÀÂÃÄ]/g,'A').replace(/[ÉÈÊË]/g,'E').replace(/[ÍÌÎÏ]/g,'I')
+    .replace(/[ÓÒÔÕÖ]/g,'O').replace(/[ÚÙÛÜ]/g,'U').replace(/Ç/g,'C')
+}
+
+function categoriaVerba(descricao) {
+  var d = semAcento(descricao)
+  for (var i = 0; i < CATEGORIAS_VERBA.length; i++) {
+    if (CATEGORIAS_VERBA[i].padrao.test(d)) return CATEGORIAS_VERBA[i].cat
+  }
+  return 'OUTROS'
+}
+
+function rotuloCategoria(cat) {
+  for (var i = 0; i < CATEGORIAS_VERBA.length; i++) {
+    if (CATEGORIAS_VERBA[i].cat === cat) return CATEGORIAS_VERBA[i].rotulo
+  }
+  return 'Outros'
+}
+
+// Descontos que a IA marcou como provento (ou vice-versa) bagunçariam o
+// total. Categorias sabidamente de desconto mandam mais que o palpite dela.
+var CATS_DESCONTO = ['INSS','IRRF','VALE','FALTAS','CONTRIBUICAO']
+
+function normalizarVerbas(lista) {
+  if (!lista || !lista.length) return []
+  var saida = []
+  for (var i = 0; i < lista.length; i++) {
+    var v = lista[i] || {}
+    var valor = valorNumerico(v.valor)
+    var desc  = String(v.descricao || '').trim()
+    if (valor === '' || valor === 0 || !desc) continue
+    var cat  = categoriaVerba(desc)
+    var tipo = String(v.tipo || '').toLowerCase() === 'desconto' ? 'desconto' : 'provento'
+    if (CATS_DESCONTO.indexOf(cat) !== -1) tipo = 'desconto'
+    saida.push({
+      codigo:    v.codigo ? String(v.codigo).trim() : '',
+      descricao: desc,
+      referencia: v.referencia ? String(v.referencia).trim() : '',
+      valor:     Math.abs(valor),
+      tipo:      tipo,
+      categoria: cat,
+    })
+  }
+  return saida
+}
+
+function verbasParaCelula(verbas) {
+  return verbas && verbas.length ? JSON.stringify(verbas) : ''
+}
+
+function verbasDaCelula(texto) {
+  var t = String(texto || '').trim()
+  if (!t) return []
+  try {
+    var v = JSON.parse(t)
+    return v && v.length ? v : []
+  } catch (e) { return [] }
+}
+
+// Histórico da folha de um funcionário, já somado por competência e por
+// categoria de verba. É a resposta para "quanto ele fez de hora extra".
+function historicoFolha(dados) {
+  var funcId = String(dados && dados.func_id || '').trim()
+  if (!funcId) throw new Error('Funcionário não informado')
+  var ano = dados.ano ? String(dados.ano).trim() : ''
+
+  var func = lerAbaComoObjetos(CONFIG.ABAS.FUNCIONARIOS)
+    .find(function (f) { return String(f['ID']) === funcId })
+
+  var linhas = lerAbaComoObjetos(CONFIG.ABAS.FOLHA).filter(function (f) {
+    if (String(f['ID FUNC.']).trim() !== funcId) return false
+    var tipo = String(f['TIPO'] || 'Folha')
+    if (tipo === 'Ponto' || tipo === 'EPI') return false
+    if (ano && String(f['COMPETÊNCIA'] || '').indexOf(ano) === -1) return false
+    return true
+  })
+
+  var meses = [], porCat = {}, anos = {}
+  linhas.forEach(function (f) {
+    var comp   = String(f['COMPETÊNCIA'] || '').trim()
+    var verbas = verbasDaCelula(f['VERBAS'])
+    var ordem  = ordemCompetencia(comp)
+    if (ordem.ano) anos[ordem.ano] = true
+
+    var proventos = 0, descontos = 0
+    verbas.forEach(function (v) {
+      if (v.tipo === 'desconto') descontos += v.valor
+      else proventos += v.valor
+      var c = v.categoria || 'OUTROS'
+      if (!porCat[c]) porCat[c] = { categoria: c, rotulo: rotuloCategoria(c), tipo: v.tipo, total: 0, meses: 0 }
+      porCat[c].total += v.valor
+    })
+
+    meses.push({
+      competencia:   comp,
+      ordem:         ordem.chave,
+      ano:           ordem.ano,
+      tipo:          String(f['TIPO'] || 'Folha'),
+      status:        String(f['STATUS'] || ''),
+      valor_liquido: valorNumerico(f['VALOR_LIQUIDO']) || 0,
+      proventos:     Math.round(proventos * 100) / 100,
+      descontos:     Math.round(descontos * 100) / 100,
+      link:          String(f['LINK DOC ASSINADO'] || f['LINK PDF ORIGINAL'] || ''),
+      verbas:        verbas,
+      sem_verbas:    verbas.length === 0,
+    })
+  })
+
+  meses.sort(function (a, b) { return a.ordem - b.ordem })
+  // "em quantos meses apareceu" separa o que é fixo do que é eventual
+  Object.keys(porCat).forEach(function (c) {
+    porCat[c].meses = meses.filter(function (m) {
+      return m.verbas.some(function (v) { return (v.categoria || 'OUTROS') === c })
+    }).length
+    porCat[c].total = Math.round(porCat[c].total * 100) / 100
+  })
+
+  var categorias = Object.keys(porCat).map(function (c) { return porCat[c] })
+  categorias.sort(function (a, b) { return b.total - a.total })
+
+  return {
+    func_id:    funcId,
+    nome:       func ? func['NOME_COMPLETO'] : '',
+    funcao:     func ? (func['FUNCAO'] || '') : '',
+    anos:       Object.keys(anos).sort().reverse(),
+    meses:      meses,
+    categorias: categorias,
+    total_liquido:   Math.round(meses.reduce(function (s, m) { return s + m.valor_liquido }, 0) * 100) / 100,
+    total_proventos: Math.round(meses.reduce(function (s, m) { return s + m.proventos }, 0) * 100) / 100,
+    total_descontos: Math.round(meses.reduce(function (s, m) { return s + m.descontos }, 0) * 100) / 100,
+    sem_verbas:      meses.filter(function (m) { return m.sem_verbas }).length,
+  }
+}
+
+// "Julho/2026" e "07/2026" viram um número ordenável (202607).
+function ordemCompetencia(comp) {
+  var c = String(comp || '').trim()
+  var m = c.match(/^([A-Za-zçÇãÃéÉêÊíÍóÓôÔõÕ]+)\s*\/\s*(\d{4})$/)
+  if (m) {
+    var i = MESES_ARQ.indexOf(semAcento(m[1]))
+    if (i >= 0) return { chave: parseInt(m[2]) * 100 + (i + 1), ano: m[2] }
+  }
+  var n = c.match(/(\d{1,2})\s*\/\s*(\d{4})/)
+  if (n) return { chave: parseInt(n[2]) * 100 + parseInt(n[1]), ano: n[2] }
+  var d = c.match(/(\d{4})/)
+  return { chave: d ? parseInt(d[1]) * 100 : 0, ano: d ? d[1] : '' }
 }
 
 function garantirColunaTipoFolha() {
@@ -2723,12 +2940,22 @@ function registrarComprovante(dados) {
 function confirmarPagamentoEmpregador(dados) {
   var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_PAGAMENTOS)
   var vals  = sheet.getDataRange().getValues()
+  var hdrs  = vals[0]
+  // Por NOME de cabeçalho: é esta gravação que tira a ordem do painel de
+  // "aguardando". Escrita por posição, uma coluna a mais na planilha faria
+  // o status nunca virar "Pago" e a pendência ficaria eterna.
+  var iTok  = hdrs.indexOf('TOKEN_CONFIRMACAO')
+  var iSt   = hdrs.indexOf('STATUS')
+  var iDtPg = hdrs.indexOf('DATA_PAGAMENTO')
+  var iComp = hdrs.indexOf('COMPROVANTE_LINK')
+  var iConf = hdrs.indexOf('DATA_CONFIRMACAO')
+  if (iTok < 0) iTok = 15
 
   for (var i = 1; i < vals.length; i++) {
-    if (String(vals[i][15]) === String(dados.token)) {
-      var funcId   = vals[i][1]
-      var funcNome = vals[i][2]
-      var comp     = vals[i][3]
+    if (String(vals[i][iTok]) === String(dados.token)) {
+      var funcId   = vals[i][hdrs.indexOf('ID_FUNC') >= 0 ? hdrs.indexOf('ID_FUNC') : 1]
+      var funcNome = vals[i][hdrs.indexOf('NOME_FUNC') >= 0 ? hdrs.indexOf('NOME_FUNC') : 2]
+      var comp     = vals[i][hdrs.indexOf('COMPETENCIA') >= 0 ? hdrs.indexOf('COMPETENCIA') : 3]
       var hoje     = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm')
 
       var linkDrive = ''
@@ -2738,16 +2965,102 @@ function confirmarPagamentoEmpregador(dados) {
         linkDrive  = salvarPdfNoDrive(funcId, funcNome, 'FOLHA_PAGAMENTO', nome, dados.comprovante_base64)
       } catch(e) { Logger.log('Erro Drive comprovante: ' + e.message) }
 
-      sheet.getRange(i+1, 7).setValue('Pago')
-      sheet.getRange(i+1, 12).setValue(dados.data_pagamento || hoje.split(' ')[0])
-      sheet.getRange(i+1, 14).setValue(linkDrive)
-      sheet.getRange(i+1, 10).setValue(hoje)
+      if (iSt   >= 0) sheet.getRange(i+1, iSt   + 1).setValue('Pago')
+      if (iDtPg >= 0) sheet.getRange(i+1, iDtPg + 1).setValue(dados.data_pagamento || hoje.split(' ')[0])
+      if (iComp >= 0) sheet.getRange(i+1, iComp + 1).setValue(linkDrive)
+      if (iConf >= 0) sheet.getRange(i+1, iConf + 1).setValue(hoje)
 
       logAcao('EMPREGADOR', 'PAGAMENTO_CONFIRMADO', 'Token: ' + dados.token + ' | Func: ' + funcNome + ' | ' + comp)
       return { ok: true, link_drive: linkDrive }
     }
   }
   throw new Error('Token não encontrado')
+}
+
+// Marca a ordem como paga direto do app. Existe porque nem todo pagamento
+// passa pelo link: dinheiro, transferência feita na mão, Pix pelo banco.
+// Sem isto a ordem ficava "aguardando" para sempre no painel.
+function marcarPago(dados, usuario) {
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_PAGAMENTOS)
+  if (!sheet) throw new Error('Aba PAGAMENTOS não encontrada')
+  var vals = sheet.getDataRange().getValues()
+  var hdrs = vals[0]
+  var iId     = hdrs.indexOf('ID')
+  var iStatus = hdrs.indexOf('STATUS')
+  var iData   = hdrs.indexOf('DATA_PAGAMENTO')
+  var iConf   = hdrs.indexOf('DATA_CONFIRMACAO')
+  if (iId < 0 || iStatus < 0) throw new Error('Aba PAGAMENTOS sem as colunas ID/STATUS')
+
+  var agora = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm')
+  for (var i = 1; i < vals.length; i++) {
+    if (String(vals[i][iId]) !== String(dados.id)) continue
+    if (String(vals[i][iStatus]) === 'Pago') return { ok: true, ja_estava: true }
+    sheet.getRange(i + 1, iStatus + 1).setValue('Pago')
+    if (iData >= 0) sheet.getRange(i + 1, iData + 1).setValue(dados.data_pagamento || agora.split(' ')[0])
+    if (iConf  >= 0) sheet.getRange(i + 1, iConf  + 1).setValue(agora)
+    logAcao(usuario, 'PAGAMENTO_MANUAL', 'ID: ' + dados.id + ' | ' + (vals[i][2] || ''))
+    return { ok: true, id: dados.id }
+  }
+  throw new Error('Ordem de pagamento não encontrada: ' + dados.id)
+}
+
+// Reprocessa holerites JÁ enviados para extrair as verbas — sem isto a
+// análise só começaria a existir daqui para frente, e o pedido era ver
+// TODO o histórico. Lê o PDF que ficou no Drive e passa pela mesma IA.
+//
+// O Apps Script corta a execução em 6 minutos, então vai em lotes: devolve
+// quantos faltam para o app chamar de novo até zerar.
+function reanalisarFolhas(dados, usuario) {
+  var funcId = dados && dados.func_id ? String(dados.func_id).trim() : ''
+  var limite = Math.max(1, Math.min(parseInt(dados && dados.limite) || 4, 10))
+
+  var hdrs  = garantirColunasFolha()
+  var sheet = getSheet(CONFIG.ABAS.FOLHA)
+  var vals  = sheet.getDataRange().getValues()
+  var iFunc = hdrs.indexOf('ID FUNC.')
+  var iTipo = hdrs.indexOf('TIPO')
+  var iVerb = hdrs.indexOf('VERBAS')
+  var iVal  = hdrs.indexOf('VALOR_LIQUIDO')
+  var iOrig = hdrs.indexOf('LINK PDF ORIGINAL')
+  var iAss  = hdrs.indexOf('LINK DOC ASSINADO')
+
+  var pendentes = []
+  for (var i = 1; i < vals.length; i++) {
+    if (funcId && String(vals[i][iFunc]).trim() !== funcId) continue
+    var tipo = String(vals[i][iTipo] || 'Folha')
+    if (tipo === 'Ponto' || tipo === 'EPI') continue
+    if (String(vals[i][iVerb] || '').trim()) continue
+    var link = String(vals[i][iAss] || '').trim() || String(vals[i][iOrig] || '').trim()
+    if (!link) continue
+    pendentes.push({ linha: i + 1, link: link })
+  }
+
+  var feitos = 0, erros = []
+  var lote = pendentes.slice(0, limite)
+  for (var j = 0; j < lote.length; j++) {
+    try {
+      var id = extrairIdDoDrive(lote[j].link)
+      if (!id) throw new Error('link do Drive não reconhecido')
+      var b64 = Utilities.base64Encode(DriveApp.getFileById(id).getBlob().getBytes())
+      var r   = identificarDocumentoComIA({ pdf_base64: b64 })
+      var verbas = normalizarVerbas(r.verbas)
+      if (verbas.length) sheet.getRange(lote[j].linha, iVerb + 1).setValue(verbasParaCelula(verbas))
+      // não sobrescreve um líquido que já estava lá
+      if (iVal >= 0 && !String(vals[lote[j].linha - 1][iVal] || '').trim() && r.valor_liquido) {
+        sheet.getRange(lote[j].linha, iVal + 1).setValue(valorNumerico(r.valor_liquido))
+      }
+      feitos++
+    } catch (e) {
+      erros.push('linha ' + lote[j].linha + ': ' + e.message)
+    }
+  }
+
+  logAcao(usuario, 'REANALISE_FOLHAS', feitos + ' processada(s), ' + erros.length + ' erro(s)')
+  return {
+    processados: feitos,
+    restantes:   Math.max(0, pendentes.length - lote.length),
+    erros:       erros,
+  }
 }
 
 function liquidarSalario(dados, usuario) {

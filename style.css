@@ -1001,3 +1001,134 @@ html { overflow-x: hidden; }
 }
 .fpc-anexo.aviso { background: var(--amber-bg); color: var(--amber-text); }
 .fpc-anexo i { font-size: 12px; }
+
+/* ── AGUARDANDO PAGAMENTO ────────────────────────────────────────── */
+/* "Avisado" e "não avisado" são estados diferentes de um mesmo pendente:
+   o card mostra os dois e distingue, em vez de sumir com um deles. */
+.np-item {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--amber-bg);
+  border: 0.5px solid rgba(133,79,11,0.2);
+  border-radius: var(--radius-md);
+  padding: 10px; margin-bottom: 6px;
+}
+.np-av {
+  width: 34px; height: 34px; border-radius: 50%; flex: none;
+  background: rgba(133,79,11,0.15); color: var(--amber-text);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+}
+.np-info { flex: 1; min-width: 0; }
+.np-nome { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-sub  { font-size: 10.5px; color: var(--amber-text); font-variant-numeric: tabular-nums; }
+.np-estado {
+  display: inline-block; margin-top: 3px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.02em;
+  padding: 2px 6px; border-radius: 5px;
+  background: rgba(133,79,11,0.16); color: var(--amber-text);
+}
+.np-estado.avisado { background: var(--blue-bg); color: var(--blue-text); }
+.np-acoes { display: flex; gap: 6px; align-items: center; flex: none; }
+.np-wa {
+  background: #22C55E; color: #fff; border-radius: 8px;
+  padding: 7px 9px; font-size: 13px; text-decoration: none;
+  display: flex; align-items: center;
+}
+.np-pago {
+  background: var(--card-bg); color: var(--verde-text);
+  border: 0.5px solid rgba(59,109,17,0.35); border-radius: 8px;
+  padding: 7px 10px; font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; gap: 3px;
+  cursor: pointer; font-family: inherit; white-space: nowrap;
+}
+.np-pago:hover { background: var(--verde-claro); }
+.np-pago i { font-size: 12px; }
+
+/* ── ANÁLISE DA FOLHA ────────────────────────────────────────────── */
+.af-abas { display: flex; gap: 4px; margin-bottom: 12px; }
+.af-aba {
+  flex: 1; padding: 7px 10px; font-size: 11.5px; font-weight: 650;
+  border: 0.5px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text-secondary);
+  cursor: pointer; font-family: inherit;
+}
+.af-aba.ativa { background: var(--verde-claro); color: var(--verde-text); border-color: rgba(59,109,17,0.3); }
+
+.af-totais { display: flex; gap: 6px; margin-bottom: 14px; }
+.af-total {
+  flex: 1; background: var(--surface); border-radius: 10px;
+  padding: 9px 8px; text-align: center;
+}
+.af-total span   { display: block; font-size: 9.5px; color: var(--text-secondary); font-weight: 600; }
+.af-total strong { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.af-total strong.neg { color: var(--red-text); }
+.af-total.destaque { background: var(--verde-claro); }
+.af-total.destaque strong { color: var(--verde-text); }
+
+.af-secao {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--text-hint);
+  margin: 14px 0 8px;
+}
+.af-verba { margin-bottom: 11px; }
+.af-verba-topo { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.af-verba-nome  { font-size: 12.5px; font-weight: 600; }
+.af-verba-valor { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.af-barra {
+  height: 5px; border-radius: 3px; background: var(--surface);
+  overflow: hidden; margin: 4px 0 3px;
+}
+.af-barra-in { height: 100%; background: var(--verde); border-radius: 3px; }
+.af-barra-in.neg { background: var(--red-text); }
+.af-verba-sub { font-size: 10px; color: var(--text-hint); font-variant-numeric: tabular-nums; }
+
+.af-mes { border-bottom: 0.5px solid var(--border); }
+.af-mes:last-child { border-bottom: none; }
+.af-mes-topo {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  padding: 10px 2px; background: none; border: none;
+  cursor: pointer; font-family: inherit; text-align: left; color: inherit;
+}
+.af-mes-topo[disabled] { cursor: default; opacity: 0.75; }
+.af-mes-nome { font-size: 12.5px; font-weight: 650; flex: 1; min-width: 0; }
+.af-mes-cols { display: flex; flex-direction: column; align-items: flex-end; }
+.af-mes-col  { font-size: 10px; color: var(--verde-text); font-variant-numeric: tabular-nums; }
+.af-mes-col.neg { color: var(--red-text); }
+.af-mes-liq {
+  font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums;
+  white-space: nowrap; min-width: 84px; text-align: right;
+}
+.af-seta { font-size: 13px; color: var(--text-hint); transition: transform var(--transition); }
+.af-mes-topo.aberto .af-seta { transform: rotate(180deg); }
+.af-tag {
+  font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 5px;
+  background: var(--amber-bg); color: var(--amber-text); white-space: nowrap;
+}
+.af-mes-detalhe { padding: 2px 0 12px 2px; }
+.af-item {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 4px 0; font-size: 11.5px;
+}
+.af-item-desc { color: var(--text-secondary); min-width: 0; }
+.af-item-valor { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+.af-item.neg .af-item-valor { color: var(--red-text); }
+.af-ref {
+  font-size: 9.5px; color: var(--text-hint);
+  background: var(--surface); padding: 1px 4px; border-radius: 4px;
+}
+
+.af-pendente {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 14px; padding: 11px 12px;
+  background: var(--blue-bg); border-radius: var(--radius-md);
+  font-size: 11px; color: var(--blue-text); line-height: 1.4;
+}
+.af-pendente > div { flex: 1; min-width: 180px; }
+.af-pendente strong { display: block; font-size: 12px; margin-bottom: 2px; }
+.af-btn {
+  background: var(--blue-text); color: #fff; border: none;
+  border-radius: 8px; padding: 8px 14px;
+  font-size: 11.5px; font-weight: 700; cursor: pointer;
+  font-family: inherit; white-space: nowrap; flex: none;
+}
+.af-btn:disabled { opacity: 0.6; cursor: default; }
