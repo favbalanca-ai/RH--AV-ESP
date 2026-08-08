@@ -1206,3 +1206,83 @@ html { overflow-x: hidden; }
   background: var(--purple-bg); color: var(--purple-text);
   vertical-align: 1px; margin-left: 4px;
 }
+
+/* ─── Custo de mão de obra ─────────────────────────────────────── */
+/* Cinco abas não cabem lado a lado numa tela de 360px: rolam. */
+#pg-custo .af-abas { overflow-x: auto; padding-bottom: 2px; }
+#pg-custo .af-aba { flex: none; white-space: nowrap; }
+
+.cst-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+.cst-card {
+  background: var(--surface); border-radius: 10px; padding: 9px 11px;
+}
+.cst-card span   { display: block; font-size: 9.5px; color: var(--text-secondary); font-weight: 600; }
+.cst-card strong { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.cst-card em     { display: block; font-style: normal; font-size: 9.5px; color: var(--text-hint); margin-top: 2px; }
+.cst-card.destaque { background: var(--verde-claro); }
+.cst-card.destaque strong { color: var(--verde-text); }
+
+.cst-aviso {
+  background: var(--amber-bg); border-radius: 10px; padding: 9px 11px;
+  font-size: 11px; color: var(--amber-text); margin-bottom: 12px;
+}
+.cst-aviso p { margin: 0 0 6px; }
+.cst-aviso p:last-child { margin: 0; }
+.cst-aviso a { color: inherit; font-weight: 700; }
+
+.cst-escada { margin-bottom: 10px; }
+.cst-linha {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 6px 0; border-bottom: 0.5px solid var(--border); font-size: 12px;
+}
+.cst-linha span   { flex: 1; color: var(--text-secondary); }
+.cst-linha strong { font-variant-numeric: tabular-nums; font-weight: 700; }
+.cst-linha em     { font-style: normal; font-size: 10px; color: var(--text-hint); min-width: 30px; text-align: right; }
+.cst-linha.total  { border-bottom: none; border-top: 1.5px solid var(--verde-text); margin-top: 2px; }
+.cst-linha.total span, .cst-linha.total strong { color: var(--verde-text); font-weight: 800; }
+
+.cst-secao {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-secondary); margin: 16px 0 8px;
+}
+
+.cst-emp {
+  border: 0.5px solid var(--border); border-radius: 12px;
+  padding: 11px 12px; margin-bottom: 8px;
+}
+.cst-emp-topo { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.cst-emp-nome { font-size: 13px; font-weight: 700; }
+.cst-emp-sub  { font-size: 10px; color: var(--text-secondary); margin-top: 1px; }
+.cst-emp-valor {
+  text-align: right; font-size: 14px; font-weight: 800; color: var(--verde-text);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.cst-emp-valor em { display: block; font-style: normal; font-size: 9.5px; font-weight: 600; color: var(--text-hint); }
+.cst-emp-grade {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px;
+}
+.cst-emp-grade > div { background: var(--surface); border-radius: 8px; padding: 6px 8px; }
+.cst-emp-grade span   { display: block; font-size: 9px; color: var(--text-secondary); font-weight: 600; }
+.cst-emp-grade strong { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cst-emp-nota { font-size: 10px; color: var(--text-hint); margin-top: 8px; line-height: 1.45; }
+
+.cst-form {
+  border: 0.5px solid var(--border); border-radius: 12px;
+  padding: 11px 12px; margin-bottom: 10px;
+}
+.cst-form-nome { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cst-selo {
+  font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 20px;
+  background: var(--amber-bg); color: var(--amber-text); text-transform: uppercase; letter-spacing: 0.04em;
+}
+.cst-selo.ok { background: var(--verde-claro); color: var(--verde-text); }
+.cst-check {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; padding: 5px 0; cursor: pointer;
+}
+.cst-check input { width: 16px; height: 16px; accent-color: var(--verde-text); }
+
+@media (max-width: 360px) {
+  .cst-cards { grid-template-columns: 1fr; }
+  .cst-emp-grade { grid-template-columns: repeat(2, 1fr); }
+}

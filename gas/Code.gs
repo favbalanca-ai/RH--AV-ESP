@@ -37,6 +37,7 @@ const CONFIG = {
     EPI_ESTOQUE:    'EPI_ESTOQUE',
     EPI_ENTREGAS:   'EPI_ENTREGAS',
     FOLHA:          'FOLHA_PAGAMENTO',
+    ENCARGOS:       'ENCARGOS',
     LOG:            'LOG_ACOES',
   }
 }
@@ -114,6 +115,11 @@ function doPost(e) {
       case 'historico_folha':             return respOk(historicoFolha(body.dados))
       case 'marcar_pago':                 return respOk(marcarPago(body.dados, usuario))
       case 'reanalisar_folhas':           return respOk(reanalisarFolhas(body.dados, usuario))
+
+      // Custo de mão de obra
+      case 'custo_mdo':                   return respOk(custoMdo(body.dados))
+      case 'listar_encargos':             return respOk(listarEncargos())
+      case 'salvar_encargos':             return respOk(salvarEncargos(body.dados, usuario))
       default: return respErro('Ação desconhecida: ' + acao)
     }
   } catch (err) {
@@ -3739,4 +3745,541 @@ function instalarTriggerEmail() {
     .everyMinutes(5)
     .create()
   Logger.log('Trigger instalado — verificando emails a cada 5 min')
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CUSTO DE MÃO DE OBRA
+// O holerite mostra o que sai do bolso do funcionário. O custo do
+// empregador é outra conta: a folha bruta mais a parte patronal mais o
+// que ainda não saiu do caixa mas já foi gerado (13º e férias).
+// ═══════════════════════════════════════════════════════════════════
+
+// Regime de recolhimento da parte patronal. Produtor rural pode recolher
+// sobre a folha ou sobre a comercialização — e em 'Receita' o INSS
+// patronal, o RAT e os terceiros NÃO saem da folha. Cobrar os dois seria
+// contar o mesmo tributo duas vezes.
+var REGIMES_ENCARGO = ['Folha', 'Receita']
+
+// Alíquotas de partida, não verdade fiscal. Ficam na aba ENCARGOS para o
+// contador ajustar por empregador; o app mostra qual alíquota gerou qual
+// número justamente para essa conferência ser possível.
+var ENCARGOS_PADRAO = {
+  regime:          'Folha',
+  inss_patronal:   20,
+  rat:             2,
+  terceiros:       2.5,
+  fgts:            8,
+  provisao_13:     true,
+  provisao_ferias: true,
+}
+
+var COLUNAS_ENCARGOS = ['EMPREGADOR', 'REGIME', 'INSS_PATRONAL', 'RAT', 'TERCEIROS',
+                        'FGTS', 'PROVISAO_13', 'PROVISAO_FERIAS', 'CONFERIDO',
+                        'OBSERVAÇÕES']
+
+// Chave de comparação de empregador: o cadastro escreve "Joaquim Gatto" e o
+// holerite "JOAQUIM GATTO COSSUL". Sem normalizar, cada grafia vira um
+// empregador diferente e o custo aparece dividido.
+function chaveEmpregador(nome) {
+  return semAcento(String(nome || '')).replace(/[^A-Z0-9]/g, '')
+}
+
+function garantirAbaEncargos() {
+  var ss = SpreadsheetApp.openById(CONFIG.SHEET_ID)
+  var sheet = ss.getSheetByName(CONFIG.ABAS.ENCARGOS)
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.ABAS.ENCARGOS)
+    sheet.appendRow(COLUNAS_ENCARGOS)
+    sheet.setFrozenRows(1)
+  }
+  var hdrs = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0]
+    .map(function (h) { return String(h).trim() })
+  COLUNAS_ENCARGOS.forEach(function (col) {
+    if (hdrs.indexOf(col) < 0) {
+      hdrs.push(col)
+      sheet.getRange(1, hdrs.length).setValue(col)
+    }
+  })
+  return { sheet: sheet, hdrs: hdrs }
+}
+
+// Uma linha por empregador do cadastro, com os padrões — para o contador
+// abrir a planilha e corrigir, em vez de precisar adivinhar o formato.
+function semearEncargos() {
+  var g = garantirAbaEncargos()
+  var existentes = {}
+  lerAbaComoObjetos(CONFIG.ABAS.ENCARGOS).forEach(function (l) {
+    existentes[chaveEmpregador(l['EMPREGADOR'])] = true
+  })
+  var criados = []
+  var vistos = {}
+  lerAbaComoObjetos(CONFIG.ABAS.FUNCIONARIOS).forEach(function (f) {
+    var emp = String(f['EMPREGADOR'] || '').trim()
+    var k = chaveEmpregador(emp)
+    if (!emp || !k || vistos[k] || existentes[k]) return
+    vistos[k] = true
+    var linha = COLUNAS_ENCARGOS.map(function (c) {
+      switch (c) {
+        case 'EMPREGADOR':      return emp
+        case 'REGIME':          return ENCARGOS_PADRAO.regime
+        case 'INSS_PATRONAL':   return ENCARGOS_PADRAO.inss_patronal
+        case 'RAT':             return ENCARGOS_PADRAO.rat
+        case 'TERCEIROS':       return ENCARGOS_PADRAO.terceiros
+        case 'FGTS':            return ENCARGOS_PADRAO.fgts
+        case 'PROVISAO_13':     return 'SIM'
+        case 'PROVISAO_FERIAS': return 'SIM'
+        // Nasce NÃO de propósito: a linha existe, mas ninguém confirmou as
+        // alíquotas ainda. É o que faz o app avisar em vez de apresentar
+        // um palpite como se fosse a conta do contador.
+        case 'CONFERIDO':       return 'NAO'
+        default:                return 'Alíquotas padrão — confirmar com o contador'
+      }
+    })
+    g.sheet.appendRow(linha)
+    criados.push(emp)
+  })
+  return criados
+}
+
+function simNao(v, padrao) {
+  var t = semAcento(String(v == null ? '' : v)).trim()
+  if (!t) return padrao
+  return t !== 'NAO' && t !== 'N' && t !== 'FALSE' && t !== '0'
+}
+
+function taxaPercentual(v, padrao) {
+  var n = valorNumerico(v)
+  return n === '' ? padrao : n
+}
+
+// Devolve uma função: dado o nome do empregador, quais alíquotas valem.
+// Empregador sem linha na aba usa o padrão e é marcado como tal.
+function lerEncargos() {
+  var porChave = {}
+  var linhas = []
+  try { linhas = lerAbaComoObjetos(CONFIG.ABAS.ENCARGOS) } catch (e) { linhas = [] }
+  linhas.forEach(function (l) {
+    var k = chaveEmpregador(l['EMPREGADOR'])
+    if (!k) return
+    var regime = String(l['REGIME'] || ENCARGOS_PADRAO.regime).trim()
+    if (REGIMES_ENCARGO.indexOf(regime) < 0) regime = ENCARGOS_PADRAO.regime
+    porChave[k] = {
+      empregador:      String(l['EMPREGADOR'] || '').trim(),
+      regime:          regime,
+      inss_patronal:   taxaPercentual(l['INSS_PATRONAL'], ENCARGOS_PADRAO.inss_patronal),
+      rat:             taxaPercentual(l['RAT'], ENCARGOS_PADRAO.rat),
+      terceiros:       taxaPercentual(l['TERCEIROS'], ENCARGOS_PADRAO.terceiros),
+      fgts:            taxaPercentual(l['FGTS'], ENCARGOS_PADRAO.fgts),
+      provisao_13:     simNao(l['PROVISAO_13'], true),
+      provisao_ferias: simNao(l['PROVISAO_FERIAS'], true),
+      observacoes:     String(l['OBSERVAÇÕES'] || l['OBSERVACOES'] || '').trim(),
+      // Alguém abriu, olhou e disse que está certo. Sem isso, o número é
+      // uma estimativa — e o app precisa dizer isso na tela.
+      conferido:       simNao(l['CONFERIDO'], false),
+      configurado:     true,
+    }
+  })
+  return function (nome) {
+    var k = chaveEmpregador(nome)
+    if (porChave[k]) return porChave[k]
+    var padrao = {}
+    Object.keys(ENCARGOS_PADRAO).forEach(function (c) { padrao[c] = ENCARGOS_PADRAO[c] })
+    padrao.empregador  = String(nome || '').trim()
+    padrao.observacoes = ''
+    padrao.conferido   = false
+    padrao.configurado = false
+    return padrao
+  }
+}
+
+function salvarEncargos(dados, usuario) {
+  var lista = (dados && dados.encargos) || []
+  if (!lista.length) throw new Error('Nada para salvar')
+  var g = garantirAbaEncargos()
+  var vals = g.sheet.getDataRange().getValues()
+  var col = function (nome) { return g.hdrs.indexOf(nome) + 1 }
+
+  var salvos = 0
+  lista.forEach(function (e) {
+    var k = chaveEmpregador(e.empregador)
+    if (!k) return
+    var linha = -1
+    for (var i = 1; i < vals.length; i++) {
+      if (chaveEmpregador(vals[i][g.hdrs.indexOf('EMPREGADOR')]) === k) { linha = i + 1; break }
+    }
+    if (linha < 0) {
+      g.sheet.appendRow(COLUNAS_ENCARGOS.map(function (c) {
+        return c === 'EMPREGADOR' ? String(e.empregador).trim() : ''
+      }))
+      linha = g.sheet.getLastRow()
+      vals = g.sheet.getDataRange().getValues()
+    }
+    var regime = String(e.regime || ENCARGOS_PADRAO.regime).trim()
+    if (REGIMES_ENCARGO.indexOf(regime) < 0) regime = ENCARGOS_PADRAO.regime
+    g.sheet.getRange(linha, col('REGIME')).setValue(regime)
+    g.sheet.getRange(linha, col('INSS_PATRONAL')).setValue(taxaPercentual(e.inss_patronal, ENCARGOS_PADRAO.inss_patronal))
+    g.sheet.getRange(linha, col('RAT')).setValue(taxaPercentual(e.rat, ENCARGOS_PADRAO.rat))
+    g.sheet.getRange(linha, col('TERCEIROS')).setValue(taxaPercentual(e.terceiros, ENCARGOS_PADRAO.terceiros))
+    g.sheet.getRange(linha, col('FGTS')).setValue(taxaPercentual(e.fgts, ENCARGOS_PADRAO.fgts))
+    g.sheet.getRange(linha, col('PROVISAO_13')).setValue(e.provisao_13 === false ? 'NAO' : 'SIM')
+    g.sheet.getRange(linha, col('PROVISAO_FERIAS')).setValue(e.provisao_ferias === false ? 'NAO' : 'SIM')
+    g.sheet.getRange(linha, col('CONFERIDO')).setValue(e.conferido ? 'SIM' : 'NAO')
+    if (e.observacoes != null) g.sheet.getRange(linha, col('OBSERVAÇÕES')).setValue(String(e.observacoes))
+    salvos++
+  })
+
+  logAcao(usuario, 'ENCARGOS_SALVOS', lista.map(function (e) { return e.empregador }).join(', '))
+  return { salvos: salvos }
+}
+
+function listarEncargos() {
+  semearEncargos()
+  var buscar = lerEncargos()
+  var vistos = {}, saida = []
+  lerAbaComoObjetos(CONFIG.ABAS.FUNCIONARIOS).forEach(function (f) {
+    var emp = String(f['EMPREGADOR'] || '').trim()
+    var k = chaveEmpregador(emp)
+    if (!emp || !k || vistos[k]) return
+    vistos[k] = true
+    saida.push(buscar(emp))
+  })
+  saida.sort(function (a, b) { return a.empregador.localeCompare(b.empregador) })
+  return { encargos: saida, padrao: ENCARGOS_PADRAO, regimes: REGIMES_ENCARGO }
+}
+
+var UM_DOZE  = 1 / 12          // 13º: um mês a cada doze
+var FERIAS_F = (1 / 12) * 4 / 3 // férias: um mês a cada doze, mais o terço
+
+// A conta de uma competência. Recebe a linha já lida (verbas, bases,
+// tipo de folha) e as alíquotas do empregador dela.
+function custoDaCompetencia(m, enc) {
+  var bases = m.bases || {}
+  // A base do INSS é o número mais confiável para os encargos: já vem do
+  // holerite com as verbas não incidentes fora. Sem ela, os proventos
+  // servem de aproximação — e a linha fica marcada como estimada.
+  var base = bases.base_inss || 0
+  var baseEstimada = false
+  if (!base) { base = m.proventos; baseEstimada = true }
+
+  var sobreFolha = enc.regime !== 'Receita'
+  var inss = sobreFolha ? base * enc.inss_patronal / 100 : 0
+  var rat  = sobreFolha ? base * enc.rat / 100 : 0
+  var terc = sobreFolha ? base * enc.terceiros / 100 : 0
+
+  // O FGTS não muda com o regime, e quando o holerite imprime "F.G.T.S do
+  // Mês" esse é o valor real recolhido — melhor que qualquer alíquota.
+  var fgtsImpresso = !!bases.fgts_mes
+  var fgts = fgtsImpresso ? bases.fgts_mes : (bases.base_fgts || base) * enc.fgts / 100
+
+  // Provisão só sobre mês comum. Provisionar 13º em cima do próprio 13º
+  // seria criar custo que não existe.
+  var mensal = (m.tipo_folha || 'Mensal') === 'Mensal'
+  var taxaEnc = (sobreFolha ? (enc.inss_patronal + enc.rat + enc.terceiros) : 0) + enc.fgts
+  var prov13 = 0, provFerias = 0
+  if (mensal && enc.provisao_13)     prov13     = m.proventos * UM_DOZE  * (1 + taxaEnc / 100)
+  if (mensal && enc.provisao_ferias) provFerias = m.proventos * FERIAS_F * (1 + taxaEnc / 100)
+
+  var encargos  = inss + rat + terc + fgts
+  var provisoes = prov13 + provFerias
+  return {
+    base_encargo:  base,
+    base_estimada: baseEstimada,
+    inss: inss, rat: rat, terceiros: terc, fgts: fgts,
+    fgts_impresso: fgtsImpresso,
+    encargos: encargos,
+    prov_13: prov13, prov_ferias: provFerias, provisoes: provisoes,
+    custo_total: m.proventos + encargos + provisoes,
+  }
+}
+
+function novoBalde(rotulo, extra) {
+  var b = {
+    rotulo: rotulo, folhas: 0, meses: {}, funcionarios: {},
+    proventos: 0, descontos: 0, liquido: 0,
+    inss: 0, rat: 0, terceiros: 0, fgts: 0, encargos: 0,
+    prov_13: 0, prov_ferias: 0, provisoes: 0, custo_total: 0,
+    he_horas: 0, he_valor: 0, faltas: 0,
+    fgts_impresso: 0, fgts_estimado: 0, base_estimada: 0, sem_verbas: 0,
+  }
+  if (extra) Object.keys(extra).forEach(function (k) { b[k] = extra[k] })
+  return b
+}
+
+function acumularBalde(b, m, c) {
+  b.folhas++
+  if (m.competencia) b.meses[m.competencia] = true
+  if (m.func_id) b.funcionarios[m.func_id] = true
+  b.proventos   += m.proventos
+  b.descontos   += m.descontos
+  b.liquido     += m.valor_liquido
+  b.inss        += c.inss
+  b.rat         += c.rat
+  b.terceiros   += c.terceiros
+  b.fgts        += c.fgts
+  b.encargos    += c.encargos
+  b.prov_13     += c.prov_13
+  b.prov_ferias += c.prov_ferias
+  b.provisoes   += c.provisoes
+  b.custo_total += c.custo_total
+  b.he_horas    += m.he_horas
+  b.he_valor    += m.he_valor
+  b.faltas      += m.faltas
+  if (c.fgts_impresso) b.fgts_impresso++; else b.fgts_estimado++
+  if (c.base_estimada) b.base_estimada++
+  if (m.sem_verbas) b.sem_verbas++
+}
+
+function fecharBalde(b) {
+  var r2 = function (n) { return Math.round(n * 100) / 100 }
+  var saida = {
+    rotulo:      b.rotulo,
+    folhas:      b.folhas,
+    meses:       Object.keys(b.meses).length,
+    funcionarios: Object.keys(b.funcionarios).length,
+    proventos:   r2(b.proventos),
+    descontos:   r2(b.descontos),
+    liquido:     r2(b.liquido),
+    inss:        r2(b.inss),
+    rat:         r2(b.rat),
+    terceiros:   r2(b.terceiros),
+    fgts:        r2(b.fgts),
+    encargos:    r2(b.encargos),
+    prov_13:     r2(b.prov_13),
+    prov_ferias: r2(b.prov_ferias),
+    provisoes:   r2(b.provisoes),
+    custo_total: r2(b.custo_total),
+    he_horas:    r2(b.he_horas),
+    he_valor:    r2(b.he_valor),
+    faltas:      r2(b.faltas),
+    fgts_impresso: b.fgts_impresso,
+    fgts_estimado: b.fgts_estimado,
+    base_estimada: b.base_estimada,
+    sem_verbas:    b.sem_verbas,
+    // Quanto custa cada real de salário bruto. É o número que responde
+    // "quanto custa contratar mais um".
+    multiplicador: b.proventos ? Math.round(b.custo_total / b.proventos * 1000) / 1000 : 0,
+    // A parte da folha que não é salário contratado — o que dá para
+    // reduzir sem demitir ninguém.
+    he_pct: b.proventos ? Math.round(b.he_valor / b.proventos * 1000) / 10 : 0,
+  }
+  Object.keys(b).forEach(function (k) {
+    if (saida[k] === undefined && k !== 'meses' && k !== 'funcionarios') saida[k] = b[k]
+  })
+  saida.custo_mes = saida.meses ? r2(b.custo_total / saida.meses) : 0
+  return saida
+}
+
+// Custo de mão de obra por empregador, com os recortes de equipe.
+// Eixo padrão: competência (o custo pertence ao mês em que o trabalho
+// aconteceu), não a data do pagamento.
+function custoMdo(dados) {
+  var d = dados || {}
+  var ano = d.ano ? String(d.ano).trim() : ''
+  var filtroEmp = d.empregador ? chaveEmpregador(d.empregador) : ''
+  var buscarEnc = lerEncargos()
+
+  var funcs = {}
+  lerAbaComoObjetos(CONFIG.ABAS.FUNCIONARIOS).forEach(function (f) {
+    funcs[String(f['ID']).trim()] = {
+      nome:       String(f['NOME_COMPLETO'] || '').trim(),
+      empregador: String(f['EMPREGADOR'] || '').trim(),
+      unidade:    String(f['UNIDADE'] || '').trim(),
+      funcao:     String(f['FUNCAO'] || '').trim(),
+      status:     String(f['STATUS'] || '').trim(),
+      salario:    valorNumerico(f['SALARIO_BASE']) || 0,
+    }
+  })
+
+  var todas = lerAbaComoObjetos(CONFIG.ABAS.FOLHA).filter(function (f) {
+    var tipo = String(f['TIPO'] || 'Folha')
+    return tipo !== 'Ponto' && tipo !== 'EPI'
+  })
+
+  var anosQtd = {}
+  todas.forEach(function (f) {
+    var a = ordemCompetencia(f['COMPETÊNCIA']).ano
+    if (a) anosQtd[a] = (anosQtd[a] || 0) + 1
+  })
+
+  var porEmp = {}, porFunc = {}, porUnidade = {}, porFuncao = {}, porMes = {}
+  var porCategoria = {}, porTipoFolha = {}
+  var geral = novoBalde('Total')
+  var comEncargo = {}   // alíquotas efetivamente usadas, por empregador
+  var usadas = 0, foraDoAno = 0, semFuncionario = 0
+
+  todas.forEach(function (f) {
+    var ordem = ordemCompetencia(f['COMPETÊNCIA'])
+    if (ano && ordem.ano !== String(ano)) { foraDoAno++; return }
+
+    var funcId = String(f['ID FUNC.'] || '').trim()
+    var func = funcs[funcId]
+    if (!func) { semFuncionario++; return }
+    if (filtroEmp && chaveEmpregador(func.empregador) !== filtroEmp) return
+
+    var verbas = verbasDaCelula(f['VERBAS'])
+    var param  = parametrosDaCelula(f['PARAMETROS'])
+    var proventos = 0, descontos = 0, heHoras = 0, heValor = 0, faltas = 0
+
+    verbas.forEach(function (v) {
+      var cat = v.categoria || 'OUTROS'
+      if (v.tipo === 'desconto') descontos += v.valor
+      else proventos += v.valor
+      if (cat === 'HORA_EXTRA') { heValor += v.valor; heHoras += (v.horas || 0) }
+      if (cat === 'FALTAS') faltas += v.valor
+      if (!porCategoria[cat]) {
+        porCategoria[cat] = { categoria: cat, rotulo: rotuloCategoria(cat),
+                              tipo: v.tipo, total: 0, horas: 0, folhas: 0 }
+      }
+      porCategoria[cat].total += v.valor
+      porCategoria[cat].horas += (v.horas || 0)
+      porCategoria[cat].folhas++
+    })
+
+    var m = {
+      func_id:       funcId,
+      competencia:   String(f['COMPETÊNCIA'] || '').trim(),
+      ordem:         ordem.chave,
+      ano:           ordem.ano,
+      bases:         basesDaCelula(f['BASES']),
+      tipo_folha:    param && param.tipo_folha ? param.tipo_folha : 'Mensal',
+      centro_custo:  (param && param.centro_custo) || '',
+      valor_liquido: valorNumerico(f['VALOR_LIQUIDO']) || 0,
+      proventos:     proventos,
+      descontos:     descontos,
+      he_horas:      heHoras,
+      he_valor:      heValor,
+      faltas:        faltas,
+      sem_verbas:    !String(f['VERBAS'] || '').trim(),
+    }
+
+    // Uma folha sem verba extraída não tem proventos: entra na conta de
+    // qualidade, não na de custo. Somá-la como zero faria a média cair
+    // sem que ninguém entendesse por quê.
+    if (m.sem_verbas && !m.proventos) {
+      geral.sem_verbas++
+      var ke0 = chaveEmpregador(func.empregador) || 'SEM'
+      if (!porEmp[ke0]) porEmp[ke0] = novoBalde(func.empregador || 'Sem empregador')
+      porEmp[ke0].sem_verbas++
+      return
+    }
+
+    var enc = buscarEnc(func.empregador)
+    var c = custoDaCompetencia(m, enc)
+    usadas++
+    porTipoFolha[m.tipo_folha] = (porTipoFolha[m.tipo_folha] || 0) + 1
+
+    var ke = chaveEmpregador(func.empregador) || 'SEM'
+    if (!porEmp[ke]) porEmp[ke] = novoBalde(func.empregador || 'Sem empregador')
+    comEncargo[ke] = enc
+    acumularBalde(porEmp[ke], m, c)
+
+    if (!porFunc[funcId]) {
+      porFunc[funcId] = novoBalde(func.nome, {
+        func_id: funcId, empregador: func.empregador, unidade: func.unidade,
+        funcao: func.funcao, status: func.status, salario_base: func.salario,
+      })
+    }
+    acumularBalde(porFunc[funcId], m, c)
+
+    var un = m.centro_custo || func.unidade || 'Sem unidade'
+    if (!porUnidade[un]) porUnidade[un] = novoBalde(un)
+    acumularBalde(porUnidade[un], m, c)
+
+    var fn = func.funcao || 'Sem função'
+    if (!porFuncao[fn]) porFuncao[fn] = novoBalde(fn)
+    acumularBalde(porFuncao[fn], m, c)
+
+    var chaveMes = m.ordem || 0
+    if (!porMes[chaveMes]) {
+      porMes[chaveMes] = novoBalde(m.competencia, { ordem: chaveMes, ano: m.ano })
+    }
+    acumularBalde(porMes[chaveMes], m, c)
+
+    acumularBalde(geral, m, c)
+  })
+
+  var lista = function (mapa) {
+    return Object.keys(mapa).map(function (k) { return fecharBalde(mapa[k]) })
+      .sort(function (a, b) { return b.custo_total - a.custo_total })
+  }
+
+  // Empregador cujas folhas do período são todas não analisadas não tem
+  // custo a mostrar — um bloco de R$ 0,00 e multiplicador 0,00× pareceria
+  // um defeito. O aviso de qualidade já conta essas folhas.
+  var empregadores = Object.keys(porEmp).filter(function (k) {
+    return porEmp[k].folhas > 0
+  }).map(function (k) {
+    var b = fecharBalde(porEmp[k])
+    var e = comEncargo[k] || buscarEnc(porEmp[k].rotulo)
+    b.regime      = e.regime
+    b.aliquotas   = { inss_patronal: e.inss_patronal, rat: e.rat,
+                      terceiros: e.terceiros, fgts: e.fgts }
+    b.configurado = e.configurado
+    b.conferido   = e.conferido
+    b.provisao_13 = e.provisao_13
+    b.provisao_ferias = e.provisao_ferias
+    return b
+  }).sort(function (a, b) { return b.custo_total - a.custo_total })
+
+  var pessoas = lista(porFunc)
+  var meses = Object.keys(porMes).map(function (k) { return fecharBalde(porMes[k]) })
+    .sort(function (a, b) { return a.ordem - b.ordem })
+
+  // Concentração de hora extra: quantos por cento do total estão em quantas
+  // pessoas. Muita hora extra em pouca gente é dimensionamento errado — e
+  // risco trabalhista, não só custo.
+  var comHe = pessoas.filter(function (p) { return p.he_valor > 0 })
+    .sort(function (a, b) { return b.he_valor - a.he_valor })
+  var totalHe = comHe.reduce(function (s, p) { return s + p.he_valor }, 0)
+  var fatia = function (n) {
+    if (!totalHe) return 0
+    var soma = comHe.slice(0, n).reduce(function (s, p) { return s + p.he_valor }, 0)
+    return Math.round(soma / totalHe * 1000) / 10
+  }
+
+  var categorias = Object.keys(porCategoria).map(function (k) {
+    var c = porCategoria[k]
+    c.total = Math.round(c.total * 100) / 100
+    c.horas = Math.round(c.horas * 100) / 100
+    return c
+  }).sort(function (a, b) { return b.total - a.total })
+
+  return {
+    ano_filtro:   ano,
+    anos:         Object.keys(anosQtd).sort().reverse(),
+    anos_qtd:     anosQtd,
+    empregador_filtro: d.empregador || '',
+    total:        fecharBalde(geral),
+    // Se o período já contém um 13º ou umas férias pagos, esse valor está
+    // na folha bruta E foi provisionado nos meses anteriores. A tela precisa
+    // dizer isso — senão o total soma a mesma coisa duas vezes em silêncio.
+    tipos_folha:  porTipoFolha,
+    empregadores: empregadores,
+    funcionarios: pessoas,
+    unidades:     lista(porUnidade),
+    funcoes:      lista(porFuncao),
+    meses:        meses,
+    categorias:   categorias,
+    concentracao_he: {
+      total:   Math.round(totalHe * 100) / 100,
+      pessoas: comHe.length,
+      top3:    fatia(3),
+      top5:    fatia(5),
+      maiores: comHe.slice(0, 5).map(function (p) {
+        return { nome: p.rotulo, valor: p.he_valor, horas: p.he_horas }
+      }),
+    },
+    // Sem isto o usuário não tem como saber se o número é sólido ou se
+    // metade das folhas ficou de fora da conta.
+    qualidade: {
+      folhas_no_periodo: usadas + geral.sem_verbas,
+      calculadas:        usadas,
+      sem_verbas:        geral.sem_verbas,
+      base_estimada:     geral.base_estimada,
+      fgts_impresso:     geral.fgts_impresso,
+      fgts_estimado:     geral.fgts_estimado,
+      sem_funcionario:   semFuncionario,
+      fora_do_ano:       foraDoAno,
+    },
+  }
 }
