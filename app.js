@@ -3328,7 +3328,7 @@ function renderAnalise() {
   const a = analiseAtual
 
   if (!a.meses.length) {
-    corpo.innerHTML = '<p class="lista-vazia">Nenhuma folha registrada neste período</p>'
+    corpo.innerHTML = analiseVazia(a)
     return
   }
   corpo.innerHTML = (analiseVista === 'resumo' ? analiseResumo(a) : analiseMeses(a)) + analiseRodape(a)
@@ -3350,6 +3350,43 @@ function analiseRodape(a) {
       </div>
       <button class="af-btn" id="btn-reanalisar" onclick="reanalisarHistorico()">Analisar agora</button>
     </div>`
+}
+
+// Sem meses no período, a tela não pode ser um beco. Ou existem folhas em
+// OUTRO ano — e aí basta trocar o seletor —, ou não existe nenhuma, e o
+// motivo é outro: documento ainda não enviado, ou enviado como Ponto.
+function analiseVazia(a) {
+  const outros = (a.anos || []).filter(y => String(y) !== String(a.ano_filtro))
+  if (outros.length) {
+    return `
+      <div class="af-pendente">
+        <div>
+          <strong>${a.ano_filtro ? 'Nada em ' + esc(String(a.ano_filtro)) : 'Nada no período selecionado'}</strong>
+          <div>Mas há folha registrada em
+            ${outros.map(y => `<button class="af-ano" onclick="irParaAno('${esc(String(y))}')">${esc(String(y))}
+                <span>${(a.anos_qtd && a.anos_qtd[y]) || ''}</span></button>`).join(' ')}
+          </div>
+        </div>
+      </div>`
+  }
+  return `
+    <div class="af-pendente">
+      <div>
+        <strong>Nenhuma folha registrada para ${esc(a.nome || 'este funcionário')}</strong>
+        <div>A análise sai das folhas enviadas pela aba <strong>Folha de Pagamento</strong>.
+          Se você já enviou, confira na planilha se a linha tem o
+          <strong>ID FUNC.</strong> deste funcionário e se o <strong>TIPO</strong>
+          não ficou como "Ponto".</div>
+      </div>
+    </div>`
+}
+
+function irParaAno(ano) {
+  const sel = document.getElementById('sel-ano-pgto')
+  if (sel && [...sel.options].some(o => o.value === String(ano))) sel.value = String(ano)
+  carregarResumoPgto()
+  carregarAnaliseFolha()
+  gerarExtrato()
 }
 
 function analiseResumo(a) {

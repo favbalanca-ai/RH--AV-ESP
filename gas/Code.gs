@@ -2506,20 +2506,30 @@ function historicoFolha(dados) {
   var func = lerAbaComoObjetos(CONFIG.ABAS.FUNCIONARIOS)
     .find(function (f) { return String(f['ID']) === funcId })
 
-  var linhas = lerAbaComoObjetos(CONFIG.ABAS.FOLHA).filter(function (f) {
+  // Todas as folhas dele, sem filtro de ano: é daqui que sai a lista de anos
+  // disponíveis. Calcular os anos DEPOIS do filtro daria lista vazia
+  // justamente quando ela importa — quando o ano escolhido não tem nada.
+  var todas = lerAbaComoObjetos(CONFIG.ABAS.FOLHA).filter(function (f) {
     if (String(f['ID FUNC.']).trim() !== funcId) return false
     var tipo = String(f['TIPO'] || 'Folha')
-    if (tipo === 'Ponto' || tipo === 'EPI') return false
-    if (ano && String(f['COMPETÊNCIA'] || '').indexOf(ano) === -1) return false
-    return true
+    return tipo !== 'Ponto' && tipo !== 'EPI'
   })
 
-  var meses = [], porCat = {}, anos = {}
+  var anos = {}
+  todas.forEach(function (f) {
+    var a = ordemCompetencia(f['COMPETÊNCIA']).ano
+    if (a) anos[a] = (anos[a] || 0) + 1
+  })
+
+  var linhas = ano
+    ? todas.filter(function (f) { return ordemCompetencia(f['COMPETÊNCIA']).ano === String(ano) })
+    : todas
+
+  var meses = [], porCat = {}
   linhas.forEach(function (f) {
     var comp   = String(f['COMPETÊNCIA'] || '').trim()
     var verbas = verbasDaCelula(f['VERBAS'])
     var ordem  = ordemCompetencia(comp)
-    if (ordem.ano) anos[ordem.ano] = true
 
     var proventos = 0, descontos = 0
     verbas.forEach(function (v) {
@@ -2561,7 +2571,12 @@ function historicoFolha(dados) {
     func_id:    funcId,
     nome:       func ? func['NOME_COMPLETO'] : '',
     funcao:     func ? (func['FUNCAO'] || '') : '',
+    // { '2026': 7, '2025': 12 } — permite dizer "não há nada em 2026, mas há
+    // 12 folhas em 2025" em vez de só "nenhuma folha registrada"
     anos:       Object.keys(anos).sort().reverse(),
+    anos_qtd:   anos,
+    total_folhas: todas.length,
+    ano_filtro: ano || '',
     meses:      meses,
     categorias: categorias,
     total_liquido:   Math.round(meses.reduce(function (s, m) { return s + m.valor_liquido }, 0) * 100) / 100,

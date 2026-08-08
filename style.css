@@ -1154,3 +1154,11 @@ html { overflow-x: hidden; }
   word-break: break-all; margin-bottom: 4px;
 }
 .diag-cru { font-size: 10px; color: var(--text-hint); font-variant-numeric: tabular-nums; }
+.af-ano {
+  background: var(--card-bg); color: var(--blue-text);
+  border: 0.5px solid rgba(24,95,165,0.3); border-radius: 7px;
+  padding: 4px 9px; margin: 3px 3px 0 0; font-size: 12px; font-weight: 700;
+  cursor: pointer; font-family: inherit;
+}
+.af-ano span { font-weight: 500; opacity: 0.7; font-size: 10px; margin-left: 3px; }
+.af-ano:hover { background: var(--blue-bg); }
