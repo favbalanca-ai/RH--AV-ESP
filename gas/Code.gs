@@ -521,8 +521,12 @@ var MESES_NOME = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
 // comportamento de hoje. Férias e ponto passam a ser definitivos pelo nome.
 function nomeDocumentoAssinatura(tipo, competencia, nomeCompleto) {
   var t = String(tipo || 'Folha').trim().toUpperCase()
+  // EPI mantém prefixo próprio de propósito. O parse_docname do servidor não
+  // reconhece 'EPI_...' e manda para revisão — que é o certo: cair em 'Folha'
+  // faria um recibo de EPI ser arquivado como recibo de pagamento, calado.
   var prefixo = t === 'FERIAS' || t === 'FÉRIAS' ? 'Ferias'
               : t === 'PONTO'  ? 'Ponto'
+              : t === 'EPI'    ? 'EPI'
               : 'Folha'
 
   var comp = String(competencia || '')
@@ -2540,6 +2544,9 @@ function historicoFolha(dados) {
   linhas.forEach(function (f) {
     var comp   = String(f['COMPETÊNCIA'] || '').trim()
     var verbas = verbasDaCelula(f['VERBAS'])
+    // Célula vazia = nunca passou pela extração. '[]' = passou e não achou
+    // nada. Só a primeira merece o convite para reanalisar.
+    var naoAnalisado = !String(f['VERBAS'] || '').trim()
     var ordem  = ordemCompetencia(comp)
 
     var proventos = 0, descontos = 0
@@ -2562,7 +2569,7 @@ function historicoFolha(dados) {
       descontos:     Math.round(descontos * 100) / 100,
       link:          String(f['LINK DOC ASSINADO'] || f['LINK PDF ORIGINAL'] || ''),
       verbas:        verbas,
-      sem_verbas:    verbas.length === 0,
+      sem_verbas:    naoAnalisado,
     })
   })
 
@@ -2678,7 +2685,39 @@ function listarPagamentos(dados) {
   })
   if (dados && dados.func_id) lista = lista.filter(function(r) { return String(r['ID_FUNC']) === String(dados.func_id) })
   if (dados && dados.status)  lista = lista.filter(function(r) { return r['STATUS'] === dados.status })
-  return lista.reverse()
+  return preencherLinkDocumento(lista).reverse()
+}
+
+// A coluna LINK_HOLERITE existe desde sempre mas nunca foi gravada. Em vez de
+// migrar a planilha, o link é resolvido na leitura, a partir da FOLHA — assim
+// vale também para as ordens antigas, sem mexer em nada do que está lá.
+//
+// Casa primeiro pelo token do documento (REF_DOC), que é exato. Sem ele, cai
+// para funcionário + competência, que é o que as ordens antigas têm.
+function preencherLinkDocumento(lista) {
+  if (!lista.length) return lista
+  if (lista.every(function (p) { return String(p['LINK_HOLERITE'] || '').trim() })) return lista
+
+  var folhas = lerAbaComoObjetos(CONFIG.ABAS.FOLHA)
+  var porToken = {}, porFuncComp = {}
+  folhas.forEach(function (f) {
+    var link = String(f['LINK DOC ASSINADO'] || '').trim() || String(f['LINK PDF ORIGINAL'] || '').trim()
+    if (!link) return
+    var tok = String(f['ZAPSIGN_DOC'] || '').trim()
+    if (tok) porToken[tok] = link
+    var chave = String(f['ID FUNC.']).trim() + '|' + ordemCompetencia(f['COMPETÊNCIA']).chave
+    // O assinado ganha do pendente quando os dois existem para a competência.
+    if (!porFuncComp[chave] || String(f['LINK DOC ASSINADO'] || '').trim()) porFuncComp[chave] = link
+  })
+
+  lista.forEach(function (p) {
+    if (String(p['LINK_HOLERITE'] || '').trim()) return
+    var ref = String(p['REF_DOC'] || '').trim()
+    if (ref && porToken[ref]) { p['LINK_HOLERITE'] = porToken[ref]; return }
+    var chave = String(p['ID_FUNC']).trim() + '|' + ordemCompetencia(p['COMPETENCIA']).chave
+    if (porFuncComp[chave]) p['LINK_HOLERITE'] = porFuncComp[chave]
+  })
+  return lista
 }
 
 function confirmarNotificacao(dados, usuario) {
@@ -3074,7 +3113,13 @@ function reanalisarFolhas(dados, usuario) {
       var b64 = Utilities.base64Encode(DriveApp.getFileById(id).getBlob().getBytes())
       var r   = identificarDocumentoComIA({ pdf_base64: b64 })
       var verbas = normalizarVerbas(r.verbas)
-      if (verbas.length) sheet.getRange(lote[j].linha, iVerb + 1).setValue(verbasParaCelula(verbas))
+      // Marca SEMPRE, mesmo sem verba nenhuma (PDF escaneado que a IA não
+      // leu). Sem marcar, a linha continuava no topo da fila: o app repetia o
+      // mesmo lote de 4 PDFs até 30 vezes, pagando a IA em cada volta e nunca
+      // chegando nas linhas seguintes. '[]' significa "já analisado, nada
+      // encontrado" e é diferente de célula vazia, que é "nunca analisado".
+      sheet.getRange(lote[j].linha, iVerb + 1)
+        .setValue(verbas.length ? verbasParaCelula(verbas) : '[]')
       // não sobrescreve um líquido que já estava lá
       if (iVal >= 0 && !String(vals[lote[j].linha - 1][iVal] || '').trim() && r.valor_liquido) {
         sheet.getRange(lote[j].linha, iVal + 1).setValue(valorNumerico(r.valor_liquido))

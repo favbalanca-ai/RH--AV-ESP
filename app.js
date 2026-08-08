@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260810'
+const APP_VERSION = '20260811'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -1075,11 +1075,15 @@ async function diagnosticarConexao(timeoutMs = 20000) {
       acao: 'O código chegou a rodar. Veja "Execuções" no Apps Script para o motivo.' }
   }
 
+  // Sem abort, uma conexão que engole o pacote sem responder deixaria o
+  // diagnóstico preso em "Testando..." para sempre.
   let alcancavel = false
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), Math.min(timeoutMs, 8000))
   try {
-    await fetch(GAS_URL, { method: 'GET', mode: 'no-cors', cache: 'no-store' })
+    await fetch(GAS_URL, { method: 'GET', mode: 'no-cors', cache: 'no-store', signal: ctrl.signal })
     alcancavel = true
-  } catch (e) { alcancavel = false }
+  } catch (e) { alcancavel = false } finally { clearTimeout(t) }
 
   if (alcancavel) {
     return { veredito: 'bloqueado', ms: ms(), detalhe: erro,
@@ -1945,7 +1949,11 @@ async function enviarPaginaAssinaturaPropria(idx, tipo) {
   const res = await chamarGAS({
     acao: 'processar_pagina_proprio',
     dados: {
-      pdf_base64:   p.pdfBase64,
+      // pdfEnvio é o documento COM o ponto junto. Mandar p.pdfBase64 aqui
+      // faria o envio individual perder o anexo que o em lote leva.
+      pdf_base64:   p.pdfEnvio || p.pdfBase64,
+      inclui_ponto: !!p.ponto,
+      verbas:       p.verbas || null,
       tipo:         tipoDoc,
       competencia:  p.competencia,
       func_id:      p.funcId,
@@ -2469,6 +2477,10 @@ async function identificarFuncionariosAutomatico() {
         paginasFracionadas[i].valorLiquido = d.valor_liquido
         paginasFracionadas[i].valorOrigem  = 'ia'
       }
+      // As verbas vêm na MESMA extração. Sem guardar aqui, toda folha nova
+      // nascia "não analisada" e a análise dependia de reler o PDF do Drive
+      // depois — pagando a IA duas vezes pelo mesmo documento.
+      if (Array.isArray(d.verbas) && d.verbas.length) paginasFracionadas[i].verbas = d.verbas
       if (d.ferias_inicio) paginasFracionadas[i].feriasInicio = d.ferias_inicio
       if (d.ferias_fim)    paginasFracionadas[i].feriasFim    = d.ferias_fim
 
@@ -2538,18 +2550,47 @@ async function identificarPonto() {
 
 // Junta, por funcionário, a página de ponto na folha. Idempotente: pode
 // rodar de novo depois de o usuário corrigir uma identificação à mão.
+// Redesenha a lista inteira preservando o que já foi enviado. O
+// renderPaginasFracionadas() reconstrói o HTML do zero: sem esta restauração,
+// um card enviado voltava a parecer pronto — com o botão Enviar ativo — e
+// mandaria um segundo documento ao ZapSign, cobrado e assinado em dobro.
+function redesenharCards() {
+  renderPaginasFracionadas()
+  paginasFracionadas.forEach((p, i) => {
+    const f = p.funcId ? funcionarios.find(x => String(x['ID']) === String(p.funcId)) : null
+    if (f) renderCardIdentificado(i, f, p._metodo || 'auto')
+    else renderCardManual(i)
+    renderValorPagina(i)
+    renderAnexoPonto(i)
+    if (p.status === 'enviado') {
+      atualizarCardEnviado(i, { link: p.signUrl || '', wa_link: '' })
+      const btn = document.getElementById('btn-zap-' + i)
+      if (btn) btn.disabled = true
+    }
+  })
+  atualizarBtnTodos()
+}
+
 async function parearPonto() {
   if (!paginasPonto.length) return
-  paginasPonto.forEach(p => { p.usada = false })
+
+  // Cards "só ponto" ainda não enviados são SAÍDA do pareamento anterior, não
+  // entrada deste. Mantê-los faria a página casar consigo mesma, ser marcada
+  // como usada, e sumir na reconstrução — sem nunca poder ser enviada. Os já
+  // enviados ficam: são história.
+  paginasFracionadas = paginasFracionadas.filter(p => !p.soPonto || p.status === 'enviado')
+  paginasPonto.forEach(q => { q.usada = false })
+
+  // Reserva o que já foi embora, nas duas formas: dentro de uma folha, ou como
+  // card próprio. Sem isso, ponto já assinado voltaria à fila.
+  paginasFracionadas.forEach(p => {
+    if (p.status !== 'enviado') return
+    if (p.ponto) p.ponto.usada = true
+    if (p.origemPonto) p.origemPonto.usada = true
+  })
 
   for (const p of paginasFracionadas) {
-    // Já enviado é imutável: o que entrou no documento entrou. Mas o ponto
-    // dele continua reservado — sem isso ele voltaria a aparecer como órfão,
-    // e alguém mandaria de novo o que já foi assinado.
-    if (p.status === 'enviado') {
-      if (p.ponto) p.ponto.usada = true
-      continue
-    }
+    if (p.status === 'enviado') continue      // o que entrou no documento entrou
     p.ponto = null; p.pdfEnvio = null
     if (!p.funcId) continue
     const par = paginasPonto.find(q => !q.usada && q.funcId && String(q.funcId) === String(p.funcId))
@@ -2564,27 +2605,20 @@ async function parearPonto() {
   // Ponto sem folha correspondente não some calado — vira card próprio, para
   // ser enviado separado (aí sim com assinatura própria).
   const orfaos = paginasPonto.filter(q => !q.usada)
-  paginasFracionadas = paginasFracionadas.filter(p => !p.soPonto)
+  const comp = paginasFracionadas.find(p => p.competencia)?.competencia || ''
   orfaos.forEach(q => {
+    q.usada = true
     const f = q.funcId ? funcionarios.find(x => String(x['ID']) === String(q.funcId)) : null
     paginasFracionadas.push({
       pagina: q.pagina, funcId: q.funcId || '', nome: q.nome || '',
       funcao: f ? f['FUNCAO'] : '', telefone: f ? f['TELEFONE'] : '',
       pdfBase64: q.pdfBase64, status: 'pronto', signUrl: '',
-      competencia: paginasFracionadas[0]?.competencia || '',
-      tipoDoc: 'Ponto', soPonto: true,
+      competencia: comp, tipoDoc: 'Ponto', soPonto: true,
+      origemPonto: q,     // liga o card de volta à página, para reservá-la depois
     })
   })
 
-  renderPaginasFracionadas()
-  paginasFracionadas.forEach((p, i) => {
-    const f = p.funcId ? funcionarios.find(x => String(x['ID']) === String(p.funcId)) : null
-    if (f) renderCardIdentificado(i, f, p._metodo || 'auto')
-    else renderCardManual(i)
-    renderValorPagina(i)
-    renderAnexoPonto(i)
-  })
-  atualizarBtnTodos()
+  redesenharCards()
 
   const juntados = paginasFracionadas.filter(p => p.ponto).length
   if (juntados) toast(`📎 ${juntados} ponto(s) juntado(s) — ${juntados} assinatura(s) economizada(s)`, 'sucesso')
@@ -2700,10 +2734,13 @@ function abrirModalEnvioFolha(idx) {
 async function enviarPaginaZapSign(idx) {
   const p = paginasFracionadas[idx]
   if (!p.funcId) return toast('❌ Selecione o funcionário primeiro', 'erro')
+  // Cinto e suspensório: o botão é desabilitado, mas um redesenho da lista já
+  // o reativou uma vez. Reenviar custa uma assinatura e gera ordem duplicada.
+  if (p.status === 'enviado') return toast('Este documento já foi enviado', 'aviso')
   const btn = document.getElementById('btn-zap-' + idx)
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>'
   mostrarLoading('Enviando para ' + p.nome.split(' ')[0] + '...')
-  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfEnvio || p.pdfBase64, inclui_ponto: !!p.ponto, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true, tipo: p.tipoDoc || tipoDocAtual, valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null } })
+  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfEnvio || p.pdfBase64, inclui_ponto: !!p.ponto, verbas: p.verbas || null, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true, tipo: p.tipoDoc || tipoDocAtual, valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null } })
   esconderLoading()
   if (res && res.ok) {
     paginasFracionadas[idx].status  = 'enviado'
@@ -2748,7 +2785,7 @@ async function enviarTodasPendentes(metodo) {
       mostrarLoading('Gerando link ' + (links.length + 1) + '/' + pendentes.length + ' — ' + p.nome.split(' ')[0])
       const res = await chamarGAS({
         acao: 'processar_pagina_proprio',
-        dados: { pdf_base64: p.pdfEnvio || p.pdfBase64, inclui_ponto: !!p.ponto, tipo: p.tipoDoc || tipoDocAtual,
+        dados: { pdf_base64: p.pdfEnvio || p.pdfBase64, inclui_ponto: !!p.ponto, verbas: p.verbas || null, tipo: p.tipoDoc || tipoDocAtual,
                  competencia: p.competencia, func_id: p.funcId, func_nome: p.nome, pagina: p.pagina,
                  valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null }
       })
@@ -3415,7 +3452,16 @@ function analiseVazia(a) {
 
 function irParaAno(ano) {
   const sel = document.getElementById('sel-ano-pgto')
-  if (sel && [...sel.options].some(o => o.value === String(ano))) sel.value = String(ano)
+  if (sel) {
+    // O seletor só nasce com o ano atual e os 3 anteriores. Um botão de 2022
+    // renderizava e não fazia nada — a opção precisa existir para ser escolhida.
+    if (![...sel.options].some(o => o.value === String(ano))) {
+      const opt = document.createElement('option')
+      opt.value = opt.textContent = String(ano)
+      sel.appendChild(opt)
+    }
+    sel.value = String(ano)
+  }
   carregarResumoPgto()
   carregarAnaliseFolha()
   gerarExtrato()
@@ -3475,6 +3521,8 @@ function analiseMeses(a) {
         <span class="af-mes-liq">R$ ${formatarValor(m.valor_liquido)}</span>
         ${m.verbas.length ? '<i class="ti ti-chevron-down af-seta"></i>' : ''}
       </button>
+      ${m.link ? `<a href="${esc(String(m.link))}" target="_blank" rel="noopener" class="af-doc"
+                    onclick="event.stopPropagation()"><i class="ti ti-file-text"></i> Ver o holerite</a>` : ''}
       ${detalhe}
     </div>`
   }).join('')
@@ -3545,11 +3593,18 @@ async function carregarHistoricoPagamentos() {
       <div class="lista-item-info">
         <div class="lista-item-nome">${compNorm}${valor?' · '+valor:''}</div>
         <div class="lista-item-sub">${p['DATA_GERACAO']||p['DATA_ASSINATURA']||''}</div>
-        ${p['COMPROVANTE_LINK']
-          ? `<a href="${p['COMPROVANTE_LINK']}" target="_blank" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px;margin-top:2px">
-               <i class="ti ti-receipt" style="font-size:10px"></i> Ver comprovante
-             </a>`
-          : ''}
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:2px">
+          ${p['LINK_HOLERITE']
+            ? `<a href="${esc(String(p['LINK_HOLERITE']))}" target="_blank" rel="noopener" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px">
+                 <i class="ti ti-file-text" style="font-size:10px"></i> Ver documento
+               </a>`
+            : ''}
+          ${p['COMPROVANTE_LINK']
+            ? `<a href="${p['COMPROVANTE_LINK']}" target="_blank" rel="noopener" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px">
+                 <i class="ti ti-receipt" style="font-size:10px"></i> Ver comprovante
+               </a>`
+            : ''}
+        </div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
         <span class="badge ${pago?'badge-verde':'badge-amarelo'}">${p['STATUS']||'—'}</span>
@@ -3721,13 +3776,17 @@ async function carregarNotifPendentes() {
         <span class="np-estado ${avisado ? 'avisado' : ''}">${avisado ? 'Avisado, aguardando pagamento' : 'Ainda não avisado'}</span>
       </div>
       <div class="np-acoes">
+        ${p['LINK_HOLERITE']
+          ? `<a href="${esc(String(p['LINK_HOLERITE']))}" target="_blank" rel="noopener" class="np-ver"
+               title="Ver o documento desta ordem"><i class="ti ti-file-text"></i> Ver</a>`
+          : ''}
         ${p['WA_LINK_EMPREGADOR']
           ? `<a href="${p['WA_LINK_EMPREGADOR']}" target="_blank" class="np-wa" title="${avisado ? 'Cobrar' : 'Avisar'} pelo WhatsApp">
                <i class="ti ti-brand-whatsapp"></i>
              </a>`
           : ''}
-        <button class="np-pago" onclick="marcarComoPago('${esc(String(p['ID']))}', '${esc(String(p['NOME_FUNC'] || ''))}')"
-                title="Marcar como pago">
+        <button class="np-pago" data-id="${esc(String(p['ID']))}" data-nome="${esc(String(p['NOME_FUNC'] || ''))}"
+                onclick="marcarComoPago(this.dataset.id, this.dataset.nome)" title="Marcar como pago">
           <i class="ti ti-check"></i> Pago
         </button>
       </div>

@@ -1181,3 +1181,18 @@ html { overflow-x: hidden; }
   border-radius: 8px; padding: 8px 12px; font-size: 11.5px; font-weight: 700;
   cursor: pointer; font-family: inherit; white-space: nowrap; flex: none;
 }
+.np-ver {
+  background: var(--card-bg); color: var(--blue-text);
+  border: 0.5px solid rgba(24,95,165,0.3); border-radius: 8px;
+  padding: 7px 10px; font-size: 11px; font-weight: 700;
+  text-decoration: none; display: flex; align-items: center; gap: 3px;
+  white-space: nowrap;
+}
+.np-ver:hover { background: var(--blue-bg); }
+.np-ver i { font-size: 12px; }
+.af-doc {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10.5px; color: var(--blue-text); text-decoration: none;
+  padding: 0 2px 8px;
+}
+.af-doc i { font-size: 12px; }
