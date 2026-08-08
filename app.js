@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260811'
+const APP_VERSION = '20260812'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -1954,6 +1954,7 @@ async function enviarPaginaAssinaturaPropria(idx, tipo) {
       pdf_base64:   p.pdfEnvio || p.pdfBase64,
       inclui_ponto: !!p.ponto,
       verbas:       p.verbas || null,
+      bases:        p.bases || null,
       tipo:         tipoDoc,
       competencia:  p.competencia,
       func_id:      p.funcId,
@@ -2481,6 +2482,9 @@ async function identificarFuncionariosAutomatico() {
       // nascia "não analisada" e a análise dependia de reler o PDF do Drive
       // depois — pagando a IA duas vezes pelo mesmo documento.
       if (Array.isArray(d.verbas) && d.verbas.length) paginasFracionadas[i].verbas = d.verbas
+      // Bases e FGTS do rodapé: é a única parcela de custo patronal que vem do
+      // próprio documento, em vez de depender de alíquota configurada.
+      if (d.bases && Object.keys(d.bases).length) paginasFracionadas[i].bases = d.bases
       if (d.ferias_inicio) paginasFracionadas[i].feriasInicio = d.ferias_inicio
       if (d.ferias_fim)    paginasFracionadas[i].feriasFim    = d.ferias_fim
 
@@ -2740,7 +2744,7 @@ async function enviarPaginaZapSign(idx) {
   const btn = document.getElementById('btn-zap-' + idx)
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>'
   mostrarLoading('Enviando para ' + p.nome.split(' ')[0] + '...')
-  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfEnvio || p.pdfBase64, inclui_ponto: !!p.ponto, verbas: p.verbas || null, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true, tipo: p.tipoDoc || tipoDocAtual, valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null } })
+  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfEnvio || p.pdfBase64, inclui_ponto: !!p.ponto, verbas: p.verbas || null, bases: p.bases || null, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true, tipo: p.tipoDoc || tipoDocAtual, valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null } })
   esconderLoading()
   if (res && res.ok) {
     paginasFracionadas[idx].status  = 'enviado'
@@ -2785,7 +2789,7 @@ async function enviarTodasPendentes(metodo) {
       mostrarLoading('Gerando link ' + (links.length + 1) + '/' + pendentes.length + ' — ' + p.nome.split(' ')[0])
       const res = await chamarGAS({
         acao: 'processar_pagina_proprio',
-        dados: { pdf_base64: p.pdfEnvio || p.pdfBase64, inclui_ponto: !!p.ponto, verbas: p.verbas || null, tipo: p.tipoDoc || tipoDocAtual,
+        dados: { pdf_base64: p.pdfEnvio || p.pdfBase64, inclui_ponto: !!p.ponto, verbas: p.verbas || null, bases: p.bases || null, tipo: p.tipoDoc || tipoDocAtual,
                  competencia: p.competencia, func_id: p.funcId, func_nome: p.nome, pagina: p.pagina,
                  valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null }
       })
@@ -3493,7 +3497,58 @@ function analiseResumo(a) {
       <div class="af-total destaque"><span>Líquido</span><strong>R$ ${formatarValor(a.total_liquido)}</strong></div>
     </div>
     ${proventos.length ? `<div class="af-secao">Proventos</div>${proventos.map(linha).join('')}` : ''}
-    ${descontos.length ? `<div class="af-secao">Descontos</div>${descontos.map(linha).join('')}` : ''}`
+    ${descontos.length ? `<div class="af-secao">Descontos</div>${descontos.map(linha).join('')}` : ''}
+    ${analiseBases(a)}`
+}
+
+// O rodapé do holerite traz base de INSS, base e valor do FGTS. É a única
+// parcela de CUSTO DO EMPREGADOR que vem do próprio documento — o resto
+// (INSS patronal, RAT, terceiros) depende de alíquota, que varia por
+// empregador e ainda não está configurada.
+const ROTULO_BASE = {
+  fgts_mes:          'FGTS do mês',
+  base_fgts:         'Base do FGTS',
+  base_inss:         'Base do INSS',
+  base_irrf:         'Base do IRRF',
+  salario_base:      'Salário contratual',
+  dias_trabalhados:  'Dias trabalhados',
+  horas_trabalhadas: 'Horas contratuais',
+}
+const BASE_EM_REAIS = ['fgts_mes', 'base_fgts', 'base_inss', 'base_irrf', 'salario_base']
+
+function analiseBases(a) {
+  const chaves = Object.keys(a.bases || {}).filter(k => ROTULO_BASE[k])
+  if (!chaves.length) return ''
+  const nMeses = a.meses.length
+
+  // Ordem fixa, do que é custo para o que é referência.
+  const ordem = ['fgts_mes', 'base_inss', 'base_fgts', 'base_irrf', 'salario_base',
+                 'dias_trabalhados', 'horas_trabalhadas']
+  const linhas = ordem.filter(k => chaves.includes(k)).map(k => {
+    const b = a.bases[k]
+    const emReais = BASE_EM_REAIS.includes(k)
+    // Um total sobre 3 de 12 meses não é o total do ano. Dizer sobre quantos
+    // meses ele foi somado é o que impede a leitura errada.
+    const parcial = b.meses < nMeses
+    return `
+      <div class="af-verba">
+        <div class="af-verba-topo">
+          <span class="af-verba-nome">${esc(ROTULO_BASE[k])}</span>
+          <span class="af-verba-valor">${emReais ? 'R$ ' + formatarValor(b.total) : formatarValor(b.total).replace(',00','')}</span>
+        </div>
+        <div class="af-verba-sub">
+          ${b.meses} de ${nMeses} ${nMeses === 1 ? 'mês' : 'meses'}
+          ${parcial ? '· <span class="af-parcial">soma parcial</span>' : ''}
+        </div>
+      </div>`
+  }).join('')
+
+  return `
+    <div class="af-secao">Do rodapé do holerite</div>
+    <p class="af-nota">Custo do empregador que o próprio documento informa.
+      O INSS patronal e os demais encargos dependem de alíquota por empregador,
+      que ainda não está configurada.</p>
+    ${linhas}`
 }
 
 function analiseMeses(a) {
