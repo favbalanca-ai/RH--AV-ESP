@@ -1167,6 +1167,15 @@ var PROMPT_HOLERITE = 'Analise este documento brasileiro (holerite/folha/ferias)
   +   'tipo ("provento" para o que soma ao salario, "desconto" para o que subtrai — INSS, IRRF, vale, adiantamento e faltas sao desconto)). '
   + 'Se for documento de ponto ou EPI, verbas deve ser lista vazia. '
   + 'NAO invente linhas: liste so o que estiver impresso. '
+  // A folha da Domínio imprime o MESMO recibo duas vezes na página (via do
+  // funcionário e via da empresa). Sem este aviso a IA lista cada verba duas
+  // vezes e todo provento dobra — silenciosamente, porque o total impresso
+  // continua certo e ninguém confere as linhas uma a uma.
+  + 'ATENCAO: muitas folhas imprimem o MESMO recibo DUAS VEZES na mesma pagina '
+  + '(uma via do funcionario e uma via da empresa, identicas). Se as duas '
+  + 'metades da pagina tiverem o mesmo funcionario e os mesmos valores, extraia '
+  + 'UMA vez so: nao repita as verbas nem some os dois blocos. '
+  + 'Se as duas metades forem de funcionarios DIFERENTES, extraia a primeira. '
   + 'ferias_inicio e ferias_fim (SE for documento de ferias, as datas de inicio e fim do periodo de gozo no formato YYYY-MM-DD; caso contrario null). '
   + 'Retorne APENAS o JSON sem nenhum texto antes ou depois. '
   + 'Exemplo: {"nome_funcionario":"Joao Silva","codigo_funcionario":"27","tipo_documento":"Folha","competencia":"Julho/2026",'
@@ -1212,10 +1221,11 @@ function identificarDocumentoComIA(dados) {
   var funcionarios = lerAbaComoObjetos(CONFIG.ABAS.FUNCIONARIOS)
   var func = null
 
-  if (resultado.codigo_funcionario) {
-    var cod = parseInt(resultado.codigo_funcionario)
-    func = funcionarios.find(function(f) { return parseInt(f['ID']) === cod })
-  }
+  // A matrícula impressa é o número DO SISTEMA DE FOLHA do contador, não o ID
+  // deste app. Casar um pelo outro atribui o holerite à pessoa errada em
+  // silêncio — e daí sai ordem de pagamento e WhatsApp para quem não é.
+  // O nome é a chave; a matrícula só confirma o que o nome já disse.
+  var codDoc = parseInt(resultado.codigo_funcionario)
 
   // O empregador (produtor) que consta no documento é a 2ª chave: cada
   // funcionário pertence a um produtor, então ele desempata homônimos e
@@ -1228,7 +1238,7 @@ function identificarDocumentoComIA(dados) {
     if (comMesmoEmpregador.length) doDocumento = comMesmoEmpregador
   }
 
-  if (!func && resultado.nome_funcionario) {
+  if (resultado.nome_funcionario) {
     // 1) Casamento preciso por 2+ partes do nome — evita pegar o empregador
     //    (comum em avisos/recibos de férias, onde a razão social aparece em destaque).
     //    Busca primeiro entre os do mesmo produtor.
@@ -1250,6 +1260,12 @@ function identificarDocumentoComIA(dados) {
     }
   }
 
+  // A matrícula concordar com o ID é coincidência boa, não prova; discordar
+  // não derruba nada, porque a numeração do contador não tem por que bater
+  // com a nossa.
+  var matriculaConfere = null
+  if (func && codDoc) matriculaConfere = parseInt(func['ID']) === codDoc
+
   // Confere: o produtor do documento bate com o cadastrado para esse funcionário?
   // Divergência não descarta o casamento, mas derruba a confiança para o app
   // pedir confirmação em vez de aceitar calado.
@@ -1267,6 +1283,8 @@ function identificarDocumentoComIA(dados) {
     competencia:    resultado.competencia        || '',
     empregador:     resultado.empregador         || '',
     empregador_confere: confereEmpregador,
+    matricula_documento: resultado.codigo_funcionario || '',
+    matricula_confere:   matriculaConfere,
     // A IA às vezes devolve "R$ 3.565,07" apesar do pedido de decimal puro.
     // Normaliza aqui: o app e a planilha só veem número.
     valor_liquido:  valorNumerico(resultado.valor_liquido) || null,
