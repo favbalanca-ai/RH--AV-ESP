@@ -1022,6 +1022,16 @@ function chamarIA(pdfBase64, prompt) {
       529: 'A Anthropic está sobrecarregada agora. Tente de novo em alguns minutos.',
     }[http]
     if (!explica && http >= 500) explica = 'A Anthropic devolveu erro ' + http + '. Tente de novo.'
+
+    // Saldo zerado chega como 400 — o mesmo código de um pedido malformado.
+    // São problemas opostos: um se resolve comprando crédito, o outro
+    // mexendo no código. Sem separar, o usuário procura defeito onde não há.
+    if (http === 400 && /credit balance|too low|billing/i.test(msg)) {
+      return { ok: false, etapa: 'saldo', http: http, erro:
+        'A conta da Anthropic está sem crédito. O app está funcionando — é só ' +
+        'recarregar em console.anthropic.com → Plans & Billing e tentar de novo.' }
+    }
+
     return { ok: false, etapa: 'http', http: http, erro: (explica || 'Erro ' + http) + ' (' + msg + ')' }
   }
 
