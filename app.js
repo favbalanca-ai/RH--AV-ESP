@@ -1103,24 +1103,57 @@ async function carregarErrosBackend() {
   renderListaErros(el, lista, 'Nenhum erro no servidor')
 }
 
-async function chamarGAS(dados, { timeoutMs = 120000 } = {}) {
-  const ctrl  = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
-  try {
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({ ...dados, usuario: dados.usuario || USUARIO, senha: dados.senha || SENHA_ADM }),
-      signal: ctrl.signal,
-    })
-    if (!res.ok) { registrarErroLocal('HTTP', 'HTTP ' + res.status, dados.acao || ''); return { ok: false, erro: 'Erro HTTP ' + res.status } }
-    return await res.json()
-  } catch(e) {
-    if (e.name === 'AbortError') { registrarErroLocal('Timeout', 'Tempo esgotado na requisição', dados.acao || ''); return { ok: false, erro: 'Tempo esgotado. Verifique sua conexão e tente novamente.' } }
-    registrarErroLocal('Conexão', e.message, dados.acao || '')
-    return { ok: false, erro: 'Erro de conexão: ' + e.message }
-  } finally {
-    clearTimeout(timer)
+// Ações que só LEEM. São as únicas que podem ser repetidas em caso de falha
+// de rede: repetir um envio criaria dois documentos no ZapSign, duas ordens
+// de pagamento, dois registros. Prefixo, não lista fechada, para não
+// esquecer de incluir as próximas.
+const ACOES_SEGURAS = /^(listar_|historico_|resumo_|buscar_|identificar_|verificar_|relatorio_)/
+
+function podeRepetir(acao) {
+  return ACOES_SEGURAS.test(String(acao || ''))
+}
+
+async function chamarGAS(dados, { timeoutMs = 120000, tentativas } = {}) {
+  const acao = dados.acao || ''
+  // Falha de rede num POST é comum e passageira (queda de sinal, conexão
+  // derrubada no meio). Tentar de novo poupa o usuário de um erro que se
+  // resolveria sozinho — mas só quando repetir é inofensivo.
+  const max = tentativas != null ? tentativas : (podeRepetir(acao) ? 3 : 1)
+  let ultimo = null
+
+  for (let n = 1; n <= max; n++) {
+    const ctrl  = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+    try {
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({ ...dados, usuario: dados.usuario || USUARIO, senha: dados.senha || SENHA_ADM }),
+        signal: ctrl.signal,
+      })
+      if (!res.ok) {
+        registrarErroLocal('HTTP', 'HTTP ' + res.status, acao)
+        return { ok: false, erro: 'Erro HTTP ' + res.status }
+      }
+      return await res.json()
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        registrarErroLocal('Timeout', 'Tempo esgotado na requisição', acao)
+        return { ok: false, erro: 'Tempo esgotado. Verifique sua conexão e tente novamente.' }
+      }
+      ultimo = e
+      if (n < max) {
+        // Espera crescente: se foi um soluço, 400 ms bastam; se a rede caiu,
+        // insistir de imediato só gasta bateria.
+        await new Promise(r => setTimeout(r, n * 400))
+      }
+    } finally {
+      clearTimeout(timer)
+    }
   }
+
+  const msg = ultimo ? ultimo.message : 'falha desconhecida'
+  registrarErroLocal('Conexão', msg + (max > 1 ? ` (${max} tentativas)` : ''), acao)
+  return { ok: false, erro: 'Erro de conexão: ' + msg }
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────
