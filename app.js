@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260814'
+const APP_VERSION = '20260815'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -2462,13 +2462,20 @@ async function identificarFuncionariosAutomatico() {
 
   const promessas = paginasFracionadas.map((p, i) =>
     chamarGAS({ acao: 'identificar_com_ia', dados: { pdf_base64: p.pdfBase64 } })
-      .catch(() => null)
+      .catch(e => ({ ok: false, erro: e && e.message ? e.message : 'falha de rede' }))
   )
+
+  // Engolir o erro fazia toda falha de leitura virar "selecione manualmente",
+  // fosse chave errada, limite da Anthropic ou resposta cortada. O primeiro
+  // motivo real é o que o usuário precisa ver.
+  let motivoFalha = ''
 
   for (let i = 0; i < promessas.length; i++) {
     const res = await promessas[i]
     let func = null
     let tipoIA = '', compIA = ''
+
+    if (res && !res.ok && !motivoFalha) motivoFalha = res.erro || 'erro sem descrição'
 
     if (res && res.ok && res.data) {
       const d = res.data
@@ -2531,10 +2538,30 @@ async function identificarFuncionariosAutomatico() {
 
   if (paginasPonto.length) await identificarPonto()
 
+  if (!identificados && motivoFalha) {
+    toast('❌ A leitura falhou: ' + motivoFalha, 'erro')
+    mostrarFalhaLeitura(motivoFalha)
+    return
+  }
   toast(identificados === paginasFracionadas.length
     ? '🤖 IA identificou todos os ' + identificados + ' funcionários!'
     : '🤖 ' + identificados + ' identificados · ' + (paginasFracionadas.length - identificados) + ' selecione manualmente',
     identificados > 0 ? 'sucesso' : '')
+  if (motivoFalha) mostrarFalhaLeitura(motivoFalha)
+}
+
+// Um aviso que fica na tela: o toast some em três segundos e o usuário
+// perde a única explicação que tinha.
+function mostrarFalhaLeitura(motivo) {
+  const el = document.getElementById('aviso-leitura')
+  if (!el) return
+  el.style.display = 'block'
+  el.innerHTML = `
+    <strong>Não consegui ler o PDF.</strong>
+    <p>${esc(motivo)}</p>
+    <p>Você pode preencher tudo à mão abaixo, ou
+      <a href="#" onclick="irPara('diagnostico');return false">abrir o Diagnóstico</a>
+      e usar <strong>Testar leitura de um PDF</strong> para ver em que etapa parou.</p>`
 }
 
 // ── Ponto na mesma assinatura ─────────────────────────────────────
@@ -4301,4 +4328,89 @@ async function salvarAliquotas() {
   // mostrando número calculado com a alíquota antiga.
   await carregarCusto()
   verCusto('resumo')
+}
+
+// ─── Testar a leitura do PDF pela IA ──────────────────────────────
+// A identificação falha em quatro lugares diferentes — chave, modelo,
+// resposta cortada, nome que não bate com o cadastro — e todos apareciam
+// como "selecione manualmente". Este teste diz qual deles foi.
+async function testarLeituraIA(comPdf) {
+  const caixa = document.getElementById('diag-ia-res')
+  if (!caixa) return
+  let pdf = ''
+
+  if (comPdf) {
+    const arq = document.getElementById('diag-pdf')?.files?.[0]
+    if (!arq) return toast('Escolha um PDF primeiro', 'erro')
+    caixa.innerHTML = '<div class="af-nota">Lendo o arquivo…</div>'
+    try {
+      pdf = await new Promise((ok, falha) => {
+        const r = new FileReader()
+        r.onload = () => ok(String(r.result).split(',')[1] || '')
+        r.onerror = () => falha(new Error('não consegui ler o arquivo'))
+        r.readAsDataURL(arq)
+      })
+    } catch (e) {
+      caixa.innerHTML = `<div class="cst-aviso"><p>${esc(e.message)}</p></div>`
+      return
+    }
+  }
+
+  caixa.innerHTML = '<div class="af-nota">Perguntando à IA… pode levar até um minuto.</div>'
+  const res = await chamarGAS({ acao: 'diagnosticar_ia', dados: { pdf_base64: pdf } })
+  if (!res || !res.ok) {
+    caixa.innerHTML = `<div class="cst-aviso"><p>O servidor não respondeu:
+      ${esc((res && res.erro) || 'sem resposta')}</p></div>`
+    return
+  }
+  caixa.innerHTML = renderDiagIA(res.data)
+}
+
+const ETAPA_IA = {
+  chave:   ['A chave não está configurada', 'Propriedades do script → ANTHROPIC_KEY'],
+  rede:    ['O Apps Script não alcançou a Anthropic', 'Rede ou autorização do script'],
+  http:    ['A Anthropic recusou a chamada', 'Veja a mensagem abaixo'],
+  vazio:   ['A IA respondeu sem conteúdo', 'Tente outro PDF'],
+  cortado: ['A resposta foi cortada', 'O holerite tem muitas linhas para o limite atual'],
+  json:    ['A IA respondeu, mas não em JSON', 'Veja o começo da resposta abaixo'],
+  ok:      ['Leitura funcionou', ''],
+}
+
+function renderDiagIA(d) {
+  const [titulo, dica] = ETAPA_IA[d.etapa] || ['Resultado', '']
+  const bom = d.etapa === 'ok' && !d.erro
+  const linha = (rot, val) => val === '' || val == null ? '' :
+    `<div class="cst-linha"><span>${rot}</span><strong>${esc(String(val))}</strong></div>`
+
+  const lido = d.lido ? `
+    <div class="cst-secao">O que a IA leu</div>
+    ${linha('Funcionário', d.lido.nome_funcionario)}
+    ${linha('Competência', d.lido.competencia)}
+    ${linha('Tipo', d.lido.tipo_documento)}
+    ${linha('Empregador', d.lido.empregador)}
+    ${linha('Valor líquido', d.lido.valor_liquido != null ? 'R$ ' + formatarValor(d.lido.valor_liquido) : '—')}
+    ${linha('Verbas', d.lido.qtd_verbas)}
+    ${linha('Rodapé (bases)', d.lido.tem_bases ? 'sim' : 'não veio')}
+    ${linha('Cabeçalho (parâmetros)', d.lido.tem_parametros ? 'sim' : 'não veio')}
+    ${linha('Casou com o cadastro', d.casou_no_cadastro ? 'sim — ' + d.func_encontrado : 'NÃO')}` : ''
+
+  return `
+    <div class="${bom ? 'cst-escada' : 'cst-aviso'}">
+      <p><strong>${bom ? '✅ ' : '❌ '}${titulo}</strong></p>
+      ${d.erro ? `<p>${esc(d.erro)}</p>` : ''}
+      ${dica && !bom ? `<p>${esc(dica)}</p>` : ''}
+    </div>
+    <div class="cst-secao">Configuração</div>
+    ${linha('Versão do servidor', d.versao_backend)}
+    ${linha('Modelo', d.modelo)}
+    ${linha('Limite de resposta', d.max_tokens + ' tokens')}
+    ${linha('Chave configurada', d.chave_configurada ? `sim (${d.chave_tamanho} caracteres, começa com ${d.chave_comeco})` : 'NÃO')}
+    ${d.http ? linha('Resposta HTTP', d.http) : ''}
+    ${d.stop_reason ? linha('Motivo da parada', d.stop_reason) : ''}
+    ${d.tamanho_resposta ? linha('Tamanho da resposta', d.tamanho_resposta + ' caracteres') : ''}
+    ${d.usage ? linha('Tokens', `${d.usage.input_tokens || 0} lidos · ${d.usage.output_tokens || 0} escritos`) : ''}
+    ${lido}
+    ${d.inicio_resposta ? `
+      <div class="cst-secao">Começo da resposta</div>
+      <pre style="font-size:10.5px;white-space:pre-wrap;word-break:break-word;background:var(--surface);border-radius:8px;padding:8px">${esc(d.inicio_resposta)}</pre>` : ''}`
 }
