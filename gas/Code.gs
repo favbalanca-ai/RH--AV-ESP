@@ -42,6 +42,16 @@ const CONFIG = {
 }
 
 function doPost(e) {
+  // Rodar doPost pelo botão Executar do editor chega aqui com 'e' indefinido —
+  // é o caminho usual para autorizar os escopos do script. Sem esta guarda o
+  // clique virava "ERRO · SISTEMA: Cannot read properties of undefined" no log,
+  // indistinguível de uma requisição do app que falhou de verdade.
+  if (!e || !e.postData || !e.postData.contents) {
+    return respErro('Este endereço espera uma requisição POST com JSON. ' +
+      'Se você chegou aqui pelo botão Executar do editor, está tudo certo: ' +
+      'os escopos foram autorizados e não há nada a corrigir.', 400)
+  }
+
   try {
     const body = JSON.parse(e.postData.contents)
     const acao = body.acao
@@ -113,9 +123,16 @@ function doPost(e) {
 }
 
 function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({ ok: true, msg: 'SST API ativa' }))
-    .setMimeType(ContentService.MimeType.JSON)
+  // Abrir a URL /exec no navegador cai aqui. É o teste rápido de que a
+  // implantação está no ar e pública — por isso responde sem exigir nada.
+  return ContentService.createTextOutput(JSON.stringify({
+    ok: true, msg: 'SST API ativa', versao: VERSAO_BACKEND,
+  })).setMimeType(ContentService.MimeType.JSON)
 }
+
+// Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
+// é como se confere que o deploy realmente pegou, sem depender de sintoma.
+var VERSAO_BACKEND = '20260813'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -429,6 +446,7 @@ function enviarFolha(dados, usuario) {
     'TIPO':           dados.tipo || 'Folha',
     'VERBAS':         verbasParaCelula(normalizarVerbas(dados.verbas)),
     'BASES':          basesParaCelula(normalizarBases(dados.bases)),
+    'PARAMETROS':     parametrosParaCelula(normalizarParametros(dados.parametros)),
   })
   try { salvarPdfNoDrive(dados.func_id, func['NOME_COMPLETO'], 'FOLHA_PAGAMENTO', nomeDoc + '_PENDENTE.pdf', pdf) }
   catch(e) { logAcao(usuario, 'ERRO_DRIVE', e.message) }
@@ -877,6 +895,7 @@ function processarPaginaFolha(dados, usuario) {
     'TIPO':              tipo,
     'VERBAS':            verbasParaCelula(normalizarVerbas(dados.verbas)),
     'BASES':             basesParaCelula(normalizarBases(dados.bases)),
+    'PARAMETROS':        parametrosParaCelula(normalizarParametros(dados.parametros)),
   })
   if (tipo === 'Ferias' && zapToken) registrarFeriasPendente(func['ID'], func['NOME_COMPLETO'], dados.ferias_inicio, dados.ferias_fim, comp, zapToken)
   logAcao(usuario, 'FOLHA_INDIVIDUAL', 'Func ' + func['ID'] + ' | ' + comp)
@@ -960,8 +979,21 @@ function identificarDocumentoComIA(dados) {
     +   'base_irrf (base de calculo do IRRF), '
     +   'salario_base (o salario contratual impresso no cabecalho, nao o total de proventos), '
     +   'dias_trabalhados (numero de dias do mes considerados), '
-    +   'horas_trabalhadas (carga horaria do mes, se impressa). '
+    +   'horas_trabalhadas (carga horaria do mes, se impressa), '
+    +   'faixa_irrf (a aliquota da faixa de IRRF impressa, ex: 27.50). '
     +   'TODOS como numero decimal, e null quando o campo nao existir no documento — nao calcule nem estime nenhum deles), '
+    // O cabeçalho identifica de quem é a folha e QUE folha é. Sem tipo_folha,
+    // um holerite de 13º entra na média mensal como se fosse mês comum.
+    + 'parametros (o CABECALHO do documento, como TEXTO, null se ausente: '
+    +   'cei_cnpj (CEI, CNPJ ou matricula do EMPREGADOR impressa no topo), '
+    +   'centro_custo (o campo CC / Centro de Custo / Setor), '
+    +   'cbo (o codigo CBO da funcao), '
+    +   'departamento, filial, '
+    +   'matricula (o codigo/numero DO FUNCIONARIO nesta folha), '
+    +   'admissao (data de admissao no formato DD/MM/AAAA), '
+    +   'categoria (Mensalista, Horista, Diarista, Safrista — como impresso), '
+    +   'tipo_folha (o tipo do calculo: "Mensal", "13o Salario", "Ferias", "Rescisao", '
+    +   '"Adiantamento" ou "Complementar" — deduza do titulo do documento, ex: "Folha Mensal" -> "Mensal")), '
     + 'verbas (LISTA de TODAS as linhas de provento e desconto da tabela do holerite, na ordem em que aparecem, cada uma com: '
     +   'codigo (o codigo/rubrica da linha, string, null se nao houver), '
     +   'descricao (o texto exatamente como impresso, ex: "HORAS EXTRAS 50%", "ADICIONAL PERICULOSIDADE"), '
@@ -975,7 +1007,10 @@ function identificarDocumentoComIA(dados) {
     + 'Exemplo: {"nome_funcionario":"Joao Silva","codigo_funcionario":"27","tipo_documento":"Folha","competencia":"Julho/2026",'
     + '"empregador":"Fazenda","valor_liquido":3565.07,"total_proventos":4200.00,"total_descontos":634.93,'
     + '"bases":{"base_inss":4200.00,"base_fgts":4200.00,"fgts_mes":336.00,"base_irrf":3822.00,'
-    + '"salario_base":2500.00,"dias_trabalhados":30,"horas_trabalhadas":220},'
+    + '"salario_base":2500.00,"dias_trabalhados":30,"horas_trabalhadas":220,"faixa_irrf":27.50},'
+    + '"parametros":{"cei_cnpj":"800007697386","centro_custo":"GERAL","cbo":"641010",'
+    + '"departamento":"1","filial":"1","matricula":"8","admissao":"22/03/2022",'
+    + '"categoria":"Mensalista","tipo_folha":"Mensal"},'
     + '"verbas":[{"codigo":"001","descricao":"SALARIO BASE","referencia":"30,00","valor":2500.00,"tipo":"provento"},'
     + '{"codigo":"102","descricao":"HORAS EXTRAS 50%","referencia":"12,50","valor":425.30,"tipo":"provento"},'
     + '{"codigo":"110","descricao":"ADICIONAL PERICULOSIDADE","referencia":"30%","valor":750.00,"tipo":"provento"},'
@@ -1093,6 +1128,7 @@ function identificarDocumentoComIA(dados) {
     total_descontos: valorNumerico(resultado.total_descontos) || null,
     verbas:         normalizarVerbas(resultado.verbas),
     bases:          normalizarBases(resultado.bases),
+    parametros:     normalizarParametros(resultado.parametros),
     ferias_inicio:  resultado.ferias_inicio      || null,
     ferias_fim:     resultado.ferias_fim         || null,
     ia_confianca:   !func ? 'baixo' : (confereEmpregador === false ? 'medio' : 'alto'),
@@ -2331,7 +2367,7 @@ function adicionarColunasFuncionarios() {
 var COLUNAS_FOLHA = ['ID FUNC.', 'FUNCIONÁRIO', 'COMPETÊNCIA', 'DATA ENVIO',
                      'STATUS', 'DATA ASSINATURA', 'ZAPSIGN_DOC',
                      'LINK PDF ORIGINAL', 'LINK DOC ASSINADO', 'OBSERVAÇÕES',
-                     'VALOR_LIQUIDO', 'TIPO', 'VERBAS', 'BASES']
+                     'VALOR_LIQUIDO', 'TIPO', 'VERBAS', 'BASES', 'PARAMETROS']
 
 // Só estas duas são CRIADAS quando faltam. As outras dez o app já lê por nome
 // e sempre estiveram na aba; mexer nelas arriscaria duplicar uma coluna numa
@@ -2373,6 +2409,7 @@ function garantirColunasFolha() {
     'VALOR_LIQUIDO': function (v) { return valorNumerico(v) !== '' },
     'VERBAS': null,
     'BASES': null,
+    'PARAMETROS': null,
   }
 
   Object.keys(orfaDe).forEach(function (nome) {
@@ -2476,10 +2513,29 @@ function semAcento(s) {
 
 function categoriaVerba(descricao) {
   var d = semAcento(descricao)
+  // O holerite abrevia com ponto: "I.N.S.S", "D.S.R.", "F.G.T.S". O \b da
+  // expressão não casa com isso, e a linha caía em OUTROS — INSS deixava de
+  // ser reconhecido como desconto justamente no holerite de verdade.
+  d = d.replace(/\b(?:[A-Z]\.){2,}[A-Z]?/g, function (sigla) {
+    return sigla.replace(/\./g, '')
+  })
   for (var i = 0; i < CATEGORIAS_VERBA.length; i++) {
     if (CATEGORIAS_VERBA[i].padrao.test(d)) return CATEGORIAS_VERBA[i].cat
   }
   return 'OUTROS'
+}
+
+// A coluna de referência mistura naturezas: dias (31,00), percentual (30,00)
+// e HORAS no formato HH:MM (67:23 = 67h23min). Só o formato com dois-pontos é
+// inequívoco, e é justamente o das horas extras.
+//
+// Ler "67:23" como decimal daria 67,23 — nove minutos a menos por linha, erro
+// que se acumula no ano inteiro. Por isso converte só o que tem ':' e deixa o
+// resto de fora: melhor não somar do que somar errado.
+function horasDaReferencia(ref) {
+  var m = String(ref || '').trim().match(/^(\d{1,4}):([0-5]\d)$/)
+  if (!m) return null
+  return Math.round((parseInt(m[1], 10) + parseInt(m[2], 10) / 60) * 100) / 100
 }
 
 function rotuloCategoria(cat) {
@@ -2504,14 +2560,17 @@ function normalizarVerbas(lista) {
     var cat  = categoriaVerba(desc)
     var tipo = String(v.tipo || '').toLowerCase() === 'desconto' ? 'desconto' : 'provento'
     if (CATS_DESCONTO.indexOf(cat) !== -1) tipo = 'desconto'
-    saida.push({
+    var item = {
       codigo:    v.codigo ? String(v.codigo).trim() : '',
       descricao: desc,
       referencia: v.referencia ? String(v.referencia).trim() : '',
       valor:     Math.abs(valor),
       tipo:      tipo,
       categoria: cat,
-    })
+    }
+    var horas = horasDaReferencia(item.referencia)
+    if (horas !== null) item.horas = horas
+    saida.push(item)
   }
   return saida
 }
@@ -2520,7 +2579,7 @@ function normalizarVerbas(lista) {
 // custo patronal que vêm do próprio documento — o resto depende de alíquota
 // configurada. Campo ausente fica ausente: não se inventa base.
 var CAMPOS_BASE = ['base_inss', 'base_fgts', 'fgts_mes', 'base_irrf',
-                   'salario_base', 'dias_trabalhados', 'horas_trabalhadas']
+                   'salario_base', 'dias_trabalhados', 'horas_trabalhadas', 'faixa_irrf']
 
 function normalizarBases(obj) {
   if (!obj) return null
@@ -2530,6 +2589,33 @@ function normalizarBases(obj) {
     if (n !== '' && n > 0) { saida[k] = n; achou = true }
   })
   return achou ? saida : null
+}
+
+// Identificação e classificação do documento. Texto, não número — e o que
+// mais importa aqui é o tipo_folha: sem ele, um holerite de 13º entra na
+// média mensal como se fosse um mês comum e distorce todo o custo.
+var CAMPOS_PARAM = ['cei_cnpj', 'centro_custo', 'cbo', 'departamento', 'filial',
+                    'matricula', 'admissao', 'categoria', 'tipo_folha']
+
+function normalizarParametros(obj) {
+  if (!obj) return null
+  var saida = {}, achou = false
+  CAMPOS_PARAM.forEach(function (k) {
+    var v = String(obj[k] == null ? '' : obj[k]).trim()
+    if (v && v.toLowerCase() !== 'null') { saida[k] = v; achou = true }
+  })
+  return achou ? saida : null
+}
+
+function parametrosParaCelula(p) { return p ? JSON.stringify(p) : '' }
+
+function parametrosDaCelula(texto) {
+  var t = String(texto || '').trim()
+  if (!t) return null
+  try {
+    var p = JSON.parse(t)
+    return p && Object.keys(p).length ? p : null
+  } catch (e) { return null }
 }
 
 function basesParaCelula(bases) {
@@ -2595,6 +2681,7 @@ function historicoFolha(dados) {
     // nada. Só a primeira merece o convite para reanalisar.
     var naoAnalisado = !String(f['VERBAS'] || '').trim()
     var bases  = basesDaCelula(f['BASES'])
+    var param  = parametrosDaCelula(f['PARAMETROS'])
     var ordem  = ordemCompetencia(comp)
 
     var proventos = 0, descontos = 0
@@ -2602,8 +2689,10 @@ function historicoFolha(dados) {
       if (v.tipo === 'desconto') descontos += v.valor
       else proventos += v.valor
       var c = v.categoria || 'OUTROS'
-      if (!porCat[c]) porCat[c] = { categoria: c, rotulo: rotuloCategoria(c), tipo: v.tipo, total: 0, meses: 0 }
+      if (!porCat[c]) porCat[c] = { categoria: c, rotulo: rotuloCategoria(c), tipo: v.tipo,
+                                    total: 0, meses: 0, horas: 0 }
       porCat[c].total += v.valor
+      if (v.horas) porCat[c].horas += v.horas
     })
 
     meses.push({
@@ -2618,6 +2707,10 @@ function historicoFolha(dados) {
       link:          String(f['LINK DOC ASSINADO'] || f['LINK PDF ORIGINAL'] || ''),
       verbas:        verbas,
       bases:         bases,
+      parametros:    param,
+      // "Mensal" é o padrão: folha antiga, extraída antes deste campo existir,
+      // é mês comum até prova em contrário.
+      tipo_folha:    param && param.tipo_folha ? param.tipo_folha : 'Mensal',
       sem_verbas:    naoAnalisado,
     })
   })
@@ -2629,6 +2722,22 @@ function historicoFolha(dados) {
       return m.verbas.some(function (v) { return (v.categoria || 'OUTROS') === c })
     }).length
     porCat[c].total = Math.round(porCat[c].total * 100) / 100
+    porCat[c].horas = Math.round(porCat[c].horas * 100) / 100
+  })
+
+  // Quantos meses de cada tipo. Um 13º somado à média mensal como se fosse
+  // mês comum inflaria o custo médio de forma invisível.
+  var porTipoFolha = {}
+  meses.forEach(function (m) {
+    porTipoFolha[m.tipo_folha] = (porTipoFolha[m.tipo_folha] || 0) + 1
+  })
+
+  // Centro de custo é a dimensão de EQUIPE que vem do próprio documento —
+  // mais confiável que a UNIDADE do cadastro, que pode estar desatualizada.
+  var centros = {}
+  meses.forEach(function (m) {
+    var cc = m.parametros && m.parametros.centro_custo
+    if (cc) centros[cc] = (centros[cc] || 0) + 1
   })
 
   var categorias = Object.keys(porCat).map(function (c) { return porCat[c] })
@@ -2660,6 +2769,12 @@ function historicoFolha(dados) {
     meses:      meses,
     categorias: categorias,
     bases:      somaBases,
+    tipos_folha: porTipoFolha,
+    centros_custo: Object.keys(centros),
+    // Só as horas que vieram em HH:MM — as demais referências (dias,
+    // percentual) não são horas e ficam de fora de propósito.
+    horas_por_categoria: categorias.filter(function (c) { return c.horas > 0 })
+      .map(function (c) { return { categoria: c.categoria, rotulo: c.rotulo, horas: c.horas } }),
     meses_com_base: meses.filter(function (m) { return !!m.bases }).length,
     total_liquido:   Math.round(meses.reduce(function (s, m) { return s + m.valor_liquido }, 0) * 100) / 100,
     total_proventos: Math.round(meses.reduce(function (s, m) { return s + m.proventos }, 0) * 100) / 100,
@@ -3155,6 +3270,7 @@ function reanalisarFolhas(dados, usuario) {
   var iVerb = hdrs.indexOf('VERBAS')
   var iVal  = hdrs.indexOf('VALOR_LIQUIDO')
   var iBase = hdrs.indexOf('BASES')
+  var iParam = hdrs.indexOf('PARAMETROS')
   var iOrig = hdrs.indexOf('LINK PDF ORIGINAL')
   var iAss  = hdrs.indexOf('LINK DOC ASSINADO')
 
@@ -3187,6 +3303,8 @@ function reanalisarFolhas(dados, usuario) {
         .setValue(verbas.length ? verbasParaCelula(verbas) : '[]')
       var bases = normalizarBases(r.bases)
       if (iBase >= 0 && bases) sheet.getRange(lote[j].linha, iBase + 1).setValue(basesParaCelula(bases))
+      var param = normalizarParametros(r.parametros)
+      if (iParam >= 0 && param) sheet.getRange(lote[j].linha, iParam + 1).setValue(parametrosParaCelula(param))
       // não sobrescreve um líquido que já estava lá
       if (iVal >= 0 && !String(vals[lote[j].linha - 1][iVal] || '').trim() && r.valor_liquido) {
         sheet.getRange(lote[j].linha, iVal + 1).setValue(valorNumerico(r.valor_liquido))

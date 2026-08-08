@@ -1201,3 +1201,8 @@ html { overflow-x: hidden; }
   margin: -4px 0 10px;
 }
 .af-parcial { color: var(--amber-text); font-weight: 700; }
+.af-tipo {
+  font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 5px;
+  background: var(--purple-bg); color: var(--purple-text);
+  vertical-align: 1px; margin-left: 4px;
+}
