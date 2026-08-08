@@ -4370,6 +4370,8 @@ const ETAPA_IA = {
   chave:   ['A chave não está configurada', 'Propriedades do script → ANTHROPIC_KEY'],
   rede:    ['O Apps Script não alcançou a Anthropic', 'Rede ou autorização do script'],
   http:    ['A Anthropic recusou a chamada', 'Veja a mensagem abaixo'],
+  saldo:   ['A conta da Anthropic está sem crédito',
+            'Não é defeito do app — recarregue em console.anthropic.com → Plans & Billing'],
   vazio:   ['A IA respondeu sem conteúdo', 'Tente outro PDF'],
   cortado: ['A resposta foi cortada', 'O holerite tem muitas linhas para o limite atual'],
   json:    ['A IA respondeu, mas não em JSON', 'Veja o começo da resposta abaixo'],
