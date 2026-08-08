@@ -999,6 +999,11 @@ function renderListaErros(el, lista, vazio) {
       <div class="log-meta">${esc(e.quando || '')}</div>
     </div>`).join('')
 }
+function idImplantacao() {
+  const m = String(GAS_URL).match(/\/macros\/s\/([^/]+)\//)
+  return m ? m[1] : '—'
+}
+
 function renderDiagnostico() {
   const st = document.getElementById('diag-status')
   if (st) {
@@ -1007,25 +1012,86 @@ function renderDiagnostico() {
     st.innerHTML =
       diagRow('Conexão', `<span class="badge ${online ? 'badge-verde' : 'badge-vermelho'}">${online ? 'Online' : 'Offline'}</span>`) +
       diagRow('Backend', `<span style="font-size:11px;color:var(--text-secondary)">${esc(host)}</span>`) +
+      // O ID identifica a IMPLANTAÇÃO. Criar uma nova em vez de editar a
+      // existente gera outra URL, e o app fica falando com a antiga.
+      diagRow('Implantação', `<span style="font-size:10px;color:var(--text-secondary);font-family:ui-monospace,Menlo,monospace;word-break:break-all">${esc(idImplantacao())}</span>`) +
       diagRow('Usuário', `<span style="font-size:11px;color:var(--text-secondary)">${esc(USUARIO || '—')}</span>`)
   }
   const elL = document.getElementById('diag-erros-locais')
   if (elL) renderListaErros(elL, lerErrosLocais(), 'Nenhum erro registrado no app 🎉')
   carregarErrosBackend()
 }
+// "Failed to fetch" não diz nada: pode ser internet, implantação fora do ar
+// ou permissão de acesso. Descobrir qual é vale mais que o texto do erro.
+//
+// O truque é o segundo tiro em 'no-cors': ele não deixa LER a resposta, mas
+// resolve se o servidor respondeu alguma coisa. Então:
+//   POST falha + no-cors resolve  -> o servidor está lá, o navegador é que
+//                                    não pode ler = implantação privada ou
+//                                    apagada (redireciona para o login)
+//   POST falha + no-cors falha    -> não há caminho até o servidor
+async function diagnosticarConexao(timeoutMs = 20000) {
+  const t0 = Date.now()
+  const res = await chamarGAS({ acao: 'listar_funcionarios' }, { timeoutMs })
+  const ms = () => Date.now() - t0
+
+  if (res && res.ok) return { veredito: 'ok', ms: ms() }
+  const erro = String((res && res.erro) || '')
+
+  if (/Tempo esgotado/.test(erro)) {
+    return { veredito: 'timeout', ms: ms(), detalhe: erro,
+      titulo: 'O servidor não respondeu a tempo',
+      acao: 'O Apps Script pode estar processando algo pesado. Tente de novo em um minuto.' }
+  }
+  if (/Erro HTTP/.test(erro)) {
+    return { veredito: 'http', ms: ms(), detalhe: erro,
+      titulo: 'O servidor respondeu com erro',
+      acao: 'O código chegou a rodar. Veja "Execuções" no Apps Script para o motivo.' }
+  }
+
+  let alcancavel = false
+  try {
+    await fetch(GAS_URL, { method: 'GET', mode: 'no-cors', cache: 'no-store' })
+    alcancavel = true
+  } catch (e) { alcancavel = false }
+
+  if (alcancavel) {
+    return { veredito: 'bloqueado', ms: ms(), detalhe: erro,
+      titulo: 'O servidor respondeu, mas o app não pode ler a resposta',
+      acao: 'Quase sempre é a permissão da implantação. No Apps Script: '
+          + 'Implantar → Gerenciar implantações → ✏️ → "Quem pode acessar" = '
+          + '<strong>Qualquer pessoa</strong>. Confira também se a URL abaixo é a '
+          + 'mesma que aparece lá — criar uma implantação nova gera outra URL.' }
+  }
+  return { veredito: 'inalcancavel', ms: ms(), detalhe: erro,
+    titulo: 'Não há caminho até o servidor',
+    acao: 'Internet caiu, o Wi-Fi está bloqueando o script.google.com, ou a '
+        + 'implantação foi apagada. Teste abrir a URL abaixo numa aba do navegador.' }
+}
+
 async function testarConexao() {
   const el = document.getElementById('diag-conexao')
-  if (el) { el.style.display = 'block'; el.innerHTML = '⏳ Testando...' }
-  const t0 = Date.now()
-  const res = await chamarGAS({ acao: 'listar_funcionarios' }, { timeoutMs: 20000 })
-  const ms = Date.now() - t0
+  if (el) { el.style.display = 'block'; el.className = 'diag-res'; el.innerHTML = '⏳ Testando...' }
+
+  const d = await diagnosticarConexao()
+
   if (el) {
-    if (res && res.ok) el.innerHTML = `<span style="color:var(--verde-text);font-weight:700">✅ Backend respondeu</span> · ${ms} ms`
-    else el.innerHTML = `<span style="color:var(--red-text);font-weight:700">❌ Falhou</span> · ${esc((res && res.erro) || 'erro')} · ${ms} ms`
+    if (d.veredito === 'ok') {
+      el.className = 'diag-res ok'
+      el.innerHTML = `<strong>✅ Backend respondeu</strong> · ${d.ms} ms`
+    } else {
+      el.className = 'diag-res falhou'
+      el.innerHTML = `
+        <strong>❌ ${esc(d.titulo)}</strong>
+        <div class="diag-acao">${d.acao}</div>
+        <div class="diag-url">${esc(GAS_URL)}</div>
+        <div class="diag-cru">${esc(d.detalhe)} · ${d.ms} ms</div>`
+    }
   }
   const elL = document.getElementById('diag-erros-locais')
   if (elL) renderListaErros(elL, lerErrosLocais(), 'Nenhum erro registrado no app 🎉')
 }
+
 async function carregarErrosBackend() {
   const el = document.getElementById('diag-erros-backend'); if (!el) return
   el.innerHTML = '<p class="lista-vazia">Carregando...</p>'
