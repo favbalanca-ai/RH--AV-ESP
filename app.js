@@ -43,6 +43,31 @@ const EPI_SUGERIDOS_PERFIL = {
   BIOFABRICA:                  ['EPI-004','EPI-005','EPI-010','EPI-002'],
 }
 
+// O index.html é servido pelo GitHub Pages com cache próprio, e o ?v= só
+// versiona o app.js e o style.css. Resultado: dava para ficar com o JS novo
+// e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
+// ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
+// <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
+const APP_VERSION = '20260811'
+
+function conferirVersaoHtml() {
+  const meta = document.querySelector('meta[name="app-version"]')
+  const noHtml = meta ? meta.getAttribute('content') : null
+  if (noHtml === APP_VERSION) return
+  const aviso = document.createElement('div')
+  aviso.className = 'aviso-versao'
+  aviso.innerHTML = `
+    <div>
+      <strong>Recarregue a página</strong>
+      O navegador está com uma versão antiga em cache, e parte da tela pode
+      não aparecer. Segure <strong>Ctrl</strong> e clique em recarregar
+      (ou <strong>Ctrl+F5</strong>).
+    </div>
+    <button onclick="location.reload(true)">Recarregar</button>`
+  document.body.appendChild(aviso)
+  console.warn('Versão do HTML (' + noHtml + ') difere do app.js (' + APP_VERSION + ')')
+}
+
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxZAoTs9hTLs3LbOgjGKPiytHTEP6N0O34WpUHUYPRaFh5yKS6P6gXNRS9dMLlmHLtW/exec'
 const PDFLIB_URL = 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js'
 
@@ -51,6 +76,9 @@ let funcionarios = [], estoque = [], itensEpiSel = []
 let funcEpiSelecionado = null
 let paginaAtual = 'inicio', todosExames = []
 let paginasFracionadas = []
+// Páginas do PDF de ponto, ainda soltas. Viram anexo da folha do mesmo
+// funcionário no parearPonto() — o que sobrar sem par vira card próprio.
+let paginasPonto = []
 // FIX #3: tipoDocAtual agora é atualizado pelos radio buttons via setTipoDoc()
 let tipoDocAtual = 'Folha'
 
@@ -72,6 +100,7 @@ async function carregarPdfLib() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  conferirVersaoHtml()
   const sessao = sessionStorage.getItem('sst_user')
   if (sessao) {
     const { usuario, senha } = JSON.parse(sessao)
@@ -113,6 +142,22 @@ document.addEventListener('DOMContentLoaded', () => {
       if (preview) preview.innerHTML = '<i class="ti ti-file-check" style="vertical-align:-2px"></i> ' + total + ' página(s) — 1 funcionário por página'
     } catch(err) { if (preview) preview.textContent = '❌ Erro: ' + err.message }
   })
+
+  const inputPonto = document.getElementById('input-pdf-ponto')
+  if (inputPonto) inputPonto.addEventListener('change', async e => {
+    const file = e.target.files[0]
+    const el = document.getElementById('ponto-selecionado')
+    if (!el) return
+    if (!file) { el.style.display = 'none'; return }
+    el.style.display = 'block'
+    el.textContent = '⏳ Lendo o ponto...'
+    try {
+      const PDFLib = await carregarPdfLib()
+      const doc = await PDFLib.PDFDocument.load(await file.arrayBuffer())
+      el.innerHTML = '<i class="ti ti-paperclip" style="vertical-align:-2px"></i> '
+        + file.name + ' — ' + doc.getPageCount() + ' página(s) para juntar na folha'
+    } catch(err) { el.textContent = '❌ Erro: ' + err.message }
+  })
 })
 
 function entrarNoApp() {
@@ -152,6 +197,12 @@ async function sincronizarManual() {
     // Sempre recarrega o painel: o ↻ é a forma de recuperar os números quando
     // o carregamento inicial falhou, não só quando houve assinatura nova.
     carregarDashboard()
+    // O empregador pode ter pago pelo celular, fora do app. O ↻ é o momento
+    // em que a lista de "aguardando" tem chance de encolher.
+    if (paginaAtual === 'pagamento') {
+      carregarNotifPendentes()
+      if (funcPgtoSelecionado) carregarHistoricoPagamentos()
+    }
   } else { toast('❌ Erro na sincronização', 'erro') }
 }
 
@@ -974,6 +1025,11 @@ function renderListaErros(el, lista, vazio) {
       <div class="log-meta">${esc(e.quando || '')}</div>
     </div>`).join('')
 }
+function idImplantacao() {
+  const m = String(GAS_URL).match(/\/macros\/s\/([^/]+)\//)
+  return m ? m[1] : '—'
+}
+
 function renderDiagnostico() {
   const st = document.getElementById('diag-status')
   if (st) {
@@ -982,25 +1038,90 @@ function renderDiagnostico() {
     st.innerHTML =
       diagRow('Conexão', `<span class="badge ${online ? 'badge-verde' : 'badge-vermelho'}">${online ? 'Online' : 'Offline'}</span>`) +
       diagRow('Backend', `<span style="font-size:11px;color:var(--text-secondary)">${esc(host)}</span>`) +
+      // O ID identifica a IMPLANTAÇÃO. Criar uma nova em vez de editar a
+      // existente gera outra URL, e o app fica falando com a antiga.
+      diagRow('Implantação', `<span style="font-size:10px;color:var(--text-secondary);font-family:ui-monospace,Menlo,monospace;word-break:break-all">${esc(idImplantacao())}</span>`) +
       diagRow('Usuário', `<span style="font-size:11px;color:var(--text-secondary)">${esc(USUARIO || '—')}</span>`)
   }
   const elL = document.getElementById('diag-erros-locais')
   if (elL) renderListaErros(elL, lerErrosLocais(), 'Nenhum erro registrado no app 🎉')
   carregarErrosBackend()
 }
+// "Failed to fetch" não diz nada: pode ser internet, implantação fora do ar
+// ou permissão de acesso. Descobrir qual é vale mais que o texto do erro.
+//
+// O truque é o segundo tiro em 'no-cors': ele não deixa LER a resposta, mas
+// resolve se o servidor respondeu alguma coisa. Então:
+//   POST falha + no-cors resolve  -> o servidor está lá, o navegador é que
+//                                    não pode ler = implantação privada ou
+//                                    apagada (redireciona para o login)
+//   POST falha + no-cors falha    -> não há caminho até o servidor
+async function diagnosticarConexao(timeoutMs = 20000) {
+  const t0 = Date.now()
+  const res = await chamarGAS({ acao: 'listar_funcionarios' }, { timeoutMs })
+  const ms = () => Date.now() - t0
+
+  if (res && res.ok) return { veredito: 'ok', ms: ms() }
+  const erro = String((res && res.erro) || '')
+
+  if (/Tempo esgotado/.test(erro)) {
+    return { veredito: 'timeout', ms: ms(), detalhe: erro,
+      titulo: 'O servidor não respondeu a tempo',
+      acao: 'O Apps Script pode estar processando algo pesado. Tente de novo em um minuto.' }
+  }
+  if (/Erro HTTP/.test(erro)) {
+    return { veredito: 'http', ms: ms(), detalhe: erro,
+      titulo: 'O servidor respondeu com erro',
+      acao: 'O código chegou a rodar. Veja "Execuções" no Apps Script para o motivo.' }
+  }
+
+  // Sem abort, uma conexão que engole o pacote sem responder deixaria o
+  // diagnóstico preso em "Testando..." para sempre.
+  let alcancavel = false
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), Math.min(timeoutMs, 8000))
+  try {
+    await fetch(GAS_URL, { method: 'GET', mode: 'no-cors', cache: 'no-store', signal: ctrl.signal })
+    alcancavel = true
+  } catch (e) { alcancavel = false } finally { clearTimeout(t) }
+
+  if (alcancavel) {
+    return { veredito: 'bloqueado', ms: ms(), detalhe: erro,
+      titulo: 'O servidor respondeu, mas o app não pode ler a resposta',
+      acao: 'Quase sempre é a permissão da implantação. No Apps Script: '
+          + 'Implantar → Gerenciar implantações → ✏️ → "Quem pode acessar" = '
+          + '<strong>Qualquer pessoa</strong>. Confira também se a URL abaixo é a '
+          + 'mesma que aparece lá — criar uma implantação nova gera outra URL.' }
+  }
+  return { veredito: 'inalcancavel', ms: ms(), detalhe: erro,
+    titulo: 'Não há caminho até o servidor',
+    acao: 'Internet caiu, o Wi-Fi está bloqueando o script.google.com, ou a '
+        + 'implantação foi apagada. Teste abrir a URL abaixo numa aba do navegador.' }
+}
+
 async function testarConexao() {
   const el = document.getElementById('diag-conexao')
-  if (el) { el.style.display = 'block'; el.innerHTML = '⏳ Testando...' }
-  const t0 = Date.now()
-  const res = await chamarGAS({ acao: 'listar_funcionarios' }, { timeoutMs: 20000 })
-  const ms = Date.now() - t0
+  if (el) { el.style.display = 'block'; el.className = 'diag-res'; el.innerHTML = '⏳ Testando...' }
+
+  const d = await diagnosticarConexao()
+
   if (el) {
-    if (res && res.ok) el.innerHTML = `<span style="color:var(--verde-text);font-weight:700">✅ Backend respondeu</span> · ${ms} ms`
-    else el.innerHTML = `<span style="color:var(--red-text);font-weight:700">❌ Falhou</span> · ${esc((res && res.erro) || 'erro')} · ${ms} ms`
+    if (d.veredito === 'ok') {
+      el.className = 'diag-res ok'
+      el.innerHTML = `<strong>✅ Backend respondeu</strong> · ${d.ms} ms`
+    } else {
+      el.className = 'diag-res falhou'
+      el.innerHTML = `
+        <strong>❌ ${esc(d.titulo)}</strong>
+        <div class="diag-acao">${d.acao}</div>
+        <div class="diag-url">${esc(GAS_URL)}</div>
+        <div class="diag-cru">${esc(d.detalhe)} · ${d.ms} ms</div>`
+    }
   }
   const elL = document.getElementById('diag-erros-locais')
   if (elL) renderListaErros(elL, lerErrosLocais(), 'Nenhum erro registrado no app 🎉')
 }
+
 async function carregarErrosBackend() {
   const el = document.getElementById('diag-erros-backend'); if (!el) return
   el.innerHTML = '<p class="lista-vazia">Carregando...</p>'
@@ -1012,24 +1133,57 @@ async function carregarErrosBackend() {
   renderListaErros(el, lista, 'Nenhum erro no servidor')
 }
 
-async function chamarGAS(dados, { timeoutMs = 120000 } = {}) {
-  const ctrl  = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
-  try {
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({ ...dados, usuario: dados.usuario || USUARIO, senha: dados.senha || SENHA_ADM }),
-      signal: ctrl.signal,
-    })
-    if (!res.ok) { registrarErroLocal('HTTP', 'HTTP ' + res.status, dados.acao || ''); return { ok: false, erro: 'Erro HTTP ' + res.status } }
-    return await res.json()
-  } catch(e) {
-    if (e.name === 'AbortError') { registrarErroLocal('Timeout', 'Tempo esgotado na requisição', dados.acao || ''); return { ok: false, erro: 'Tempo esgotado. Verifique sua conexão e tente novamente.' } }
-    registrarErroLocal('Conexão', e.message, dados.acao || '')
-    return { ok: false, erro: 'Erro de conexão: ' + e.message }
-  } finally {
-    clearTimeout(timer)
+// Ações que só LEEM. São as únicas que podem ser repetidas em caso de falha
+// de rede: repetir um envio criaria dois documentos no ZapSign, duas ordens
+// de pagamento, dois registros. Prefixo, não lista fechada, para não
+// esquecer de incluir as próximas.
+const ACOES_SEGURAS = /^(listar_|historico_|resumo_|buscar_|identificar_|verificar_|relatorio_)/
+
+function podeRepetir(acao) {
+  return ACOES_SEGURAS.test(String(acao || ''))
+}
+
+async function chamarGAS(dados, { timeoutMs = 120000, tentativas } = {}) {
+  const acao = dados.acao || ''
+  // Falha de rede num POST é comum e passageira (queda de sinal, conexão
+  // derrubada no meio). Tentar de novo poupa o usuário de um erro que se
+  // resolveria sozinho — mas só quando repetir é inofensivo.
+  const max = tentativas != null ? tentativas : (podeRepetir(acao) ? 3 : 1)
+  let ultimo = null
+
+  for (let n = 1; n <= max; n++) {
+    const ctrl  = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+    try {
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({ ...dados, usuario: dados.usuario || USUARIO, senha: dados.senha || SENHA_ADM }),
+        signal: ctrl.signal,
+      })
+      if (!res.ok) {
+        registrarErroLocal('HTTP', 'HTTP ' + res.status, acao)
+        return { ok: false, erro: 'Erro HTTP ' + res.status }
+      }
+      return await res.json()
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        registrarErroLocal('Timeout', 'Tempo esgotado na requisição', acao)
+        return { ok: false, erro: 'Tempo esgotado. Verifique sua conexão e tente novamente.' }
+      }
+      ultimo = e
+      if (n < max) {
+        // Espera crescente: se foi um soluço, 400 ms bastam; se a rede caiu,
+        // insistir de imediato só gasta bateria.
+        await new Promise(r => setTimeout(r, n * 400))
+      }
+    } finally {
+      clearTimeout(timer)
+    }
   }
+
+  const msg = ultimo ? ultimo.message : 'falha desconhecida'
+  registrarErroLocal('Conexão', msg + (max > 1 ? ` (${max} tentativas)` : ''), acao)
+  return { ok: false, erro: 'Erro de conexão: ' + msg }
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────
@@ -1795,7 +1949,11 @@ async function enviarPaginaAssinaturaPropria(idx, tipo) {
   const res = await chamarGAS({
     acao: 'processar_pagina_proprio',
     dados: {
-      pdf_base64:   p.pdfBase64,
+      // pdfEnvio é o documento COM o ponto junto. Mandar p.pdfBase64 aqui
+      // faria o envio individual perder o anexo que o em lote leva.
+      pdf_base64:   p.pdfEnvio || p.pdfBase64,
+      inclui_ponto: !!p.ponto,
+      verbas:       p.verbas || null,
       tipo:         tipoDoc,
       competencia:  p.competencia,
       func_id:      p.funcId,
@@ -2122,8 +2280,44 @@ function mostrarModalNotificacao(mensagens, editavel) {
   document.body.appendChild(modal)
 }
 
+// Separa um PDF em uma página por documento. Devolve os pedaços em base64.
+async function separarPaginas(file, PDFLib, rotulo) {
+  const pdfDoc = await PDFLib.PDFDocument.load(await file.arrayBuffer())
+  const total  = pdfDoc.getPageCount()
+  const saida  = []
+  for (let i = 0; i < total; i++) {
+    mostrarLoading(`Separando ${rotulo} — página ${i + 1} de ${total}...`)
+    const novoDoc = await PDFLib.PDFDocument.create()
+    const [pag]   = await novoDoc.copyPages(pdfDoc, [i])
+    novoDoc.addPage(pag)
+    saida.push({ pagina: i + 1, pdfBase64: arrayBufferToBase64(await novoDoc.save()) })
+  }
+  return saida
+}
+
+// Cola dois PDFs de uma página num só. É o que economiza a assinatura: o
+// ZapSign cobra por DOCUMENTO, não por página.
+async function juntarPdfs(listaBase64) {
+  const PDFLib = await carregarPdfLib()
+  const doc = await PDFLib.PDFDocument.create()
+  for (const b64 of listaBase64) {
+    const origem = await PDFLib.PDFDocument.load(base64ParaArrayBuffer(b64))
+    const pags   = await doc.copyPages(origem, origem.getPageIndices())
+    pags.forEach(p => doc.addPage(p))
+  }
+  return arrayBufferToBase64(await doc.save())
+}
+
+function base64ParaArrayBuffer(b64) {
+  const bin = atob(b64)
+  const buf = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i)
+  return buf.buffer
+}
+
 async function processarFracionamento() {
   const file        = document.getElementById('input-pdf-frac').files[0]
+  const filePonto   = document.getElementById('input-pdf-ponto')?.files[0] || null
   const competencia = document.getElementById('sel-comp-frac').value
   if (!file) return toast('❌ Selecione o PDF', 'erro')
   if (!competencia) return toast('❌ Selecione a competência antes de separar', 'erro')
@@ -2138,21 +2332,28 @@ async function processarFracionamento() {
   mostrarLoading('Carregando pdf-lib...')
   try {
     const PDFLib = await carregarPdfLib()
-    const pdfDoc = await PDFLib.PDFDocument.load(await file.arrayBuffer())
-    const total  = pdfDoc.getPageCount()
-    paginasFracionadas = []
-    for (let i = 0; i < total; i++) {
-      mostrarLoading('Separando página ' + (i+1) + ' de ' + total + '...')
-      const novoDoc = await PDFLib.PDFDocument.create()
-      const [pag]   = await novoDoc.copyPages(pdfDoc, [i])
-      novoDoc.addPage(pag)
-      paginasFracionadas.push({ pagina:i+1, funcId:'', nome:'', funcao:'', telefone:'', pdfBase64:arrayBufferToBase64(await novoDoc.save()), status:'pronto', signUrl:'', competencia, tipoDoc: tipoDocAtual })
-    }
+    const doTipo = await separarPaginas(file, PDFLib, tipoDocAtual === 'Ponto' ? 'o ponto' : 'a folha')
+    paginasFracionadas = doTipo.map(p => ({
+      pagina: p.pagina, funcId:'', nome:'', funcao:'', telefone:'',
+      pdfBase64: p.pdfBase64, status:'pronto', signUrl:'', competencia,
+      tipoDoc: tipoDocAtual,
+    }))
+
+    // O ponto vira uma lista à parte; o pareamento com a folha só acontece
+    // depois da identificação, porque a chave é o FUNCIONÁRIO — a ordem das
+    // páginas nos dois PDFs não precisa bater.
+    paginasPonto = filePonto
+      ? (await separarPaginas(filePonto, PDFLib, 'o ponto')).map(p => ({
+          pagina: p.pagina, pdfBase64: p.pdfBase64, funcId:'', nome:'', usada:false,
+        }))
+      : []
+
     esconderLoading()
     btn.disabled = false; btn.innerHTML = '<i class="ti ti-scissors"></i> Separar PDF'
     document.getElementById('frac-step-wrap').style.display = 'block'
     const resumoEl = document.getElementById('frac-resumo')
-    resumoEl.dataset.base = competencia + ' · ' + total + ' página(s) separadas'
+    resumoEl.dataset.base = competencia + ' · ' + paginasFracionadas.length + ' página(s) separadas'
+      + (paginasPonto.length ? ' + ' + paginasPonto.length + ' de ponto' : '')
     resumoEl.textContent  = resumoEl.dataset.base
     renderPaginasFracionadas()
     atualizarBtnTodos()
@@ -2185,8 +2386,25 @@ function renderPaginasFracionadas() {
           Identificando automaticamente...
         </div>
       </div>
+      <div id="fpc-anexo-${i}"></div>
       <div id="fpc-valor-${i}"></div>
     </div>`).join('')
+}
+
+// Selo do que vai dentro do documento enviado. Sem ele, o usuário não teria
+// como saber que o ponto entrou junto — nem que uma assinatura foi poupada.
+function renderAnexoPonto(i) {
+  const el = document.getElementById('fpc-anexo-' + i); if (!el) return
+  const p = paginasFracionadas[i]
+  if (p.soPonto) {
+    el.innerHTML = `<div class="fpc-anexo aviso"><i class="ti ti-alert-triangle"></i>
+      Só ponto — sem folha deste funcionário no PDF</div>`
+  } else if (p.ponto) {
+    el.innerHTML = `<div class="fpc-anexo"><i class="ti ti-paperclip"></i>
+      Folha + ponto (pág. ${p.ponto.pagina}) num documento só · <strong>1 assinatura</strong></div>`
+  } else {
+    el.innerHTML = ''
+  }
 }
 
 // ── Valor líquido da página ───────────────────────────────────────
@@ -2259,6 +2477,10 @@ async function identificarFuncionariosAutomatico() {
         paginasFracionadas[i].valorLiquido = d.valor_liquido
         paginasFracionadas[i].valorOrigem  = 'ia'
       }
+      // As verbas vêm na MESMA extração. Sem guardar aqui, toda folha nova
+      // nascia "não analisada" e a análise dependia de reler o PDF do Drive
+      // depois — pagando a IA duas vezes pelo mesmo documento.
+      if (Array.isArray(d.verbas) && d.verbas.length) paginasFracionadas[i].verbas = d.verbas
       if (d.ferias_inicio) paginasFracionadas[i].feriasInicio = d.ferias_inicio
       if (d.ferias_fim)    paginasFracionadas[i].feriasFim    = d.ferias_fim
 
@@ -2293,15 +2515,114 @@ async function identificarFuncionariosAutomatico() {
       renderCardManual(i)
     }
     renderValorPagina(i)
+    renderAnexoPonto(i)
     atualizarBtnTodos()
   }
 
   if (identificados > 0) salvarMapeamento(competencia)
 
+  if (paginasPonto.length) await identificarPonto()
+
   toast(identificados === paginasFracionadas.length
     ? '🤖 IA identificou todos os ' + identificados + ' funcionários!'
     : '🤖 ' + identificados + ' identificados · ' + (paginasFracionadas.length - identificados) + ' selecione manualmente',
     identificados > 0 ? 'sucesso' : '')
+}
+
+// ── Ponto na mesma assinatura ─────────────────────────────────────
+// Identifica de quem é cada página do ponto e junta na folha do mesmo
+// funcionário. Um documento só no ZapSign = uma assinatura só cobrada.
+async function identificarPonto() {
+  toast('🔍 Identificando o ponto...', '')
+  const promessas = paginasPonto.map(p =>
+    chamarGAS({ acao: 'identificar_com_ia', dados: { pdf_base64: p.pdfBase64 } }).catch(() => null))
+
+  for (let i = 0; i < promessas.length; i++) {
+    const res = await promessas[i]
+    const d = res && res.ok ? res.data : null
+    if (d && d.func_id) {
+      const f = funcionarios.find(x => String(x['ID']) === String(d.func_id))
+      if (f) { paginasPonto[i].funcId = String(f['ID']); paginasPonto[i].nome = f['NOME_COMPLETO'] }
+    }
+  }
+  await parearPonto()
+}
+
+// Junta, por funcionário, a página de ponto na folha. Idempotente: pode
+// rodar de novo depois de o usuário corrigir uma identificação à mão.
+// Redesenha a lista inteira preservando o que já foi enviado. O
+// renderPaginasFracionadas() reconstrói o HTML do zero: sem esta restauração,
+// um card enviado voltava a parecer pronto — com o botão Enviar ativo — e
+// mandaria um segundo documento ao ZapSign, cobrado e assinado em dobro.
+function redesenharCards() {
+  renderPaginasFracionadas()
+  paginasFracionadas.forEach((p, i) => {
+    const f = p.funcId ? funcionarios.find(x => String(x['ID']) === String(p.funcId)) : null
+    if (f) renderCardIdentificado(i, f, p._metodo || 'auto')
+    else renderCardManual(i)
+    renderValorPagina(i)
+    renderAnexoPonto(i)
+    if (p.status === 'enviado') {
+      atualizarCardEnviado(i, { link: p.signUrl || '', wa_link: '' })
+      const btn = document.getElementById('btn-zap-' + i)
+      if (btn) btn.disabled = true
+    }
+  })
+  atualizarBtnTodos()
+}
+
+async function parearPonto() {
+  if (!paginasPonto.length) return
+
+  // Cards "só ponto" ainda não enviados são SAÍDA do pareamento anterior, não
+  // entrada deste. Mantê-los faria a página casar consigo mesma, ser marcada
+  // como usada, e sumir na reconstrução — sem nunca poder ser enviada. Os já
+  // enviados ficam: são história.
+  paginasFracionadas = paginasFracionadas.filter(p => !p.soPonto || p.status === 'enviado')
+  paginasPonto.forEach(q => { q.usada = false })
+
+  // Reserva o que já foi embora, nas duas formas: dentro de uma folha, ou como
+  // card próprio. Sem isso, ponto já assinado voltaria à fila.
+  paginasFracionadas.forEach(p => {
+    if (p.status !== 'enviado') return
+    if (p.ponto) p.ponto.usada = true
+    if (p.origemPonto) p.origemPonto.usada = true
+  })
+
+  for (const p of paginasFracionadas) {
+    if (p.status === 'enviado') continue      // o que entrou no documento entrou
+    p.ponto = null; p.pdfEnvio = null
+    if (!p.funcId) continue
+    const par = paginasPonto.find(q => !q.usada && q.funcId && String(q.funcId) === String(p.funcId))
+    if (!par) continue
+    par.usada = true
+    p.ponto = par
+    // Folha primeiro, ponto depois: a página 1 é a que o classifica_conteudo
+    // do servidor lê para decidir a pasta do arquivo.
+    p.pdfEnvio = await juntarPdfs([p.pdfBase64, par.pdfBase64])
+  }
+
+  // Ponto sem folha correspondente não some calado — vira card próprio, para
+  // ser enviado separado (aí sim com assinatura própria).
+  const orfaos = paginasPonto.filter(q => !q.usada)
+  const comp = paginasFracionadas.find(p => p.competencia)?.competencia || ''
+  orfaos.forEach(q => {
+    q.usada = true
+    const f = q.funcId ? funcionarios.find(x => String(x['ID']) === String(q.funcId)) : null
+    paginasFracionadas.push({
+      pagina: q.pagina, funcId: q.funcId || '', nome: q.nome || '',
+      funcao: f ? f['FUNCAO'] : '', telefone: f ? f['TELEFONE'] : '',
+      pdfBase64: q.pdfBase64, status: 'pronto', signUrl: '',
+      competencia: comp, tipoDoc: 'Ponto', soPonto: true,
+      origemPonto: q,     // liga o card de volta à página, para reservá-la depois
+    })
+  })
+
+  redesenharCards()
+
+  const juntados = paginasFracionadas.filter(p => p.ponto).length
+  if (juntados) toast(`📎 ${juntados} ponto(s) juntado(s) — ${juntados} assinatura(s) economizada(s)`, 'sucesso')
+  if (orfaos.length) toast(`⚠️ ${orfaos.length} página(s) de ponto sem folha correspondente`, 'aviso')
 }
 
 function renderCardIdentificado(i, func, metodo) {
@@ -2371,12 +2692,16 @@ function selecionarFuncManual(i, funcId) {
   paginasFracionadas[i].telefone = func['TELEFONE']
   renderCardIdentificado(i, func, 'manual')
   renderValorPagina(i)
-  atualizarBtnTodos()
+  // A folha mudou de dono: o ponto que estava junto pode não ser mais dele.
+  if (paginasPonto.length) parearPonto()
+  else { renderAnexoPonto(i); atualizarBtnTodos() }
 }
 
 function visualizarPagina(idx) {
   const p = paginasFracionadas[idx]; if (!p || !p.pdfBase64) return toast('❌ PDF indisponível', 'erro')
-  const url = URL.createObjectURL(new Blob([Uint8Array.from(atob(p.pdfBase64), c => c.charCodeAt(0))], { type: 'application/pdf' }))
+  // Mostra o documento COMO SERÁ ASSINADO — com o ponto junto, se houver.
+  const b64 = p.pdfEnvio || p.pdfBase64
+  const url = URL.createObjectURL(new Blob([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], { type: 'application/pdf' }))
   window.open(url, '_blank')
   setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
@@ -2409,10 +2734,13 @@ function abrirModalEnvioFolha(idx) {
 async function enviarPaginaZapSign(idx) {
   const p = paginasFracionadas[idx]
   if (!p.funcId) return toast('❌ Selecione o funcionário primeiro', 'erro')
+  // Cinto e suspensório: o botão é desabilitado, mas um redesenho da lista já
+  // o reativou uma vez. Reenviar custa uma assinatura e gera ordem duplicada.
+  if (p.status === 'enviado') return toast('Este documento já foi enviado', 'aviso')
   const btn = document.getElementById('btn-zap-' + idx)
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>'
   mostrarLoading('Enviando para ' + p.nome.split(' ')[0] + '...')
-  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfBase64, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true, tipo: p.tipoDoc || tipoDocAtual, valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null } })
+  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfEnvio || p.pdfBase64, inclui_ponto: !!p.ponto, verbas: p.verbas || null, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true, tipo: p.tipoDoc || tipoDocAtual, valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null } })
   esconderLoading()
   if (res && res.ok) {
     paginasFracionadas[idx].status  = 'enviado'
@@ -2457,7 +2785,7 @@ async function enviarTodasPendentes(metodo) {
       mostrarLoading('Gerando link ' + (links.length + 1) + '/' + pendentes.length + ' — ' + p.nome.split(' ')[0])
       const res = await chamarGAS({
         acao: 'processar_pagina_proprio',
-        dados: { pdf_base64: p.pdfBase64, tipo: p.tipoDoc || tipoDocAtual,
+        dados: { pdf_base64: p.pdfEnvio || p.pdfBase64, inclui_ponto: !!p.ponto, verbas: p.verbas || null, tipo: p.tipoDoc || tipoDocAtual,
                  competencia: p.competencia, func_id: p.funcId, func_nome: p.nome, pagina: p.pagina,
                  valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null }
       })
@@ -2641,6 +2969,12 @@ function parseValorNum(v) {
 
 function normalizarComp(comp) {
   const s = String(comp||'').trim()
+  // ISO vindo de célula de data: "2026-07-01T07:00:00.000Z" ou "2026-07-01".
+  // O fuso vem em UTC e o Brasil está atrás, então às 21h de 30/06 o ISO já
+  // marca 01/07 — usar getMonth() local jogaria a competência para o mês
+  // anterior. Lê os números direto do texto.
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) return MESES[parseInt(iso[2]) - 1] + '/' + iso[1]
   const m = s.match(/([A-Z][a-z]{2})\s+\d{2}\s+(\d{4})/)
   const eng = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11}
   if (m && eng[m[1]] !== undefined) return MESES[eng[m[1]]] + '/' + m[2]
@@ -2701,6 +3035,7 @@ function selecionarFuncPgto(funcId) {
 
   carregarResumoPgto()
   carregarHistoricoPagamentos()
+  carregarAnaliseFolha()
   gerarExtrato()
 }
 
@@ -3017,6 +3352,224 @@ async function registrarAdiantamento() {
   } else toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// ANÁLISE DA FOLHA — o que compõe o salário, mês a mês
+// ═══════════════════════════════════════════════════════════════════
+// O líquido sozinho não explica nada: se subiu R$ 400 num mês, foi hora
+// extra, periculosidade ou reajuste? As verbas extraídas do holerite
+// respondem isso sem reabrir PDF nenhum.
+let analiseAtual = null
+let analiseVista = 'resumo'
+
+async function carregarAnaliseFolha() {
+  if (!funcPgtoSelecionado) return
+  const card = document.getElementById('card-analise-folha')
+  const corpo = document.getElementById('analise-corpo')
+  if (!card || !corpo) return
+  card.style.display = 'block'
+  corpo.innerHTML = '<p class="lista-vazia">Carregando...</p>'
+
+  const ano = document.getElementById('sel-ano-pgto')?.value || ''
+  document.getElementById('analise-ano-label').textContent = ano ? ' · ' + ano : ''
+
+  const res = await chamarGAS({ acao: 'historico_folha',
+                                dados: { func_id: funcPgtoSelecionado['ID'], ano } })
+  if (!res || !res.ok) {
+    corpo.innerHTML = '<p class="lista-vazia">Não consegui carregar a análise</p>'
+    return
+  }
+  analiseAtual = res.data
+  renderAnalise()
+}
+
+function verAnalise(vista) {
+  analiseVista = vista
+  ;['resumo', 'meses'].forEach(v => {
+    const b = document.getElementById('af-aba-' + v)
+    if (b) b.className = 'af-aba' + (v === vista ? ' ativa' : '')
+  })
+  renderAnalise()
+}
+
+function renderAnalise() {
+  const corpo = document.getElementById('analise-corpo')
+  if (!corpo || !analiseAtual) return
+  const a = analiseAtual
+
+  if (!a.meses.length) {
+    corpo.innerHTML = analiseVazia(a)
+    return
+  }
+  corpo.innerHTML = (analiseVista === 'resumo' ? analiseResumo(a) : analiseMeses(a)) + analiseRodape(a)
+}
+
+// Quando nenhum holerite passou pela extração, o card não pode só ficar
+// vazio: tem que dizer o que fazer.
+function analiseRodape(a) {
+  if (!a.sem_verbas) return ''
+  const todos = a.sem_verbas === a.meses.length
+  return `
+    <div class="af-pendente">
+      <div>
+        <strong>${a.sem_verbas} ${a.sem_verbas === 1 ? 'holerite ainda não analisado' : 'holerites ainda não analisados'}</strong>
+        <div>${todos
+          ? 'As folhas enviadas antes desta atualização não tiveram as verbas extraídas.'
+          : 'Alguns meses entram no líquido mas não no detalhamento por verba.'}
+          Posso reler os PDFs guardados no Drive.</div>
+      </div>
+      <button class="af-btn" id="btn-reanalisar" onclick="reanalisarHistorico()">Analisar agora</button>
+    </div>`
+}
+
+// Sem meses no período, a tela não pode ser um beco. Ou existem folhas em
+// OUTRO ano — e aí basta trocar o seletor —, ou não existe nenhuma, e o
+// motivo é outro: documento ainda não enviado, ou enviado como Ponto.
+function analiseVazia(a) {
+  const outros = (a.anos || []).filter(y => String(y) !== String(a.ano_filtro))
+  if (outros.length) {
+    return `
+      <div class="af-pendente">
+        <div>
+          <strong>${a.ano_filtro ? 'Nada em ' + esc(String(a.ano_filtro)) : 'Nada no período selecionado'}</strong>
+          <div>Mas há folha registrada em
+            ${outros.map(y => `<button class="af-ano" onclick="irParaAno('${esc(String(y))}')">${esc(String(y))}
+                <span>${(a.anos_qtd && a.anos_qtd[y]) || ''}</span></button>`).join(' ')}
+          </div>
+        </div>
+      </div>`
+  }
+  return `
+    <div class="af-pendente">
+      <div>
+        <strong>Nenhuma folha registrada para ${esc(a.nome || 'este funcionário')}</strong>
+        <div>A análise sai das folhas enviadas pela aba <strong>Folha de Pagamento</strong>.
+          Se você já enviou, confira na planilha se a linha tem o
+          <strong>ID FUNC.</strong> deste funcionário e se o <strong>TIPO</strong>
+          não ficou como "Ponto".</div>
+      </div>
+    </div>`
+}
+
+function irParaAno(ano) {
+  const sel = document.getElementById('sel-ano-pgto')
+  if (sel) {
+    // O seletor só nasce com o ano atual e os 3 anteriores. Um botão de 2022
+    // renderizava e não fazia nada — a opção precisa existir para ser escolhida.
+    if (![...sel.options].some(o => o.value === String(ano))) {
+      const opt = document.createElement('option')
+      opt.value = opt.textContent = String(ano)
+      sel.appendChild(opt)
+    }
+    sel.value = String(ano)
+  }
+  carregarResumoPgto()
+  carregarAnaliseFolha()
+  gerarExtrato()
+}
+
+function analiseResumo(a) {
+  const proventos = a.categorias.filter(c => c.tipo !== 'desconto')
+  const descontos = a.categorias.filter(c => c.tipo === 'desconto')
+  const teto = Math.max(...a.categorias.map(c => c.total), 1)
+  const nMeses = a.meses.length
+
+  const linha = c => `
+    <div class="af-verba">
+      <div class="af-verba-topo">
+        <span class="af-verba-nome">${esc(c.rotulo)}</span>
+        <span class="af-verba-valor">R$ ${formatarValor(c.total)}</span>
+      </div>
+      <div class="af-barra"><div class="af-barra-in ${c.tipo === 'desconto' ? 'neg' : ''}" style="width:${Math.round(c.total / teto * 100)}%"></div></div>
+      <div class="af-verba-sub">
+        ${c.meses} de ${nMeses} ${nMeses === 1 ? 'mês' : 'meses'}
+        · média R$ ${formatarValor(c.total / c.meses)}
+      </div>
+    </div>`
+
+  return `
+    <div class="af-totais">
+      <div class="af-total"><span>Proventos</span><strong>R$ ${formatarValor(a.total_proventos)}</strong></div>
+      <div class="af-total"><span>Descontos</span><strong class="neg">R$ ${formatarValor(a.total_descontos)}</strong></div>
+      <div class="af-total destaque"><span>Líquido</span><strong>R$ ${formatarValor(a.total_liquido)}</strong></div>
+    </div>
+    ${proventos.length ? `<div class="af-secao">Proventos</div>${proventos.map(linha).join('')}` : ''}
+    ${descontos.length ? `<div class="af-secao">Descontos</div>${descontos.map(linha).join('')}` : ''}`
+}
+
+function analiseMeses(a) {
+  return a.meses.slice().reverse().map((m, idx) => {
+    const i = a.meses.length - 1 - idx
+    const detalhe = m.verbas.length ? `
+      <div class="af-mes-detalhe" id="af-det-${i}" hidden>
+        ${m.verbas.map(v => `
+          <div class="af-item ${v.tipo === 'desconto' ? 'neg' : ''}">
+            <span class="af-item-desc">${esc(v.descricao)}${v.referencia ? ` <span class="af-ref">${esc(v.referencia)}</span>` : ''}</span>
+            <span class="af-item-valor">${v.tipo === 'desconto' ? '−' : ''}R$ ${formatarValor(v.valor)}</span>
+          </div>`).join('')}
+      </div>` : ''
+    return `
+    <div class="af-mes">
+      <button class="af-mes-topo" onclick="alternarMes(${i})" aria-expanded="false" id="af-btn-${i}"
+              ${m.verbas.length ? '' : 'disabled'}>
+        <span class="af-mes-nome">${esc(normalizarComp(m.competencia))}</span>
+        ${m.sem_verbas
+          ? '<span class="af-tag">sem detalhamento</span>'
+          : `<span class="af-mes-cols">
+               <span class="af-mes-col">+${formatarValor(m.proventos)}</span>
+               <span class="af-mes-col neg">−${formatarValor(m.descontos)}</span>
+             </span>`}
+        <span class="af-mes-liq">R$ ${formatarValor(m.valor_liquido)}</span>
+        ${m.verbas.length ? '<i class="ti ti-chevron-down af-seta"></i>' : ''}
+      </button>
+      ${m.link ? `<a href="${esc(String(m.link))}" target="_blank" rel="noopener" class="af-doc"
+                    onclick="event.stopPropagation()"><i class="ti ti-file-text"></i> Ver o holerite</a>` : ''}
+      ${detalhe}
+    </div>`
+  }).join('')
+}
+
+function alternarMes(i) {
+  const det = document.getElementById('af-det-' + i)
+  const btn = document.getElementById('af-btn-' + i)
+  if (!det || !btn) return
+  const aberto = !det.hidden
+  det.hidden = aberto
+  btn.setAttribute('aria-expanded', String(!aberto))
+  btn.classList.toggle('aberto', !aberto)
+}
+
+// Relê os PDFs do Drive em lotes — o Apps Script corta a execução em 6 min,
+// então o backend devolve quantos faltam e a gente volta até zerar.
+async function reanalisarHistorico() {
+  if (!funcPgtoSelecionado) return
+  const btn = document.getElementById('btn-reanalisar')
+  if (btn) { btn.disabled = true; btn.textContent = 'Analisando...' }
+
+  let total = 0, voltas = 0
+  while (voltas++ < 30) {
+    mostrarLoading(`Lendo holerites... ${total} analisado(s)`)
+    const res = await chamarGAS({ acao: 'reanalisar_folhas',
+                                  dados: { func_id: funcPgtoSelecionado['ID'], limite: 4 } })
+    if (!res || !res.ok) {
+      esconderLoading()
+      toast('❌ ' + ((res && res.erro) || 'Erro na análise'), 'erro')
+      break
+    }
+    total += res.data.processados
+    if (res.data.erros?.length) console.warn('Reanálise:', res.data.erros)
+    // Nada processado e ainda há pendentes = todos falharam; insistir seria laço infinito.
+    if (!res.data.restantes || !res.data.processados) {
+      if (res.data.restantes && !res.data.processados) {
+        toast(`⚠️ ${res.data.restantes} holerite(s) não puderam ser lidos`, 'aviso')
+      }
+      break
+    }
+  }
+  esconderLoading()
+  if (total) toast(`✅ ${total} holerite(s) analisado(s)`, 'sucesso')
+  await carregarAnaliseFolha()
+}
+
 async function carregarHistoricoPagamentos() {
   if (!funcPgtoSelecionado) return
   const res  = await chamarGAS({ acao: 'listar_pagamentos', dados: { func_id: funcPgtoSelecionado['ID'] } })
@@ -3040,11 +3593,18 @@ async function carregarHistoricoPagamentos() {
       <div class="lista-item-info">
         <div class="lista-item-nome">${compNorm}${valor?' · '+valor:''}</div>
         <div class="lista-item-sub">${p['DATA_GERACAO']||p['DATA_ASSINATURA']||''}</div>
-        ${p['COMPROVANTE_LINK']
-          ? `<a href="${p['COMPROVANTE_LINK']}" target="_blank" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px;margin-top:2px">
-               <i class="ti ti-receipt" style="font-size:10px"></i> Ver comprovante
-             </a>`
-          : ''}
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:2px">
+          ${p['LINK_HOLERITE']
+            ? `<a href="${esc(String(p['LINK_HOLERITE']))}" target="_blank" rel="noopener" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px">
+                 <i class="ti ti-file-text" style="font-size:10px"></i> Ver documento
+               </a>`
+            : ''}
+          ${p['COMPROVANTE_LINK']
+            ? `<a href="${p['COMPROVANTE_LINK']}" target="_blank" rel="noopener" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px">
+                 <i class="ti ti-receipt" style="font-size:10px"></i> Ver comprovante
+               </a>`
+            : ''}
+        </div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
         <span class="badge ${pago?'badge-verde':'badge-amarelo'}">${p['STATUS']||'—'}</span>
@@ -3174,25 +3734,75 @@ async function gerarExtrato() {
   corpo.style.display = ''
 }
 
+// Ordens de pagamento em aberto. Inclui as já notificadas: "Notificado"
+// significa que o empregador foi avisado, não que pagou — mostrar só
+// "Aguardando Pagamento" esvaziava o painel no instante do aviso, que é
+// justamente quando ele passa a importar.
 async function carregarNotifPendentes() {
-  const res  = await chamarGAS({ acao: 'listar_pagamentos', dados: { status: 'Aguardando Pagamento' } })
   const card = document.getElementById('card-notif-pendentes')
   const el   = document.getElementById('lista-notif-pendentes')
   if (!card || !el) return
-  if (!res || !res.ok || !res.data?.length) { card.style.display = 'none'; return }
+
+  const res = await chamarGAS({ acao: 'listar_pagamentos' })
+  if (!res || !res.ok || !Array.isArray(res.data)) { card.style.display = 'none'; return }
+
+  const pendentes = res.data.filter(p =>
+    ['Aguardando Pagamento', 'Notificado'].includes(String(p['STATUS'] || '').trim()) &&
+    String(p['CANCELADO'] || '').trim() !== 'Sim')
+
+  if (!pendentes.length) { card.style.display = 'none'; return }
   card.style.display = 'block'
-  el.innerHTML = res.data.map(p => `
-    <div style="background:var(--amber-bg);border:0.5px solid rgba(133,79,11,0.2);border-radius:var(--radius-md);padding:10px;margin-bottom:6px;display:flex;align-items:center;gap:10px">
-      <div class="avatar" style="background:rgba(133,79,11,0.15);color:var(--amber-text)">${getIniciais(p['NOME_FUNC']||'?')}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p['NOME_FUNC'])}</div>
-        <div style="font-size:10px;color:var(--amber-text)">${esc(normalizarComp(p['COMPETENCIA']||''))}${p['VALOR_LIQUIDO']?' · R$ '+formatarValor(p['VALOR_LIQUIDO']):''}</div>
+
+  const total = pendentes.reduce((s, p) => s + parseValorNum(p['VALOR_LIQUIDO']), 0)
+  const tituloEl = document.getElementById('notif-pendentes-titulo')
+  if (tituloEl) {
+    tituloEl.textContent = pendentes.length + (pendentes.length === 1 ? ' pendente' : ' pendentes')
+      + (total > 0 ? ' · R$ ' + formatarValor(total) : '')
+  }
+
+  el.innerHTML = pendentes.map(p => {
+    const avisado = String(p['STATUS']).trim() === 'Notificado'
+    const valor = parseValorNum(p['VALOR_LIQUIDO'])
+    return `
+    <div class="np-item">
+      <div class="np-av">${getIniciais(p['NOME_FUNC'] || '?')}</div>
+      <div class="np-info">
+        <div class="np-nome">${esc(p['NOME_FUNC'] || '')}</div>
+        <div class="np-sub">
+          ${esc(normalizarComp(p['COMPETENCIA'] || ''))}
+          ${p['ORIGEM'] && p['ORIGEM'] !== 'Folha' ? ' · ' + esc(p['ORIGEM']) : ''}
+          ${valor > 0 ? ' · R$ ' + formatarValor(valor) : ''}
+        </div>
+        <span class="np-estado ${avisado ? 'avisado' : ''}">${avisado ? 'Avisado, aguardando pagamento' : 'Ainda não avisado'}</span>
       </div>
-      ${p['WA_LINK_EMPREGADOR']
-        ? `<a href="${p['WA_LINK_EMPREGADOR']}" target="_blank" title="Reenviar"
-             style="background:#22C55E;color:#fff;border-radius:8px;padding:7px 9px;font-size:13px;text-decoration:none;display:flex;align-items:center;flex-shrink:0">
-             <i class="ti ti-brand-whatsapp"></i>
-           </a>`
-        : '<span class="badge ba" style="flex-shrink:0">Aguardando</span>'}
-    </div>`).join('')
+      <div class="np-acoes">
+        ${p['LINK_HOLERITE']
+          ? `<a href="${esc(String(p['LINK_HOLERITE']))}" target="_blank" rel="noopener" class="np-ver"
+               title="Ver o documento desta ordem"><i class="ti ti-file-text"></i> Ver</a>`
+          : ''}
+        ${p['WA_LINK_EMPREGADOR']
+          ? `<a href="${p['WA_LINK_EMPREGADOR']}" target="_blank" class="np-wa" title="${avisado ? 'Cobrar' : 'Avisar'} pelo WhatsApp">
+               <i class="ti ti-brand-whatsapp"></i>
+             </a>`
+          : ''}
+        <button class="np-pago" data-id="${esc(String(p['ID']))}" data-nome="${esc(String(p['NOME_FUNC'] || ''))}"
+                onclick="marcarComoPago(this.dataset.id, this.dataset.nome)" title="Marcar como pago">
+          <i class="ti ti-check"></i> Pago
+        </button>
+      </div>
+    </div>`
+  }).join('')
+}
+
+// Nem todo pagamento passa pelo link: dinheiro, Pix pelo banco, transferência
+// na mão. Sem isto a ordem ficava "aguardando" para sempre.
+async function marcarComoPago(id, nome) {
+  if (!confirm(`Confirmar que o pagamento de ${nome || 'este funcionário'} já foi feito?`)) return
+  mostrarLoading('Registrando...')
+  const res = await chamarGAS({ acao: 'marcar_pago', dados: { id } })
+  esconderLoading()
+  if (!res || !res.ok) return toast('❌ ' + ((res && res.erro) || 'Erro ao registrar'), 'erro')
+  toast(res.data?.ja_estava ? 'Já estava marcado como pago' : '✅ Pagamento registrado', 'sucesso')
+  await carregarNotifPendentes()
+  if (funcPgtoSelecionado) carregarHistoricoPagamentos()
 }

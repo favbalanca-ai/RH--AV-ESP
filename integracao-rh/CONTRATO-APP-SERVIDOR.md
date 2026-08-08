@@ -21,41 +21,69 @@ consultar o app: tudo o que ele precisa chega no e-mail.
 Remetente `ola@zapsign.com.br`, assunto `<Nome Completo> assinou o documento <DocName>`,
 com o **PDF assinado anexado**.
 
-**O nome do anexo é o nome final do arquivo** — mesma convenção do `Y:\RH-2`:
+**O nome do anexo carrega o tipo do documento:**
 
 ```
-AAAA.MM.NOME COMPLETO.TIPO.pdf
+<Tipo>_<Mês>-<Ano>_<NOME COMPLETO>
 ```
 
 | Documento | Nome do anexo |
 |---|---|
-| Folha de pagamento | `2026.07.ANA PAULA RIBEIRO.RECIBO.pdf` |
-| Férias | `2026.07.JOSE NILSON ANTONIO LIMA.FERIAS.pdf` |
-| Ponto | `2026.07.CARLOS EDUARDO SOUZA.PONTO.pdf` |
-| EPI | `Recibo_EPI_<Nome>_<DD-MM-AAAA>` *(formato antigo, ainda não migrado)* |
+| Folha de pagamento | `Folha_Julho-2026_ANA PAULA RIBEIRO` |
+| Férias | `Ferias_Julho-2026_JOSE NILSON ANTONIO LIMA` |
+| Ponto | `Ponto_Julho-2026_CARLOS EDUARDO SOUZA` |
+| EPI | `Recibo_EPI_<Nome>_<DD-MM-AAAA>` *(formato próprio, não passa por aqui)* |
 
-> **Mudou em 08/2026.** Antes o app mandava `Folha_Julho-2026_Watila` para
-> **todo** documento — férias e ponto inclusive — e o tipo só existia dentro do
-> PDF, obrigando a classificar por OCR. Agora o tipo vem no nome.
+> **Mudou em 08/2026.** Antes o app mandava `Folha_...` para **todo**
+> documento — férias e ponto inclusive — e o tipo só existia dentro do PDF,
+> obrigando o `classifica_conteudo` a descobri-lo por OCR. Agora vem no
+> prefixo.
 >
-> ⚠️ **O `parse_docname` precisa do patch** em `PATCH-parse_docname.py`, que
-> aceita o formato novo mantendo os antigos. Sem ele, todo documento novo cai
-> em "REVISAR". O histórico de e-mails dentro da janela de 45 dias ainda tem
-> `Folha_...`, então os dois formatos precisam conviver.
+> ✅ **O `baixar_rh_email.py` NÃO precisa de alteração.** O formato é de
+> propósito o mesmo que o `parse_docname` dele já entende: ele testa
+> `startswith("FOLHA_")`, `startswith("PONTO")` e `startswith("FERIAS")`, e
+> tira mês/ano do padrão `<MES>-<ANO>`. O servidor ganha o tipo de graça.
+>
+> `Folha` continua devolvendo a família `FOLHA?`, e o `classifica_conteudo`
+> decide entre recibo, contracheque e comprovante lendo o PDF — comportamento
+> inalterado. **Férias e ponto passam a ser definitivos pelo nome**, que é
+> onde o OCR errava.
 
-O `controle_rh.parse_arquivo` já aceita o formato novo sem mudança — ele é
-exatamente o padrão que o `destino_e_nome` produz.
+Chegou a existir aqui uma proposta de nomear o anexo já no padrão do arquivo
+(`2026.07.NOME.TIPO`), com um patch obrigatório no `parse_docname`. Foi
+descartada: obrigava a mexer no servidor para ganhar pouco — o nome final em
+`Y:\RH-2` é montado pelo `destino_e_nome` a partir de `(tipo, ano, mês)`, não
+do nome do anexo, então ele já sai certo dos dois jeitos. O patch está no
+histórico do repositório (`b5483fd`) se um dia fizer sentido.
+
+## O recibo pode vir com o ponto dentro
+
+Para economizar assinatura — o ZapSign cobra por **documento**, não por
+página — o app junta a folha e o ponto do mesmo funcionário num arquivo só.
+Quando isso acontece, o anexo `Folha_Julho-2026_NOME` tem **2 páginas**:
+
+| Página | Conteúdo |
+|---|---|
+| 1 | recibo / holerite |
+| 2 | folha de ponto |
+
+A página 1 é sempre a folha, de propósito: é ela que o `classifica_conteudo`
+lê para decidir a pasta. O documento inteiro arquiva em
+`03. Folha de Pagamento\Recibos` — o ponto vai junto como comprovação anexa,
+e `04. Ponto` fica sem arquivo próprio nesse mês.
+
+Nada muda no script: continua sendo um e-mail, um anexo, um arquivo.
 
 ## A cópia não assinada (fica só no Drive)
 
 Ao enviar para assinatura, o app guarda o PDF cru na pasta do funcionário:
 
 ```
-<ID>_<NOME>/FOLHA_PAGAMENTO/2026.07.ANA PAULA RIBEIRO.RECIBO.PENDENTE.pdf
-<ID>_<NOME>/FERIAS/2026.07.JOSE NILSON ANTONIO LIMA.FERIAS.PENDENTE.pdf
+<ID>_<NOME>/FOLHA_PAGAMENTO/Folha_Julho-2026_ANA PAULA RIBEIRO_PENDENTE.pdf
+<ID>_<NOME>/FERIAS/Ferias_Julho-2026_JOSE NILSON ANTONIO LIMA_PENDENTE.pdf
 ```
 
-O sufixo `.PENDENTE` distingue da via assinada. **Essa cópia não vai para o
+O sufixo `_PENDENTE` distingue da via assinada. **Essa cópia não vai para o
 `Y:\RH-2`** — o arquivo permanente é a via assinada, conforme o §3 do fluxo.
 
 ## Duas fontes de arquivo, de propósito
@@ -63,7 +91,7 @@ O sufixo `.PENDENTE` distingue da via assinada. **Essa cópia não vai para o
 | | Google Drive | `Y:\RH-2` |
 |---|---|---|
 | Alimentado por | App | Script do servidor |
-| Contém | cópia crua (`.PENDENTE`) + a assinada que o webhook pegar | **a assinada** |
+| Contém | cópia crua (`_PENDENTE`) + a assinada que o webhook pegar | **a assinada** |
 | Papel | operacional do app (consulta na ficha do funcionário) | **arquivo permanente e impressão** |
 
 Não é duplicação acidental: o Drive serve o app, o `Y:\RH-2` é o arquivo legal.
@@ -86,13 +114,12 @@ por sair do escopo; está no histórico do repositório (`a078d29`).
 
 ## Ordem de implantação
 
-1. **Aplicar o `PATCH-parse_docname.py`** no `baixar_rh_email.py`
-2. **Deploy do `Code.gs`** no Apps Script (preservando `SHEET_ID`,
-   `DRIVE_ROOT_FOLDER` e a senha do admin — linhas 22, 23 e 31)
-3. `python baixar_rh_email.py` em dry-run: os antigos devem continuar
-   reconhecidos
-4. Enviar um documento novo pelo app e conferir que o anexo chega com o nome
-   no formato novo
+1. **Deploy do `Code.gs`** no Apps Script, preservando `SHEET_ID`,
+   `DRIVE_ROOT_FOLDER` e a senha do admin (linhas 22, 23 e 31)
+2. Enviar um documento novo pelo app e conferir que o anexo chega como
+   `Ferias_Julho-2026_NOME` (e não mais `Folha_...` para tudo)
+3. Conferir no servidor que ele foi para `05. Férias`, sem passar por
+   `_A_CLASSIFICAR`
 
-Inverter 1 e 2 manda os documentos assinados no intervalo para
-`_A_CLASSIFICAR` — recuperável, mas dá trabalho.
+Nada a fazer no servidor. Se algo cair em `_A_CLASSIFICAR`, é sinal de que o
+nome saiu fora do padrão — mande o nome do anexo que dá para diagnosticar.
