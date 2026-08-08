@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260812'
+const APP_VERSION = '20260813'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -1955,6 +1955,7 @@ async function enviarPaginaAssinaturaPropria(idx, tipo) {
       inclui_ponto: !!p.ponto,
       verbas:       p.verbas || null,
       bases:        p.bases || null,
+      parametros:   p.parametros || null,
       tipo:         tipoDoc,
       competencia:  p.competencia,
       func_id:      p.funcId,
@@ -2485,6 +2486,7 @@ async function identificarFuncionariosAutomatico() {
       // Bases e FGTS do rodapé: é a única parcela de custo patronal que vem do
       // próprio documento, em vez de depender de alíquota configurada.
       if (d.bases && Object.keys(d.bases).length) paginasFracionadas[i].bases = d.bases
+      if (d.parametros && Object.keys(d.parametros).length) paginasFracionadas[i].parametros = d.parametros
       if (d.ferias_inicio) paginasFracionadas[i].feriasInicio = d.ferias_inicio
       if (d.ferias_fim)    paginasFracionadas[i].feriasFim    = d.ferias_fim
 
@@ -2744,7 +2746,7 @@ async function enviarPaginaZapSign(idx) {
   const btn = document.getElementById('btn-zap-' + idx)
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>'
   mostrarLoading('Enviando para ' + p.nome.split(' ')[0] + '...')
-  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfEnvio || p.pdfBase64, inclui_ponto: !!p.ponto, verbas: p.verbas || null, bases: p.bases || null, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true, tipo: p.tipoDoc || tipoDocAtual, valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null } })
+  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: { pdf_base64: p.pdfEnvio || p.pdfBase64, inclui_ponto: !!p.ponto, verbas: p.verbas || null, bases: p.bases || null, parametros: p.parametros || null, competencia: p.competencia, nome_funcionario: p.nome, pagina: p.pagina, enviar_zapsign: true, tipo: p.tipoDoc || tipoDocAtual, valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null } })
   esconderLoading()
   if (res && res.ok) {
     paginasFracionadas[idx].status  = 'enviado'
@@ -2789,7 +2791,7 @@ async function enviarTodasPendentes(metodo) {
       mostrarLoading('Gerando link ' + (links.length + 1) + '/' + pendentes.length + ' — ' + p.nome.split(' ')[0])
       const res = await chamarGAS({
         acao: 'processar_pagina_proprio',
-        dados: { pdf_base64: p.pdfEnvio || p.pdfBase64, inclui_ponto: !!p.ponto, verbas: p.verbas || null, bases: p.bases || null, tipo: p.tipoDoc || tipoDocAtual,
+        dados: { pdf_base64: p.pdfEnvio || p.pdfBase64, inclui_ponto: !!p.ponto, verbas: p.verbas || null, bases: p.bases || null, parametros: p.parametros || null, tipo: p.tipoDoc || tipoDocAtual,
                  competencia: p.competencia, func_id: p.funcId, func_nome: p.nome, pagina: p.pagina,
                  valor_liquido: p.valorLiquido || null, ferias_inicio: p.feriasInicio || null, ferias_fim: p.feriasFim || null }
       })
@@ -3487,6 +3489,7 @@ function analiseResumo(a) {
       <div class="af-verba-sub">
         ${c.meses} de ${nMeses} ${nMeses === 1 ? 'mês' : 'meses'}
         · média R$ ${formatarValor(c.total / c.meses)}
+        ${c.horas ? `· <strong>${formatarValor(c.horas)} h</strong>` : ''}
       </div>
     </div>`
 
@@ -3566,7 +3569,9 @@ function analiseMeses(a) {
     <div class="af-mes">
       <button class="af-mes-topo" onclick="alternarMes(${i})" aria-expanded="false" id="af-btn-${i}"
               ${m.verbas.length ? '' : 'disabled'}>
-        <span class="af-mes-nome">${esc(normalizarComp(m.competencia))}</span>
+        <span class="af-mes-nome">${esc(normalizarComp(m.competencia))}${
+          m.tipo_folha && m.tipo_folha !== 'Mensal'
+            ? ` <span class="af-tipo">${esc(m.tipo_folha)}</span>` : ''}</span>
         ${m.sem_verbas
           ? '<span class="af-tag">sem detalhamento</span>'
           : `<span class="af-mes-cols">
