@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260813'
+const APP_VERSION = '20260814'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -412,6 +412,7 @@ const TITULOS = {
   'log':'Log de Auditoria',
   'diagnostico':'Diagnóstico',
   'calendario':'Calendário de Férias',
+  'custo':'Custo de Mão de Obra',
 }
 
 function irPara(pg) {
@@ -429,6 +430,7 @@ function irPara(pg) {
   if (pg === 'log')        carregarLog()
   if (pg === 'diagnostico') renderDiagnostico()
   if (pg === 'calendario') carregarCalendario()
+  if (pg === 'custo')      iniciarCusto()
 }
 
 // ─── CALENDÁRIO DE FÉRIAS ────────────────────────────────────────
@@ -3549,8 +3551,9 @@ function analiseBases(a) {
   return `
     <div class="af-secao">Do rodapé do holerite</div>
     <p class="af-nota">Custo do empregador que o próprio documento informa.
-      O INSS patronal e os demais encargos dependem de alíquota por empregador,
-      que ainda não está configurada.</p>
+      O INSS patronal e os demais encargos saem daqui multiplicados pelas
+      alíquotas de cada empregador —
+      <a href="#" onclick="irPara('custo');return false">ver o custo completo</a>.</p>
     ${linhas}`
 }
 
@@ -3865,4 +3868,437 @@ async function marcarComoPago(id, nome) {
   toast(res.data?.ja_estava ? 'Já estava marcado como pago' : '✅ Pagamento registrado', 'sucesso')
   await carregarNotifPendentes()
   if (funcPgtoSelecionado) carregarHistoricoPagamentos()
+}
+
+// ─── CUSTO DE MÃO DE OBRA ─────────────────────────────────────────
+// O holerite responde "quanto o funcionário recebeu". Esta tela responde
+// "quanto o empregador gastou" — que é outro número, e maior.
+let custoCache = null
+let custoVista = 'resumo'
+let encargosCache = null
+
+async function iniciarCusto() {
+  const sel = document.getElementById('cst-ano')
+  if (sel && !sel.options.length) {
+    const hoje = new Date().getFullYear()
+    for (let a = hoje; a >= hoje - 4; a--) sel.add(new Option(a, a))
+    sel.value = hoje
+  }
+  await carregarCusto()
+}
+
+async function carregarCusto() {
+  const corpo = document.getElementById('cst-corpo')
+  if (!corpo) return
+  corpo.innerHTML = '<div class="af-nota">Somando…</div>'
+  const ano = document.getElementById('cst-ano')?.value || ''
+  const emp = document.getElementById('cst-emp')?.value || ''
+  const res = await chamarGAS({ acao: 'custo_mdo', dados: { ano, empregador: emp } })
+  if (!res || !res.ok) {
+    custoCache = null
+    corpo.innerHTML = `<div class="af-nota">Não consegui carregar: ${esc((res && res.erro) || 'sem resposta do servidor')}</div>`
+    return
+  }
+  custoCache = res.data
+  preencherAnosCusto(custoCache)
+  preencherEmpregadoresCusto(custoCache)
+  renderCusto()
+}
+
+// O select de ano nasce com os últimos cinco; se a planilha tem folha de um
+// ano fora dessa janela, ele ganha a opção — senão o dado existiria e não
+// haveria como chegar até ele.
+function preencherAnosCusto(c) {
+  const sel = document.getElementById('cst-ano')
+  if (!sel) return
+  ;(c.anos || []).forEach(a => {
+    if (![...sel.options].some(o => o.value === String(a))) sel.add(new Option(a, a))
+  })
+  ;[...sel.options].sort((x, y) => Number(y.value) - Number(x.value))
+    .forEach(o => sel.appendChild(o))
+  if (c.ano_filtro) sel.value = c.ano_filtro
+}
+
+function preencherEmpregadoresCusto(c) {
+  const sel = document.getElementById('cst-emp')
+  if (!sel || sel.dataset.pronto === '1') return
+  // Com o filtro ligado a resposta traz um empregador só — a lista completa
+  // tem de vir de uma leitura sem filtro, senão o select se estreita a cada uso.
+  if (c.empregador_filtro) return
+  const atual = sel.value
+  sel.innerHTML = '<option value="">Todos os empregadores</option>'
+  ;(c.empregadores || []).forEach(e => sel.add(new Option(e.rotulo, e.rotulo)))
+  sel.value = atual
+  sel.dataset.pronto = '1'
+}
+
+function verCusto(vista) {
+  custoVista = vista
+  document.querySelectorAll('#pg-custo .af-aba').forEach(b => b.classList.remove('ativa'))
+  document.getElementById('cst-aba-' + vista)?.classList.add('ativa')
+  renderCusto()
+}
+
+function renderCusto() {
+  const corpo = document.getElementById('cst-corpo')
+  if (!corpo) return
+  const c = custoCache
+  if (!c) return
+  const t = c.total || {}
+  const nota = document.getElementById('cst-nota')
+  if (nota) nota.textContent = c.ano_filtro ? ' · ' + c.ano_filtro : ' · todos os anos'
+
+  if (!t.folhas) {
+    corpo.innerHTML = `
+      <div class="af-nota">
+        Nenhuma folha analisada ${c.ano_filtro ? 'em ' + esc(c.ano_filtro) : ''}.
+        ${c.qualidade && c.qualidade.sem_verbas
+          ? `Há ${c.qualidade.sem_verbas} holerite(s) ainda sem leitura — abra a aba
+             Pgto de um funcionário e use <strong>Analisar agora</strong>.`
+          : 'Envie os holerites pela aba Folha para que o custo apareça aqui.'}
+      </div>`
+    return
+  }
+
+  if (custoVista === 'pessoas')   return void (corpo.innerHTML = custoPessoas(c))
+  if (custoVista === 'equipe')    return void (corpo.innerHTML = custoEquipe(c))
+  if (custoVista === 'meses')     return void (corpo.innerHTML = custoMeses(c))
+  if (custoVista === 'aliquotas') return void carregarAliquotas()
+  corpo.innerHTML = custoResumo(c)
+}
+
+const rs = v => 'R$ ' + formatarValor(v || 0)
+
+function custoResumo(c) {
+  const t = c.total
+  const q = c.qualidade || {}
+
+  const alerta = []
+  if (q.sem_verbas) {
+    alerta.push(`${q.sem_verbas} holerite(s) do período ainda não foram lidos e ficaram
+                 <strong>fora</strong> desta conta.`)
+  }
+  if (q.base_estimada) {
+    alerta.push(`${q.base_estimada} folha(s) sem a base de INSS impressa — nelas os
+                 encargos foram calculados sobre os proventos, o que superestima
+                 um pouco.`)
+  }
+  // 13º e férias pagos já foram provisionados mês a mês. Somar os dois no
+  // mesmo período conta a mesma coisa duas vezes — e quem lê precisa saber.
+  const especiais = Object.keys(c.tipos_folha || {})
+    .filter(k => k !== 'Mensal')
+    .map(k => `${c.tipos_folha[k]} de ${k}`)
+  if (especiais.length) {
+    alerta.push(`O período inclui folha ${especiais.join(' e ')}. Esse valor entra na
+                 folha bruta <em>e</em> já havia sido provisionado nos meses
+                 anteriores — para comparar meses, olhe a aba Mês a mês, onde cada
+                 competência aparece separada.`)
+  }
+
+  const naoConferidos = (c.empregadores || []).filter(e => !e.conferido)
+  if (naoConferidos.length) {
+    alerta.push(`Alíquotas ainda não conferidas com o contador em
+                 ${naoConferidos.map(e => esc(e.rotulo)).join(', ')} — os números usam
+                 os valores padrão. <a href="#" onclick="verCusto('aliquotas');return false">Ajustar</a>`)
+  }
+
+  return `
+    <div class="cst-cards">
+      <div class="cst-card destaque">
+        <span>Custo total</span><strong>${rs(t.custo_total)}</strong>
+        <em>${t.meses} ${t.meses === 1 ? 'mês' : 'meses'} · ${t.funcionarios} pessoa(s)</em>
+      </div>
+      <div class="cst-card">
+        <span>Por mês</span><strong>${rs(t.custo_mes)}</strong>
+        <em>média do período</em>
+      </div>
+      <div class="cst-card">
+        <span>Multiplicador</span><strong>${(t.multiplicador || 0).toFixed(2)}×</strong>
+        <em>cada R$ 1,00 de salário custa ${rs(t.multiplicador)}</em>
+      </div>
+      <div class="cst-card">
+        <span>Hora extra</span><strong>${formatarValor(t.he_horas)} h</strong>
+        <em>${rs(t.he_valor)} · ${t.he_pct}% da folha</em>
+      </div>
+    </div>
+
+    ${alerta.length ? `<div class="cst-aviso">${alerta.map(a => `<p>${a}</p>`).join('')}</div>` : ''}
+
+    ${custoEscada(t)}
+    ${(c.empregadores || []).map(custoBlocoEmpregador).join('')}
+    ${custoConcentracao(c)}
+    ${custoCategorias(c)}`
+}
+
+// Do bruto ao custo, parcela por parcela. É a tela que responde "por que o
+// custo é maior que a folha".
+function custoEscada(t) {
+  const linha = (rot, val, cls) => `
+    <div class="cst-linha ${cls || ''}">
+      <span>${rot}</span>
+      <strong>${rs(val)}</strong>
+      <em>${t.custo_total ? Math.round(val / t.custo_total * 100) : 0}%</em>
+    </div>`
+  return `
+    <div class="cst-escada">
+      ${linha('Folha bruta', t.proventos)}
+      ${linha('INSS patronal', t.inss)}
+      ${linha('RAT', t.rat)}
+      ${linha('Terceiros', t.terceiros)}
+      ${linha('FGTS', t.fgts)}
+      ${linha('Provisão de 13º', t.prov_13)}
+      ${linha('Provisão de férias', t.prov_ferias)}
+      ${linha('Custo total', t.custo_total, 'total')}
+    </div>
+    <div class="af-nota">
+      O líquido pago aos funcionários foi ${rs(t.liquido)}; a diferença para a folha
+      bruta são os descontos (${rs(t.descontos)}), que saem do salário e não são
+      custo a mais para o empregador.
+    </div>`
+}
+
+function custoBlocoEmpregador(e) {
+  const aliq = e.aliquotas || {}
+  const regime = e.regime === 'Receita'
+    ? 'recolhe sobre a comercialização — INSS patronal, RAT e terceiros não entram na folha'
+    : `sobre a folha · INSS ${aliq.inss_patronal}% · RAT ${aliq.rat}% · terceiros ${aliq.terceiros}%`
+  const fgtsFonte = e.fgts_estimado
+    ? (e.fgts_impresso
+        ? `${e.fgts_impresso} mês(es) com o FGTS impresso no holerite, ${e.fgts_estimado} calculado(s) pela alíquota`
+        : `calculado pela alíquota de ${aliq.fgts}% — nenhum holerite trouxe o FGTS impresso`)
+    : 'todo o FGTS veio impresso no holerite'
+
+  return `
+    <div class="cst-emp">
+      <div class="cst-emp-topo">
+        <div>
+          <div class="cst-emp-nome">${esc(e.rotulo)}</div>
+          <div class="cst-emp-sub">${regime}</div>
+        </div>
+        <div class="cst-emp-valor">
+          ${rs(e.custo_total)}
+          <em>${(e.multiplicador || 0).toFixed(2)}× a folha</em>
+        </div>
+      </div>
+      <div class="cst-emp-grade">
+        <div><span>Folha bruta</span><strong>${rs(e.proventos)}</strong></div>
+        <div><span>Encargos</span><strong>${rs(e.encargos)}</strong></div>
+        <div><span>Provisões</span><strong>${rs(e.provisoes)}</strong></div>
+        <div><span>Pessoas</span><strong>${e.funcionarios}</strong></div>
+        <div><span>Por mês</span><strong>${rs(e.custo_mes)}</strong></div>
+        <div><span>Hora extra</span><strong>${formatarValor(e.he_horas)} h</strong></div>
+      </div>
+      <div class="cst-emp-nota">
+        FGTS: ${fgtsFonte}.
+        ${e.conferido ? '' : ' <strong>Alíquotas ainda não conferidas.</strong>'}
+        ${e.sem_verbas ? ` ${e.sem_verbas} holerite(s) fora da conta, sem leitura.` : ''}
+      </div>
+    </div>`
+}
+
+function custoConcentracao(c) {
+  const k = c.concentracao_he || {}
+  if (!k.total) return ''
+  return `
+    <div class="cst-secao">Concentração de hora extra</div>
+    <div class="af-nota">
+      ${k.pessoas} pessoa(s) fizeram hora extra, somando ${rs(k.total)}.
+      ${k.pessoas > 3 ? `As 3 maiores respondem por <strong>${k.top3}%</strong> do total` : ''}
+      ${k.pessoas > 5 ? ` e as 5 maiores por ${k.top5}%` : ''}${k.pessoas > 3 ? '.' : ''}
+      ${k.top3 >= 60 && k.pessoas > 3
+        ? ' Concentração alta costuma ser sinal de equipe subdimensionada num ponto só — e é o tipo de padrão que aparece em reclamação trabalhista.'
+        : ''}
+    </div>
+    ${(k.maiores || []).map(p => `
+      <div class="cst-linha">
+        <span>${esc(p.nome)}</span>
+        <strong>${rs(p.valor)}</strong>
+        <em>${formatarValor(p.horas)} h</em>
+      </div>`).join('')}`
+}
+
+function custoCategorias(c) {
+  const cats = (c.categorias || []).filter(x => x.tipo !== 'desconto')
+  if (!cats.length) return ''
+  const teto = Math.max(...cats.map(x => x.total), 1)
+  return `
+    <div class="cst-secao">Composição da folha bruta</div>
+    ${cats.map(x => `
+      <div class="af-verba">
+        <div class="af-verba-topo">
+          <span class="af-verba-nome">${esc(x.rotulo)}</span>
+          <span class="af-verba-valor">${rs(x.total)}</span>
+        </div>
+        <div class="af-barra"><div class="af-barra-in" style="width:${Math.round(x.total / teto * 100)}%"></div></div>
+        <div class="af-verba-sub">
+          ${x.folhas} lançamento(s)${x.horas ? ` · <strong>${formatarValor(x.horas)} h</strong>` : ''}
+        </div>
+      </div>`).join('')}`
+}
+
+function custoPessoas(c) {
+  const gente = c.funcionarios || []
+  if (!gente.length) return '<div class="af-nota">Nenhum funcionário com folha no período.</div>'
+  const teto = Math.max(...gente.map(p => p.custo_total), 1)
+  return `
+    <div class="af-nota">
+      Ordenado pelo custo total do período — folha bruta mais encargos e provisões.
+    </div>
+    ${gente.map(p => `
+      <div class="af-verba">
+        <div class="af-verba-topo">
+          <span class="af-verba-nome">${esc(p.rotulo)}</span>
+          <span class="af-verba-valor">${rs(p.custo_total)}</span>
+        </div>
+        <div class="af-barra"><div class="af-barra-in" style="width:${Math.round(p.custo_total / teto * 100)}%"></div></div>
+        <div class="af-verba-sub">
+          ${esc(p.funcao || '—')}${p.unidade ? ' · ' + esc(p.unidade) : ''}
+          · ${p.meses} ${p.meses === 1 ? 'mês' : 'meses'}
+          · ${rs(p.custo_mes)}/mês
+          · ${(p.multiplicador || 0).toFixed(2)}×
+          ${p.he_horas ? ` · <strong>${formatarValor(p.he_horas)} h extra</strong> (${p.he_pct}%)` : ''}
+        </div>
+      </div>`).join('')}`
+}
+
+function custoEquipe(c) {
+  const bloco = (titulo, lista, ajuda) => {
+    if (!lista || !lista.length) return ''
+    const teto = Math.max(...lista.map(u => u.custo_total), 1)
+    return `
+      <div class="cst-secao">${titulo}</div>
+      ${ajuda ? `<div class="af-nota">${ajuda}</div>` : ''}
+      ${lista.map(u => `
+        <div class="af-verba">
+          <div class="af-verba-topo">
+            <span class="af-verba-nome">${esc(u.rotulo)}</span>
+            <span class="af-verba-valor">${rs(u.custo_total)}</span>
+          </div>
+          <div class="af-barra"><div class="af-barra-in" style="width:${Math.round(u.custo_total / teto * 100)}%"></div></div>
+          <div class="af-verba-sub">
+            ${u.funcionarios} pessoa(s) · ${rs(u.custo_mes)}/mês
+            ${u.he_horas ? ` · ${formatarValor(u.he_horas)} h extra` : ''}
+            ${u.faltas ? ` · faltas ${rs(u.faltas)}` : ''}
+          </div>
+        </div>`).join('')}`
+  }
+  return bloco('Por unidade', c.unidades,
+      'A unidade vem do centro de custo impresso no holerite quando ele existe; senão, do cadastro do funcionário.')
+    + bloco('Por função', c.funcoes,
+      'Mesma função em unidades diferentes pode custar diferente — é aqui que isso aparece.')
+}
+
+function custoMeses(c) {
+  const meses = c.meses || []
+  if (!meses.length) return '<div class="af-nota">Sem meses no período.</div>'
+  const teto = Math.max(...meses.map(m => m.custo_total), 1)
+  return `
+    <div class="af-nota">
+      Cada mês pelo que foi trabalhado (competência), não pela data do pagamento.
+    </div>
+    ${meses.map(m => `
+      <div class="af-verba">
+        <div class="af-verba-topo">
+          <span class="af-verba-nome">${esc(normalizarComp(m.rotulo))}</span>
+          <span class="af-verba-valor">${rs(m.custo_total)}</span>
+        </div>
+        <div class="af-barra"><div class="af-barra-in" style="width:${Math.round(m.custo_total / teto * 100)}%"></div></div>
+        <div class="af-verba-sub">
+          ${m.funcionarios} pessoa(s) · folha ${rs(m.proventos)}
+          · encargos ${rs(m.encargos)} · provisões ${rs(m.provisoes)}
+          ${m.he_horas ? ` · ${formatarValor(m.he_horas)} h extra` : ''}
+        </div>
+      </div>`).join('')}`
+}
+
+// ─── Alíquotas por empregador ─────────────────────────────────────
+async function carregarAliquotas() {
+  const corpo = document.getElementById('cst-corpo')
+  corpo.innerHTML = '<div class="af-nota">Carregando…</div>'
+  const res = await chamarGAS({ acao: 'listar_encargos' })
+  if (!res || !res.ok) {
+    corpo.innerHTML = `<div class="af-nota">Não consegui carregar: ${esc((res && res.erro) || 'sem resposta')}</div>`
+    return
+  }
+  encargosCache = res.data
+  corpo.innerHTML = renderAliquotas(encargosCache)
+}
+
+function renderAliquotas(d) {
+  const linhas = (d.encargos || []).map((e, i) => `
+    <div class="cst-form" data-emp="${esc(e.empregador)}">
+      <div class="cst-form-nome">${esc(e.empregador)}
+        ${e.conferido ? '<span class="cst-selo ok">conferido</span>'
+                      : '<span class="cst-selo">a conferir</span>'}
+      </div>
+      <div class="campo-grupo">
+        <label>Como recolhe a parte patronal</label>
+        <select data-c="regime">
+          ${(d.regimes || ['Folha']).map(r =>
+            `<option value="${r}" ${r === e.regime ? 'selected' : ''}>${
+              r === 'Folha' ? 'Sobre a folha de pagamento' : 'Sobre a comercialização (receita)'
+            }</option>`).join('')}
+        </select>
+      </div>
+      <div class="dois-col">
+        <div class="campo-grupo"><label>INSS patronal %</label>
+          <input type="number" step="0.01" data-c="inss_patronal" value="${e.inss_patronal}"></div>
+        <div class="campo-grupo"><label>RAT %</label>
+          <input type="number" step="0.01" data-c="rat" value="${e.rat}"></div>
+      </div>
+      <div class="dois-col">
+        <div class="campo-grupo"><label>Terceiros %</label>
+          <input type="number" step="0.01" data-c="terceiros" value="${e.terceiros}"></div>
+        <div class="campo-grupo"><label>FGTS %</label>
+          <input type="number" step="0.01" data-c="fgts" value="${e.fgts}"></div>
+      </div>
+      <label class="cst-check"><input type="checkbox" data-c="provisao_13" ${e.provisao_13 ? 'checked' : ''}> Provisionar 13º</label>
+      <label class="cst-check"><input type="checkbox" data-c="provisao_ferias" ${e.provisao_ferias ? 'checked' : ''}> Provisionar férias</label>
+      <label class="cst-check"><input type="checkbox" data-c="conferido" ${e.conferido ? 'checked' : ''}> Conferido com o contador</label>
+      <div class="campo-grupo"><label>Observação</label>
+        <input type="text" data-c="observacoes" value="${esc(e.observacoes || '')}" placeholder="data da conferência, nome do contador…"></div>
+    </div>`).join('')
+
+  return `
+    <div class="af-nota">
+      A alíquota de FGTS só é usada quando o holerite não imprime o valor do mês —
+      quando imprime, vale o que está no documento. As demais são multiplicadas
+      pela base de INSS de cada holerite.
+    </div>
+    ${linhas || '<div class="af-nota">Nenhum empregador cadastrado nos funcionários.</div>'}
+    ${linhas ? `<button class="btn-primario w-full mt-2" onclick="salvarAliquotas()">
+      <i class="ti ti-device-floppy" aria-hidden="true"></i> Salvar alíquotas</button>` : ''}`
+}
+
+async function salvarAliquotas() {
+  const blocos = [...document.querySelectorAll('#cst-corpo .cst-form')]
+  const encargos = blocos.map(b => {
+    const val = c => b.querySelector(`[data-c="${c}"]`)
+    const num = c => { const el = val(c); return el ? parseFloat(el.value) : null }
+    return {
+      empregador:      b.dataset.emp,
+      regime:          val('regime')?.value,
+      inss_patronal:   num('inss_patronal'),
+      rat:             num('rat'),
+      terceiros:       num('terceiros'),
+      fgts:            num('fgts'),
+      provisao_13:     !!val('provisao_13')?.checked,
+      provisao_ferias: !!val('provisao_ferias')?.checked,
+      conferido:       !!val('conferido')?.checked,
+      observacoes:     val('observacoes')?.value || '',
+    }
+  })
+  const ruim = encargos.find(e => [e.inss_patronal, e.rat, e.terceiros, e.fgts]
+    .some(n => !isFinite(n) || n < 0 || n > 100))
+  if (ruim) return toast('❌ Alíquota inválida em ' + ruim.empregador, 'erro')
+
+  mostrarLoading('Salvando…')
+  const res = await chamarGAS({ acao: 'salvar_encargos', dados: { encargos } })
+  esconderLoading()
+  if (!res || !res.ok) return toast('❌ ' + ((res && res.erro) || 'Erro ao salvar'), 'erro')
+  toast('✅ Alíquotas salvas', 'sucesso')
+  // O custo inteiro depende delas: recarrega para a tela não ficar
+  // mostrando número calculado com a alíquota antiga.
+  await carregarCusto()
+  verCusto('resumo')
 }

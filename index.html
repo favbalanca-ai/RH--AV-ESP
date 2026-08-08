@@ -10,11 +10,11 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
-<link rel="stylesheet" href="style.css?v=20260813">
+<link rel="stylesheet" href="style.css?v=20260814">
 <script src="https://apis.google.com/js/api.js"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
-<meta name="app-version" content="20260813">
+<meta name="app-version" content="20260814">
 <title>SST — Fazenda Água Viva</title>
 </head>
 <body>
@@ -100,6 +100,7 @@
           <button class="btn-acao" onclick="irPara('pagamento')"><div class="acao-icon green"><i class="ti ti-cash" aria-hidden="true"></i></div><span class="label">Pagamentos</span></button>
           <button class="btn-acao" onclick="irPara('diagnostico')"><div class="acao-icon red"><i class="ti ti-history" aria-hidden="true"></i></div><span class="label">Histórico &amp; erros</span></button>
           <button class="btn-acao" onclick="irPara('calendario')"><div class="acao-icon blue"><i class="ti ti-calendar-event" aria-hidden="true"></i></div><span class="label">Calendário férias</span></button>
+          <button class="btn-acao" onclick="irPara('custo')"><div class="acao-icon amber"><i class="ti ti-report-money" aria-hidden="true"></i></div><span class="label">Custo de MDO</span></button>
         </div>
       </div>
     </div>
@@ -494,6 +495,31 @@
       </div>
     </div>
 
+    <!-- CUSTO DE MÃO DE OBRA -->
+    <div id="pg-custo" class="pagina">
+      <div class="card mb-3">
+        <div class="card-titulo"><i class="ti ti-filter" aria-hidden="true"></i> Período</div>
+        <div class="dois-col">
+          <div class="campo-grupo"><label>Ano</label><select id="cst-ano" onchange="carregarCusto()"></select></div>
+          <div class="campo-grupo"><label>Empregador</label><select id="cst-emp" onchange="carregarCusto()"><option value="">Todos os empregadores</option></select></div>
+        </div>
+      </div>
+      <div class="card mb-3">
+        <div class="card-titulo">
+          <i class="ti ti-report-money" aria-hidden="true"></i> Custo de mão de obra
+          <span id="cst-nota" style="color:var(--text-secondary);font-weight:400"></span>
+        </div>
+        <div class="af-abas" role="tablist">
+          <button class="af-aba ativa" id="cst-aba-resumo" role="tab" onclick="verCusto('resumo')">Resumo</button>
+          <button class="af-aba" id="cst-aba-pessoas" role="tab" onclick="verCusto('pessoas')">Pessoas</button>
+          <button class="af-aba" id="cst-aba-equipe" role="tab" onclick="verCusto('equipe')">Equipe</button>
+          <button class="af-aba" id="cst-aba-meses" role="tab" onclick="verCusto('meses')">Mês a mês</button>
+          <button class="af-aba" id="cst-aba-aliquotas" role="tab" onclick="verCusto('aliquotas')">Alíquotas</button>
+        </div>
+        <div id="cst-corpo"></div>
+      </div>
+    </div>
+
     <!-- LOG AUDITORIA -->
     <div id="pg-log" class="pagina">
       <div class="card">
@@ -595,7 +621,7 @@
   </nav>
 </div>
 
-<script src="app.js?v=20260813"></script>
+<script src="app.js?v=20260814"></script>
 <script>
   // Registra o Service Worker (necessário para Web Share Target e cache offline)
   if ('serviceWorker' in navigator) {
