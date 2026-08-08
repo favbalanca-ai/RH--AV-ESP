@@ -87,6 +87,7 @@ function doPost(e) {
       case 'gerar_link_assinatura':       return respOk(gerarLinkAssinatura(body.dados, usuario))
       case 'processar_pagina_proprio':    return respOk(processarPaginaProprio(body.dados, usuario))
       case 'identificar_com_ia':          return respOk(identificarDocumentoComIA(body.dados))
+      case 'diagnosticar_ia':             return respOk(diagnosticarIA(body.dados))
 
       // Módulo Pagamento — somente ADM
       case 'cadastrar_comissao':          return respOk(cadastrarComissao(body.dados, usuario))
@@ -138,7 +139,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260813'
+var VERSAO_BACKEND = '20260814'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -960,6 +961,227 @@ function identificarFuncionarioPdf(dados) {
 // IDENTIFICAÇÃO POR IA — Claude API
 // Extrai funcionário, tipo de documento e competência do PDF
 // ═══════════════════════════════════════════════════════════════════
+
+var MODELO_IA = 'claude-sonnet-4-6'
+
+// Um holerite de 30 rubricas com verbas, bases e parâmetros passa
+// folgado de 3.000 tokens. Cortada no meio, a resposta não é JSON e a
+// leitura inteira se perde — sem dizer por quê.
+var MAX_TOKENS_IA = 8000
+
+// Uma chamada, um lugar para errar. Devolve o motivo em vez de estourar:
+// quem chama decide se transforma em erro ou em diagnóstico.
+function chamarIA(pdfBase64, prompt) {
+  var chave = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_KEY') || ''
+  if (!chave) {
+    return { ok: false, etapa: 'chave', erro:
+      'A chave da Anthropic não está configurada. No editor do Apps Script: ' +
+      'Configurações do projeto → Propriedades do script → adicionar ' +
+      'ANTHROPIC_KEY com a chave (sk-ant-...).' }
+  }
+
+  var conteudo = []
+  if (pdfBase64) {
+    conteudo.push({ type: 'document',
+      source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } })
+  }
+  conteudo.push({ type: 'text', text: prompt })
+
+  var res
+  try {
+    res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { 'x-api-key': chave, 'anthropic-version': '2023-06-01' },
+      payload: JSON.stringify({
+        model: MODELO_IA,
+        max_tokens: MAX_TOKENS_IA,
+        messages: [{ role: 'user', content: conteudo }],
+      }),
+      muteHttpExceptions: true,
+    })
+  } catch (e) {
+    return { ok: false, etapa: 'rede', erro: 'Não consegui falar com a Anthropic: ' + e.message }
+  }
+
+  var http = res.getResponseCode()
+  var corpo = res.getContentText()
+  var data
+  try { data = JSON.parse(corpo) } catch (e) { data = null }
+
+  if (http !== 200) {
+    var msg = data && data.error ? data.error.message : String(corpo).slice(0, 200)
+    Logger.log('Claude API ' + http + ': ' + corpo)
+    // Cada código erra por um motivo diferente, e a correção é diferente.
+    // "Erro na IA" mandava o usuário adivinhar qual dos quatro era.
+    var explica = {
+      401: 'A chave da Anthropic foi recusada. Confira ANTHROPIC_KEY nas Propriedades do script.',
+      403: 'A chave não tem permissão para este modelo.',
+      404: 'O modelo ' + MODELO_IA + ' não foi encontrado nesta conta.',
+      429: 'Limite de uso da Anthropic atingido. Espere um pouco e tente de novo.',
+      529: 'A Anthropic está sobrecarregada agora. Tente de novo em alguns minutos.',
+    }[http]
+    if (!explica && http >= 500) explica = 'A Anthropic devolveu erro ' + http + '. Tente de novo.'
+    return { ok: false, etapa: 'http', http: http, erro: (explica || 'Erro ' + http) + ' (' + msg + ')' }
+  }
+
+  if (!data || !data.content || !data.content.length) {
+    return { ok: false, etapa: 'vazio', http: http, erro: 'A IA respondeu sem conteúdo.' }
+  }
+
+  var texto = ''
+  data.content.forEach(function (b) { if (b.type === 'text' && b.text) texto += b.text })
+  texto = texto.replace(/```json/g, '').replace(/```/g, '').trim()
+
+  return {
+    ok: true,
+    texto: texto,
+    // Resposta truncada: o JSON vem quebrado e o parse falha depois. Saber
+    // que foi corte muda o conserto de "a IA errou" para "o limite é baixo".
+    cortado: data.stop_reason === 'max_tokens',
+    stop_reason: data.stop_reason || '',
+    usage: data.usage || null,
+    http: http,
+  }
+}
+
+// Testa a leitura sem gravar nada: diz em que etapa parou e o que veio.
+// Serve para o usuário descobrir sozinho por que um PDF não é reconhecido.
+function diagnosticarIA(dados) {
+  var chave = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_KEY') || ''
+  var saida = {
+    versao_backend:    VERSAO_BACKEND,
+    modelo:            MODELO_IA,
+    max_tokens:        MAX_TOKENS_IA,
+    chave_configurada: !!chave,
+    // Só o tamanho e o começo: o suficiente para ver que é a chave certa,
+    // longe do suficiente para vazar a chave num print de tela.
+    chave_tamanho:     chave.length,
+    chave_comeco:      chave ? chave.slice(0, 8) + '…' : '',
+  }
+
+  var pdf = dados && dados.pdf_base64 ? dados.pdf_base64 : ''
+  if (!chave) {
+    saida.etapa = 'chave'
+    saida.erro  = 'ANTHROPIC_KEY não está nas Propriedades do script.'
+    return saida
+  }
+
+  if (!pdf) {
+    // Sem PDF: confere só se a chave e o modelo respondem.
+    var ping = chamarIA('', 'Responda apenas: ok')
+    saida.etapa = ping.ok ? 'ok' : ping.etapa
+    saida.http  = ping.http || 0
+    saida.erro  = ping.ok ? '' : ping.erro
+    saida.resposta = ping.ok ? String(ping.texto).slice(0, 60) : ''
+    return saida
+  }
+
+  var leitura = chamarIA(pdf, PROMPT_HOLERITE)
+  saida.http        = leitura.http || 0
+  saida.stop_reason = leitura.stop_reason || ''
+  saida.cortado     = !!leitura.cortado
+  saida.usage       = leitura.usage
+  if (!leitura.ok) {
+    saida.etapa = leitura.etapa
+    saida.erro  = leitura.erro
+    return saida
+  }
+
+  saida.tamanho_resposta = leitura.texto.length
+  try {
+    var obj = JSON.parse(leitura.texto)
+    saida.etapa = 'ok'
+    saida.lido  = {
+      nome_funcionario: obj.nome_funcionario || '',
+      competencia:      obj.competencia || '',
+      tipo_documento:   obj.tipo_documento || '',
+      empregador:       obj.empregador || '',
+      valor_liquido:    obj.valor_liquido,
+      qtd_verbas:       Array.isArray(obj.verbas) ? obj.verbas.length : 0,
+      tem_bases:        !!(obj.bases && Object.keys(obj.bases).length),
+      tem_parametros:   !!(obj.parametros && Object.keys(obj.parametros).length),
+    }
+    // O casamento com o cadastro é a segunda metade do problema: a IA pode
+    // ler o nome certo e mesmo assim não achar a pessoa na planilha.
+    var funcs = lerAbaComoObjetos(CONFIG.ABAS.FUNCIONARIOS)
+    var achou = obj.nome_funcionario
+      ? encontrarFuncionarioPorNome(obj.nome_funcionario, funcs) : null
+    saida.casou_no_cadastro = !!achou
+    saida.func_encontrado   = achou ? achou['NOME_COMPLETO'] : ''
+    if (!achou && obj.nome_funcionario) {
+      saida.erro = 'A IA leu "' + obj.nome_funcionario + '", mas não achei esse nome ' +
+        'entre os ' + funcs.length + ' funcionários cadastrados.'
+    }
+  } catch (e) {
+    saida.etapa = leitura.cortado ? 'cortado' : 'json'
+    saida.erro  = leitura.cortado
+      ? 'A resposta foi cortada no limite de ' + MAX_TOKENS_IA + ' tokens.'
+      : 'A IA respondeu, mas não em JSON.'
+    saida.inicio_resposta = leitura.texto.slice(0, 300)
+  }
+  return saida
+}
+
+// O pedido feito à IA. Constante de módulo porque o diagnóstico precisa
+// mandar exatamente o mesmo texto — um diagnóstico que testa outro prompt
+// não diz nada sobre a leitura de verdade.
+var PROMPT_HOLERITE = 'Analise este documento brasileiro (holerite/folha/ferias) e extraia em JSON puro (sem markdown): '
+  + 'nome_funcionario (nome completo do trabalhador, nao do empregador), '
+  + 'codigo_funcionario (numero matricula), '
+  + 'tipo_documento (Folha para holerite ou contracheque, Ponto para folha de ponto, Ferias para aviso ou recibo de ferias, EPI para recibo EPI), '
+  + 'competencia (mes e ano referencia ex: Abril/2026), '
+  + 'empregador (razao social ou nome do empregador), '
+  + 'valor_liquido (valor liquido a receber pelo funcionario — procure por: Valor Liquido, Liquido, Valor a Receber, Net Pay — apenas o numero decimal ex: 3565.07 sem R$ ou ponto de milhar), '
+  + 'total_proventos e total_descontos (os totais impressos no rodape, como numero decimal; null se nao houver), '
+  // O rodapé do holerite costuma trazer as BASES e o FGTS do mês. É custo do
+  // empregador impresso no próprio documento — sem isso teria de vir de uma
+  // tabela de alíquotas configurada à mão, e cada empregador tem a sua.
+  + 'bases (o quadro de totais do RODAPE do holerite, com: '
+  +   'base_inss (base de calculo do INSS / salario de contribuicao), '
+  +   'base_fgts (base de calculo do FGTS), '
+  +   'fgts_mes (valor do FGTS depositado no mes — procure por: FGTS do Mes, Deposito FGTS, FGTS Recolhido), '
+  +   'base_irrf (base de calculo do IRRF), '
+  +   'salario_base (o salario contratual impresso no cabecalho, nao o total de proventos), '
+  +   'dias_trabalhados (numero de dias do mes considerados), '
+  +   'horas_trabalhadas (carga horaria do mes, se impressa), '
+  +   'faixa_irrf (a aliquota da faixa de IRRF impressa, ex: 27.50). '
+  +   'TODOS como numero decimal, e null quando o campo nao existir no documento — nao calcule nem estime nenhum deles), '
+  // O cabeçalho identifica de quem é a folha e QUE folha é. Sem tipo_folha,
+  // um holerite de 13º entra na média mensal como se fosse mês comum.
+  + 'parametros (o CABECALHO do documento, como TEXTO, null se ausente: '
+  +   'cei_cnpj (CEI, CNPJ ou matricula do EMPREGADOR impressa no topo), '
+  +   'centro_custo (o campo CC / Centro de Custo / Setor), '
+  +   'cbo (o codigo CBO da funcao), '
+  +   'departamento, filial, '
+  +   'matricula (o codigo/numero DO FUNCIONARIO nesta folha), '
+  +   'admissao (data de admissao no formato DD/MM/AAAA), '
+  +   'categoria (Mensalista, Horista, Diarista, Safrista — como impresso), '
+  +   'tipo_folha (o tipo do calculo: "Mensal", "13o Salario", "Ferias", "Rescisao", '
+  +   '"Adiantamento" ou "Complementar" — deduza do titulo do documento, ex: "Folha Mensal" -> "Mensal")), '
+  + 'verbas (LISTA de TODAS as linhas de provento e desconto da tabela do holerite, na ordem em que aparecem, cada uma com: '
+  +   'codigo (o codigo/rubrica da linha, string, null se nao houver), '
+  +   'descricao (o texto exatamente como impresso, ex: "HORAS EXTRAS 50%", "ADICIONAL PERICULOSIDADE"), '
+  +   'referencia (a coluna de referencia/quantidade como texto, ex: "12,50", "30,00", "40%"; null se vazia), '
+  +   'valor (numero decimal positivo), '
+  +   'tipo ("provento" para o que soma ao salario, "desconto" para o que subtrai — INSS, IRRF, vale, adiantamento e faltas sao desconto)). '
+  + 'Se for documento de ponto ou EPI, verbas deve ser lista vazia. '
+  + 'NAO invente linhas: liste so o que estiver impresso. '
+  + 'ferias_inicio e ferias_fim (SE for documento de ferias, as datas de inicio e fim do periodo de gozo no formato YYYY-MM-DD; caso contrario null). '
+  + 'Retorne APENAS o JSON sem nenhum texto antes ou depois. '
+  + 'Exemplo: {"nome_funcionario":"Joao Silva","codigo_funcionario":"27","tipo_documento":"Folha","competencia":"Julho/2026",'
+  + '"empregador":"Fazenda","valor_liquido":3565.07,"total_proventos":4200.00,"total_descontos":634.93,'
+  + '"bases":{"base_inss":4200.00,"base_fgts":4200.00,"fgts_mes":336.00,"base_irrf":3822.00,'
+  + '"salario_base":2500.00,"dias_trabalhados":30,"horas_trabalhadas":220,"faixa_irrf":27.50},'
+  + '"parametros":{"cei_cnpj":"800007697386","centro_custo":"GERAL","cbo":"641010",'
+  + '"departamento":"1","filial":"1","matricula":"8","admissao":"22/03/2022",'
+  + '"categoria":"Mensalista","tipo_folha":"Mensal"},'
+  + '"verbas":[{"codigo":"001","descricao":"SALARIO BASE","referencia":"30,00","valor":2500.00,"tipo":"provento"},'
+  + '{"codigo":"102","descricao":"HORAS EXTRAS 50%","referencia":"12,50","valor":425.30,"tipo":"provento"},'
+  + '{"codigo":"110","descricao":"ADICIONAL PERICULOSIDADE","referencia":"30%","valor":750.00,"tipo":"provento"},'
+  + '{"codigo":"901","descricao":"INSS","referencia":"9,00","valor":378.00,"tipo":"desconto"}],'
+  + '"ferias_inicio":null,"ferias_fim":null}'
+
 function identificarDocumentoComIA(dados) {
   var pdfBase64 = dados.pdf_base64
   if (!pdfBase64) throw new Error('PDF não fornecido')
@@ -967,106 +1189,24 @@ function identificarDocumentoComIA(dados) {
   // As VERBAS são o que permite analisar o histórico depois: sem elas só
   // sobra o líquido, e não dá para saber se subiu por hora extra, por
   // periculosidade ou por reajuste.
-  var prompt = 'Analise este documento brasileiro (holerite/folha/ferias) e extraia em JSON puro (sem markdown): '
-    + 'nome_funcionario (nome completo do trabalhador, nao do empregador), '
-    + 'codigo_funcionario (numero matricula), '
-    + 'tipo_documento (Folha para holerite ou contracheque, Ponto para folha de ponto, Ferias para aviso ou recibo de ferias, EPI para recibo EPI), '
-    + 'competencia (mes e ano referencia ex: Abril/2026), '
-    + 'empregador (razao social ou nome do empregador), '
-    + 'valor_liquido (valor liquido a receber pelo funcionario — procure por: Valor Liquido, Liquido, Valor a Receber, Net Pay — apenas o numero decimal ex: 3565.07 sem R$ ou ponto de milhar), '
-    + 'total_proventos e total_descontos (os totais impressos no rodape, como numero decimal; null se nao houver), '
-    // O rodapé do holerite costuma trazer as BASES e o FGTS do mês. É custo do
-    // empregador impresso no próprio documento — sem isso teria de vir de uma
-    // tabela de alíquotas configurada à mão, e cada empregador tem a sua.
-    + 'bases (o quadro de totais do RODAPE do holerite, com: '
-    +   'base_inss (base de calculo do INSS / salario de contribuicao), '
-    +   'base_fgts (base de calculo do FGTS), '
-    +   'fgts_mes (valor do FGTS depositado no mes — procure por: FGTS do Mes, Deposito FGTS, FGTS Recolhido), '
-    +   'base_irrf (base de calculo do IRRF), '
-    +   'salario_base (o salario contratual impresso no cabecalho, nao o total de proventos), '
-    +   'dias_trabalhados (numero de dias do mes considerados), '
-    +   'horas_trabalhadas (carga horaria do mes, se impressa), '
-    +   'faixa_irrf (a aliquota da faixa de IRRF impressa, ex: 27.50). '
-    +   'TODOS como numero decimal, e null quando o campo nao existir no documento — nao calcule nem estime nenhum deles), '
-    // O cabeçalho identifica de quem é a folha e QUE folha é. Sem tipo_folha,
-    // um holerite de 13º entra na média mensal como se fosse mês comum.
-    + 'parametros (o CABECALHO do documento, como TEXTO, null se ausente: '
-    +   'cei_cnpj (CEI, CNPJ ou matricula do EMPREGADOR impressa no topo), '
-    +   'centro_custo (o campo CC / Centro de Custo / Setor), '
-    +   'cbo (o codigo CBO da funcao), '
-    +   'departamento, filial, '
-    +   'matricula (o codigo/numero DO FUNCIONARIO nesta folha), '
-    +   'admissao (data de admissao no formato DD/MM/AAAA), '
-    +   'categoria (Mensalista, Horista, Diarista, Safrista — como impresso), '
-    +   'tipo_folha (o tipo do calculo: "Mensal", "13o Salario", "Ferias", "Rescisao", '
-    +   '"Adiantamento" ou "Complementar" — deduza do titulo do documento, ex: "Folha Mensal" -> "Mensal")), '
-    + 'verbas (LISTA de TODAS as linhas de provento e desconto da tabela do holerite, na ordem em que aparecem, cada uma com: '
-    +   'codigo (o codigo/rubrica da linha, string, null se nao houver), '
-    +   'descricao (o texto exatamente como impresso, ex: "HORAS EXTRAS 50%", "ADICIONAL PERICULOSIDADE"), '
-    +   'referencia (a coluna de referencia/quantidade como texto, ex: "12,50", "30,00", "40%"; null se vazia), '
-    +   'valor (numero decimal positivo), '
-    +   'tipo ("provento" para o que soma ao salario, "desconto" para o que subtrai — INSS, IRRF, vale, adiantamento e faltas sao desconto)). '
-    + 'Se for documento de ponto ou EPI, verbas deve ser lista vazia. '
-    + 'NAO invente linhas: liste so o que estiver impresso. '
-    + 'ferias_inicio e ferias_fim (SE for documento de ferias, as datas de inicio e fim do periodo de gozo no formato YYYY-MM-DD; caso contrario null). '
-    + 'Retorne APENAS o JSON sem nenhum texto antes ou depois. '
-    + 'Exemplo: {"nome_funcionario":"Joao Silva","codigo_funcionario":"27","tipo_documento":"Folha","competencia":"Julho/2026",'
-    + '"empregador":"Fazenda","valor_liquido":3565.07,"total_proventos":4200.00,"total_descontos":634.93,'
-    + '"bases":{"base_inss":4200.00,"base_fgts":4200.00,"fgts_mes":336.00,"base_irrf":3822.00,'
-    + '"salario_base":2500.00,"dias_trabalhados":30,"horas_trabalhadas":220,"faixa_irrf":27.50},'
-    + '"parametros":{"cei_cnpj":"800007697386","centro_custo":"GERAL","cbo":"641010",'
-    + '"departamento":"1","filial":"1","matricula":"8","admissao":"22/03/2022",'
-    + '"categoria":"Mensalista","tipo_folha":"Mensal"},'
-    + '"verbas":[{"codigo":"001","descricao":"SALARIO BASE","referencia":"30,00","valor":2500.00,"tipo":"provento"},'
-    + '{"codigo":"102","descricao":"HORAS EXTRAS 50%","referencia":"12,50","valor":425.30,"tipo":"provento"},'
-    + '{"codigo":"110","descricao":"ADICIONAL PERICULOSIDADE","referencia":"30%","valor":750.00,"tipo":"provento"},'
-    + '{"codigo":"901","descricao":"INSS","referencia":"9,00","valor":378.00,"tipo":"desconto"}],'
-    + '"ferias_inicio":null,"ferias_fim":null}'
+  var prompt = PROMPT_HOLERITE
 
-  var payload = {
-    model: 'claude-sonnet-4-6', // FIX: 'claude-opus-4-6' não é um ID válido
-    max_tokens: 3000,   // uma folha com muitas rubricas nao cabe em 300
-    messages: [{
-      role: 'user',
-      content: [{
-        type: 'document',
-        source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 }
-      }, {
-        type: 'text',
-        text: prompt
-      }]
-    }]
-  }
-
-  var options = {
-    method: 'post',
-    contentType: 'application/json',
-    headers: {
-      'x-api-key':         PropertiesService.getScriptProperties().getProperty('ANTHROPIC_KEY'),
-      'anthropic-version': '2023-06-01',
-    },
-    payload:            JSON.stringify(payload),
-    muteHttpExceptions: true,
-  }
-
-  var res  = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', options)
-  var data = JSON.parse(res.getContentText())
-
-  if (res.getResponseCode() !== 200) {
-    Logger.log('Claude API erro: ' + res.getContentText())
-    throw new Error('Erro na IA: ' + (data.error ? data.error.message : res.getContentText()))
-  }
-
-  var texto = data.content[0].text.trim()
-  Logger.log('IA retornou: ' + texto)
+  var leitura = chamarIA(pdfBase64, prompt)
+  if (!leitura.ok) throw new Error(leitura.erro)
 
   var resultado
   try {
-    texto = texto.replace(/```json/g,'').replace(/```/g,'').trim()
-    resultado = JSON.parse(texto)
-  } catch(e) {
-    Logger.log('Erro parse IA: ' + e.message + ' | texto: ' + texto)
-    throw new Error('IA não retornou JSON válido')
+    resultado = JSON.parse(leitura.texto)
+  } catch (e) {
+    Logger.log('Erro parse IA: ' + e.message + ' | texto: ' + leitura.texto)
+    // O motivo mais comum de JSON quebrado é a resposta ter sido cortada no
+    // meio. Dizer isso é diferente de "não retornou JSON válido": um se
+    // resolve aumentando o limite, o outro não.
+    throw new Error(leitura.cortado
+      ? 'A leitura foi cortada antes de terminar (holerite com muitas linhas). ' +
+        'O limite de resposta precisa ser aumentado no Code.gs.'
+      : 'A IA respondeu, mas não em JSON. Começo da resposta: ' +
+        String(leitura.texto).slice(0, 120))
   }
 
   var funcionarios = lerAbaComoObjetos(CONFIG.ABAS.FUNCIONARIOS)

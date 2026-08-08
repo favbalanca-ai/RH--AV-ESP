@@ -10,11 +10,11 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
-<link rel="stylesheet" href="style.css?v=20260814">
+<link rel="stylesheet" href="style.css?v=20260815">
 <script src="https://apis.google.com/js/api.js"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
-<meta name="app-version" content="20260814">
+<meta name="app-version" content="20260815">
 <title>SST — Fazenda Água Viva</title>
 </head>
 <body>
@@ -302,6 +302,7 @@
 
     <!-- FOLHA DE PAGAMENTO -->
     <div id="pg-fracionar" class="pagina">
+      <div class="cst-aviso" id="aviso-leitura" style="display:none"></div>
       <!-- FIX #3: radio buttons agora chamam setTipoDoc() para atualizar tipoDocAtual -->
       <div class="card mb-3">
         <div class="card-titulo"><i class="ti ti-file-invoice" aria-hidden="true"></i> Tipo de documento *</div>
@@ -535,6 +536,20 @@
     <!-- DIAGNÓSTICO / HISTÓRICO DE ERROS -->
     <div id="pg-diagnostico" class="pagina">
       <div class="card mb-3">
+        <div class="card-titulo"><i class="ti ti-file-search" aria-hidden="true"></i> Testar leitura de um PDF</div>
+        <p style="font-size:11.5px;color:var(--text-secondary);margin-bottom:10px">
+          Manda um holerite para a IA e mostra em que etapa a leitura parou —
+          chave, modelo, resposta cortada ou nome que não bate com o cadastro.
+          Nada é gravado.
+        </p>
+        <input type="file" id="diag-pdf" accept="application/pdf" style="font-size:12px;width:100%">
+        <div class="dois-col" style="margin-top:10px">
+          <button onclick="testarLeituraIA(false)" class="btn-secundario">Só a chave</button>
+          <button onclick="testarLeituraIA(true)" class="btn-primario">Testar o PDF</button>
+        </div>
+        <div id="diag-ia-res" style="margin-top:10px"></div>
+      </div>
+      <div class="card mb-3">
         <div class="card-titulo"><i class="ti ti-activity" aria-hidden="true"></i> Diagnóstico do sistema</div>
         <div id="diag-status"></div>
         <button onclick="testarConexao()" class="btn-primario w-full" style="margin-top:10px">
@@ -621,7 +636,7 @@
   </nav>
 </div>
 
-<script src="app.js?v=20260814"></script>
+<script src="app.js?v=20260815"></script>
 <script>
   // Registra o Service Worker (necessário para Web Share Target e cache offline)
   if ('serviceWorker' in navigator) {
