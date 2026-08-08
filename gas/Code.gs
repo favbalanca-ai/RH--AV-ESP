@@ -128,6 +128,24 @@ function getSheet(nomeAba) {
   return SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(nomeAba)
 }
 
+// Célula de data vira texto dd/MM/yyyy. Sem isto o objeto sai com um Date,
+// que no JSON da resposta vira "2026-07-01T07:00:00.000Z" — foi assim que a
+// competência apareceu crua na tela de pagamentos.
+function ehData(v) {
+  // Não usa `instanceof Date`: ele compara o construtor do contexto atual e
+  // devolve false para uma data vinda de outro contexto. O toString é o teste
+  // que não depende disso.
+  return Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())
+}
+
+function valorDeCelula(v) {
+  if (ehData(v)) {
+    // 1899 é a data-zero do Sheets: célula de hora sem data, ou vazia.
+    return v.getFullYear() === 1899 ? '' : Utilities.formatDate(v, 'America/Sao_Paulo', 'dd/MM/yyyy')
+  }
+  return v ?? ''
+}
+
 function lerAbaComoObjetos(nomeAba) {
   const sheet = getSheet(nomeAba)
   const dados = sheet.getDataRange().getValues()
@@ -137,14 +155,7 @@ function lerAbaComoObjetos(nomeAba) {
     .filter(row => row.some(c => c !== ''))
     .map(row => {
       const obj = {}
-      headers.forEach((h, i) => {
-        const v = row[i]
-        if (v instanceof Date) {
-          obj[h] = v.getFullYear() === 1899 ? '' : Utilities.formatDate(v, 'America/Sao_Paulo', 'dd/MM/yyyy')
-        } else {
-          obj[h] = v ?? ''
-        }
-      })
+      headers.forEach((h, i) => { obj[h] = valorDeCelula(row[i]) })
       return obj
     })
 }
@@ -1690,7 +1701,7 @@ function listarComissoes(dados) {
   var hdrs = vals[0]
   var lista = vals.slice(1).map(function(row) {
     var obj = {}
-    hdrs.forEach(function(h, i) { obj[h] = row[i] })
+    hdrs.forEach(function(h, i) { obj[h] = valorDeCelula(row[i]) })
     return obj
   })
   if (dados && dados.func_id) lista = lista.filter(function(r) { return String(r['ID_FUNC']) === String(dados.func_id) })
@@ -1725,7 +1736,7 @@ function listarAdiantamentos(dados) {
   var hdrs = vals[0]
   var lista = vals.slice(1).map(function(row) {
     var obj = {}
-    hdrs.forEach(function(h, i) { obj[h] = row[i] })
+    hdrs.forEach(function(h, i) { obj[h] = valorDeCelula(row[i]) })
     return obj
   })
   if (dados && dados.func_id) lista = lista.filter(function(r) { return String(r['ID_FUNC']) === String(dados.func_id) })
@@ -1936,7 +1947,7 @@ function listarAutorizacoes(dados) {
   var hdrs = vals[0]
   var lista = vals.slice(1).map(function(row) {
     var obj = {}
-    hdrs.forEach(function(h, i) { obj[h] = row[i] })
+    hdrs.forEach(function(h, i) { obj[h] = valorDeCelula(row[i]) })
     return obj
   })
   if (dados && dados.func_id) lista = lista.filter(function(r) { return String(r['ID_FUNC']) === String(dados.func_id) })
@@ -2589,6 +2600,10 @@ function historicoFolha(dados) {
 // "Julho/2026" e "07/2026" viram um número ordenável (202607).
 function ordemCompetencia(comp) {
   var c = String(comp || '').trim()
+  // "2026-07-01T07:00:00.000Z" — lê os números do texto, não pela data: o
+  // ISO vem em UTC e converter para o fuso local mudaria o mês na virada.
+  var iso = c.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) return { chave: parseInt(iso[1]) * 100 + parseInt(iso[2]), ano: iso[1] }
   var m = c.match(/^([A-Za-zçÇãÃéÉêÊíÍóÓôÔõÕ]+)\s*\/\s*(\d{4})$/)
   if (m) {
     var i = MESES_ARQ.indexOf(semAcento(m[1]))
@@ -2658,7 +2673,7 @@ function listarPagamentos(dados) {
   var hdrs = vals[0]
   var lista = vals.slice(1).map(function(row) {
     var obj = {}
-    hdrs.forEach(function(h, i) { obj[h] = row[i] })
+    hdrs.forEach(function(h, i) { obj[h] = valorDeCelula(row[i]) })
     return obj
   })
   if (dados && dados.func_id) lista = lista.filter(function(r) { return String(r['ID_FUNC']) === String(dados.func_id) })
@@ -3369,7 +3384,7 @@ function listarLog(dados) {
   var hdrs = vals[0]
   return vals.slice(1).reverse().slice(0, 100).map(function(row) {
     var obj = {}
-    hdrs.forEach(function(h, i) { obj[h] = row[i] })
+    hdrs.forEach(function(h, i) { obj[h] = valorDeCelula(row[i]) })
     return obj
   })
 }

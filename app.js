@@ -43,6 +43,31 @@ const EPI_SUGERIDOS_PERFIL = {
   BIOFABRICA:                  ['EPI-004','EPI-005','EPI-010','EPI-002'],
 }
 
+// O index.html é servido pelo GitHub Pages com cache próprio, e o ?v= só
+// versiona o app.js e o style.css. Resultado: dava para ficar com o JS novo
+// e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
+// ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
+// <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
+const APP_VERSION = '20260810'
+
+function conferirVersaoHtml() {
+  const meta = document.querySelector('meta[name="app-version"]')
+  const noHtml = meta ? meta.getAttribute('content') : null
+  if (noHtml === APP_VERSION) return
+  const aviso = document.createElement('div')
+  aviso.className = 'aviso-versao'
+  aviso.innerHTML = `
+    <div>
+      <strong>Recarregue a página</strong>
+      O navegador está com uma versão antiga em cache, e parte da tela pode
+      não aparecer. Segure <strong>Ctrl</strong> e clique em recarregar
+      (ou <strong>Ctrl+F5</strong>).
+    </div>
+    <button onclick="location.reload(true)">Recarregar</button>`
+  document.body.appendChild(aviso)
+  console.warn('Versão do HTML (' + noHtml + ') difere do app.js (' + APP_VERSION + ')')
+}
+
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxZAoTs9hTLs3LbOgjGKPiytHTEP6N0O34WpUHUYPRaFh5yKS6P6gXNRS9dMLlmHLtW/exec'
 const PDFLIB_URL = 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js'
 
@@ -75,6 +100,7 @@ async function carregarPdfLib() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  conferirVersaoHtml()
   const sessao = sessionStorage.getItem('sst_user')
   if (sessao) {
     const { usuario, senha } = JSON.parse(sessao)
@@ -2906,6 +2932,12 @@ function parseValorNum(v) {
 
 function normalizarComp(comp) {
   const s = String(comp||'').trim()
+  // ISO vindo de célula de data: "2026-07-01T07:00:00.000Z" ou "2026-07-01".
+  // O fuso vem em UTC e o Brasil está atrás, então às 21h de 30/06 o ISO já
+  // marca 01/07 — usar getMonth() local jogaria a competência para o mês
+  // anterior. Lê os números direto do texto.
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) return MESES[parseInt(iso[2]) - 1] + '/' + iso[1]
   const m = s.match(/([A-Z][a-z]{2})\s+\d{2}\s+(\d{4})/)
   const eng = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11}
   if (m && eng[m[1]] !== undefined) return MESES[eng[m[1]]] + '/' + m[2]

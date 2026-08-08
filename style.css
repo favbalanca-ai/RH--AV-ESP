@@ -1162,3 +1162,22 @@ html { overflow-x: hidden; }
 }
 .af-ano span { font-weight: 500; opacity: 0.7; font-size: 10px; margin-left: 3px; }
 .af-ano:hover { background: var(--blue-bg); }
+
+/* Aviso de HTML em cache. Fica por cima de tudo porque o sintoma é a tela
+   faltando pedaço — o usuário não tem como adivinhar sozinho. */
+.aviso-versao {
+  position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%);
+  z-index: 3000; width: calc(100% - 24px); max-width: 420px;
+  display: flex; align-items: center; gap: 10px;
+  background: var(--amber-bg); color: var(--amber-text);
+  border: 0.5px solid rgba(133,79,11,0.35); border-radius: var(--radius-md);
+  padding: 11px 13px; font-size: 11.5px; line-height: 1.4;
+  box-shadow: var(--shadow-pop);
+}
+.aviso-versao strong { display: block; font-size: 12.5px; margin-bottom: 2px; }
+.aviso-versao > div { flex: 1; min-width: 0; }
+.aviso-versao button {
+  background: var(--amber-text); color: #fff; border: none;
+  border-radius: 8px; padding: 8px 12px; font-size: 11.5px; font-weight: 700;
+  cursor: pointer; font-family: inherit; white-space: nowrap; flex: none;
+}
