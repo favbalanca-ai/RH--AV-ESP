@@ -1196,3 +1196,8 @@ html { overflow-x: hidden; }
   padding: 0 2px 8px;
 }
 .af-doc i { font-size: 12px; }
+.af-nota {
+  font-size: 11px; color: var(--text-secondary); line-height: 1.45;
+  margin: -4px 0 10px;
+}
+.af-parcial { color: var(--amber-text); font-weight: 700; }

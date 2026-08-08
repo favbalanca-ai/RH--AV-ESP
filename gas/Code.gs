@@ -428,6 +428,7 @@ function enviarFolha(dados, usuario) {
     'VALOR_LIQUIDO':  valorNumerico(dados.valor_liquido),
     'TIPO':           dados.tipo || 'Folha',
     'VERBAS':         verbasParaCelula(normalizarVerbas(dados.verbas)),
+    'BASES':          basesParaCelula(normalizarBases(dados.bases)),
   })
   try { salvarPdfNoDrive(dados.func_id, func['NOME_COMPLETO'], 'FOLHA_PAGAMENTO', nomeDoc + '_PENDENTE.pdf', pdf) }
   catch(e) { logAcao(usuario, 'ERRO_DRIVE', e.message) }
@@ -875,6 +876,7 @@ function processarPaginaFolha(dados, usuario) {
     'VALOR_LIQUIDO':     valorNumerico(dados.valor_liquido),
     'TIPO':              tipo,
     'VERBAS':            verbasParaCelula(normalizarVerbas(dados.verbas)),
+    'BASES':             basesParaCelula(normalizarBases(dados.bases)),
   })
   if (tipo === 'Ferias' && zapToken) registrarFeriasPendente(func['ID'], func['NOME_COMPLETO'], dados.ferias_inicio, dados.ferias_fim, comp, zapToken)
   logAcao(usuario, 'FOLHA_INDIVIDUAL', 'Func ' + func['ID'] + ' | ' + comp)
@@ -948,6 +950,18 @@ function identificarDocumentoComIA(dados) {
     + 'empregador (razao social ou nome do empregador), '
     + 'valor_liquido (valor liquido a receber pelo funcionario — procure por: Valor Liquido, Liquido, Valor a Receber, Net Pay — apenas o numero decimal ex: 3565.07 sem R$ ou ponto de milhar), '
     + 'total_proventos e total_descontos (os totais impressos no rodape, como numero decimal; null se nao houver), '
+    // O rodapé do holerite costuma trazer as BASES e o FGTS do mês. É custo do
+    // empregador impresso no próprio documento — sem isso teria de vir de uma
+    // tabela de alíquotas configurada à mão, e cada empregador tem a sua.
+    + 'bases (o quadro de totais do RODAPE do holerite, com: '
+    +   'base_inss (base de calculo do INSS / salario de contribuicao), '
+    +   'base_fgts (base de calculo do FGTS), '
+    +   'fgts_mes (valor do FGTS depositado no mes — procure por: FGTS do Mes, Deposito FGTS, FGTS Recolhido), '
+    +   'base_irrf (base de calculo do IRRF), '
+    +   'salario_base (o salario contratual impresso no cabecalho, nao o total de proventos), '
+    +   'dias_trabalhados (numero de dias do mes considerados), '
+    +   'horas_trabalhadas (carga horaria do mes, se impressa). '
+    +   'TODOS como numero decimal, e null quando o campo nao existir no documento — nao calcule nem estime nenhum deles), '
     + 'verbas (LISTA de TODAS as linhas de provento e desconto da tabela do holerite, na ordem em que aparecem, cada uma com: '
     +   'codigo (o codigo/rubrica da linha, string, null se nao houver), '
     +   'descricao (o texto exatamente como impresso, ex: "HORAS EXTRAS 50%", "ADICIONAL PERICULOSIDADE"), '
@@ -960,6 +974,8 @@ function identificarDocumentoComIA(dados) {
     + 'Retorne APENAS o JSON sem nenhum texto antes ou depois. '
     + 'Exemplo: {"nome_funcionario":"Joao Silva","codigo_funcionario":"27","tipo_documento":"Folha","competencia":"Julho/2026",'
     + '"empregador":"Fazenda","valor_liquido":3565.07,"total_proventos":4200.00,"total_descontos":634.93,'
+    + '"bases":{"base_inss":4200.00,"base_fgts":4200.00,"fgts_mes":336.00,"base_irrf":3822.00,'
+    + '"salario_base":2500.00,"dias_trabalhados":30,"horas_trabalhadas":220},'
     + '"verbas":[{"codigo":"001","descricao":"SALARIO BASE","referencia":"30,00","valor":2500.00,"tipo":"provento"},'
     + '{"codigo":"102","descricao":"HORAS EXTRAS 50%","referencia":"12,50","valor":425.30,"tipo":"provento"},'
     + '{"codigo":"110","descricao":"ADICIONAL PERICULOSIDADE","referencia":"30%","valor":750.00,"tipo":"provento"},'
@@ -1076,6 +1092,7 @@ function identificarDocumentoComIA(dados) {
     total_proventos: valorNumerico(resultado.total_proventos) || null,
     total_descontos: valorNumerico(resultado.total_descontos) || null,
     verbas:         normalizarVerbas(resultado.verbas),
+    bases:          normalizarBases(resultado.bases),
     ferias_inicio:  resultado.ferias_inicio      || null,
     ferias_fim:     resultado.ferias_fim         || null,
     ia_confianca:   !func ? 'baixo' : (confereEmpregador === false ? 'medio' : 'alto'),
@@ -2314,7 +2331,7 @@ function adicionarColunasFuncionarios() {
 var COLUNAS_FOLHA = ['ID FUNC.', 'FUNCIONÁRIO', 'COMPETÊNCIA', 'DATA ENVIO',
                      'STATUS', 'DATA ASSINATURA', 'ZAPSIGN_DOC',
                      'LINK PDF ORIGINAL', 'LINK DOC ASSINADO', 'OBSERVAÇÕES',
-                     'VALOR_LIQUIDO', 'TIPO', 'VERBAS']
+                     'VALOR_LIQUIDO', 'TIPO', 'VERBAS', 'BASES']
 
 // Só estas duas são CRIADAS quando faltam. As outras dez o app já lê por nome
 // e sempre estiveram na aba; mexer nelas arriscaria duplicar uma coluna numa
@@ -2355,6 +2372,7 @@ function garantirColunasFolha() {
     },
     'VALOR_LIQUIDO': function (v) { return valorNumerico(v) !== '' },
     'VERBAS': null,
+    'BASES': null,
   }
 
   Object.keys(orfaDe).forEach(function (nome) {
@@ -2498,6 +2516,35 @@ function normalizarVerbas(lista) {
   return saida
 }
 
+// Bases e FGTS que o holerite imprime no rodapé. São as únicas parcelas de
+// custo patronal que vêm do próprio documento — o resto depende de alíquota
+// configurada. Campo ausente fica ausente: não se inventa base.
+var CAMPOS_BASE = ['base_inss', 'base_fgts', 'fgts_mes', 'base_irrf',
+                   'salario_base', 'dias_trabalhados', 'horas_trabalhadas']
+
+function normalizarBases(obj) {
+  if (!obj) return null
+  var saida = {}, achou = false
+  CAMPOS_BASE.forEach(function (k) {
+    var n = valorNumerico(obj[k])
+    if (n !== '' && n > 0) { saida[k] = n; achou = true }
+  })
+  return achou ? saida : null
+}
+
+function basesParaCelula(bases) {
+  return bases ? JSON.stringify(bases) : ''
+}
+
+function basesDaCelula(texto) {
+  var t = String(texto || '').trim()
+  if (!t) return null
+  try {
+    var b = JSON.parse(t)
+    return b && Object.keys(b).length ? b : null
+  } catch (e) { return null }
+}
+
 function verbasParaCelula(verbas) {
   return verbas && verbas.length ? JSON.stringify(verbas) : ''
 }
@@ -2547,6 +2594,7 @@ function historicoFolha(dados) {
     // Célula vazia = nunca passou pela extração. '[]' = passou e não achou
     // nada. Só a primeira merece o convite para reanalisar.
     var naoAnalisado = !String(f['VERBAS'] || '').trim()
+    var bases  = basesDaCelula(f['BASES'])
     var ordem  = ordemCompetencia(comp)
 
     var proventos = 0, descontos = 0
@@ -2569,6 +2617,7 @@ function historicoFolha(dados) {
       descontos:     Math.round(descontos * 100) / 100,
       link:          String(f['LINK DOC ASSINADO'] || f['LINK PDF ORIGINAL'] || ''),
       verbas:        verbas,
+      bases:         bases,
       sem_verbas:    naoAnalisado,
     })
   })
@@ -2585,6 +2634,19 @@ function historicoFolha(dados) {
   var categorias = Object.keys(porCat).map(function (c) { return porCat[c] })
   categorias.sort(function (a, b) { return b.total - a.total })
 
+  // Soma o que o rodapé do holerite informa. Cada campo conta em quantos meses
+  // apareceu: um total de FGTS sobre 3 de 12 meses não é o FGTS do ano, e
+  // apresentar como se fosse seria pior do que não mostrar.
+  var somaBases = {}
+  CAMPOS_BASE.forEach(function (k) {
+    var comDado = meses.filter(function (m) { return m.bases && m.bases[k] })
+    if (!comDado.length) return
+    somaBases[k] = {
+      total: Math.round(comDado.reduce(function (s2, m) { return s2 + m.bases[k] }, 0) * 100) / 100,
+      meses: comDado.length,
+    }
+  })
+
   return {
     func_id:    funcId,
     nome:       func ? func['NOME_COMPLETO'] : '',
@@ -2597,6 +2659,8 @@ function historicoFolha(dados) {
     ano_filtro: ano || '',
     meses:      meses,
     categorias: categorias,
+    bases:      somaBases,
+    meses_com_base: meses.filter(function (m) { return !!m.bases }).length,
     total_liquido:   Math.round(meses.reduce(function (s, m) { return s + m.valor_liquido }, 0) * 100) / 100,
     total_proventos: Math.round(meses.reduce(function (s, m) { return s + m.proventos }, 0) * 100) / 100,
     total_descontos: Math.round(meses.reduce(function (s, m) { return s + m.descontos }, 0) * 100) / 100,
@@ -3090,6 +3154,7 @@ function reanalisarFolhas(dados, usuario) {
   var iTipo = hdrs.indexOf('TIPO')
   var iVerb = hdrs.indexOf('VERBAS')
   var iVal  = hdrs.indexOf('VALOR_LIQUIDO')
+  var iBase = hdrs.indexOf('BASES')
   var iOrig = hdrs.indexOf('LINK PDF ORIGINAL')
   var iAss  = hdrs.indexOf('LINK DOC ASSINADO')
 
@@ -3120,6 +3185,8 @@ function reanalisarFolhas(dados, usuario) {
       // encontrado" e é diferente de célula vazia, que é "nunca analisado".
       sheet.getRange(lote[j].linha, iVerb + 1)
         .setValue(verbas.length ? verbasParaCelula(verbas) : '[]')
+      var bases = normalizarBases(r.bases)
+      if (iBase >= 0 && bases) sheet.getRange(lote[j].linha, iBase + 1).setValue(basesParaCelula(bases))
       // não sobrescreve um líquido que já estava lá
       if (iVal >= 0 && !String(vals[lote[j].linha - 1][iVal] || '').trim() && r.valor_liquido) {
         sheet.getRange(lote[j].linha, iVal + 1).setValue(valorNumerico(r.valor_liquido))
