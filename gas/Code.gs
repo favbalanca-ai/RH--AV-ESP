@@ -139,7 +139,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260821'
+var VERSAO_BACKEND = '20260822'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null

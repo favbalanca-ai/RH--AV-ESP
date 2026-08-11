@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260821'
+const APP_VERSION = '20260822'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -345,7 +345,7 @@ async function renderFichaPagamentos() {
   const res = await chamarGAS({ acao: 'listar_pagamentos', dados: { func_id: fichaFuncId } })
   const lista = res?.ok ? res.data : []
   if (!lista.length) { el.innerHTML = '<p class="lista-vazia">Nenhum pagamento</p>'; return }
-  el.innerHTML = lista.map(p => `<div class="lista-item" style="margin-bottom:6px"><div class="lista-item-info"><div class="lista-item-nome">${normalizarComp(p['COMPETENCIA']||'')}${p['VALOR_LIQUIDO']?' · R$ '+formatarValor(p['VALOR_LIQUIDO']):''}</div><div class="lista-item-sub">${p['DATA_GERACAO']||''}</div></div><span class="badge ${p['STATUS']==='Pago'?'badge-verde':'badge-amarelo'}">${p['STATUS']||'—'}</span></div>`).join('')
+  el.innerHTML = lista.map(p => `<div class="lista-item" style="margin-bottom:6px"><div class="lista-item-info"><div class="lista-item-nome">${esc(normalizarComp(p['COMPETENCIA']||''))}${p['VALOR_LIQUIDO']?' · R$ '+formatarValor(p['VALOR_LIQUIDO']):''}</div><div class="lista-item-sub">${esc(soDia(p['DATA_GERACAO']||''))}</div></div><span class="badge ${p['STATUS']==='Pago'?'badge-verde':'badge-amarelo'}">${esc(p['STATUS']||'—')}</span></div>`).join('')
 }
 
 // ── PENDÊNCIAS DO DIA ────────────────────────────────────────────
@@ -3098,10 +3098,13 @@ function selecionarFuncPgto(funcId) {
 
 async function carregarResumoPgto() {
   if (!funcPgtoSelecionado) return
+  const funcId = String(funcPgtoSelecionado['ID'])
   const ano = document.getElementById('sel-ano-pgto')?.value || new Date().getFullYear()
   document.getElementById('ano-label-pgto').textContent = ano
 
-  const res = await chamarGAS({ acao: 'resumo_comissao', dados: { func_id: funcPgtoSelecionado['ID'], ano } })
+  const res = await chamarGAS({ acao: 'resumo_comissao', dados: { func_id: funcId, ano } })
+  // Resposta atrasada de um funcionário não pode pintar a tela de outro.
+  if (!funcPgtoSelecionado || String(funcPgtoSelecionado['ID']) !== funcId) return
   if (!res || !res.ok) return
   const d   = res.data
   const pct = Math.min(d.percentual || 0, 100)
@@ -3426,11 +3429,14 @@ async function carregarAnaliseFolha() {
   card.style.display = 'block'
   corpo.innerHTML = '<p class="lista-vazia">Carregando...</p>'
 
+  const funcId = String(funcPgtoSelecionado['ID'])
   const ano = document.getElementById('sel-ano-pgto')?.value || ''
   document.getElementById('analise-ano-label').textContent = ano ? ' · ' + ano : ''
 
   const res = await chamarGAS({ acao: 'historico_folha',
-                                dados: { func_id: funcPgtoSelecionado['ID'], ano } })
+                                dados: { func_id: funcId, ano } })
+  // Resposta atrasada de um funcionário não pode pintar a tela de outro.
+  if (!funcPgtoSelecionado || String(funcPgtoSelecionado['ID']) !== funcId) return
   if (!res || !res.ok) {
     corpo.innerHTML = '<p class="lista-vazia">Não consegui carregar a análise</p>'
     return
@@ -3706,13 +3712,28 @@ async function reanalisarHistorico() {
   await carregarAnaliseFolha()
 }
 
+// 'dd/MM/yyyy HH:mm:ss' → 'dd/MM/yyyy'. Nas listas de pagamento a hora é
+// ruído; ela continua inteira no log, onde é a resposta de uma pergunta.
+const soDia = s => String(s || '').split(' ')[0]
+
 async function carregarHistoricoPagamentos() {
   if (!funcPgtoSelecionado) return
-  const res  = await chamarGAS({ acao: 'listar_pagamentos', dados: { func_id: funcPgtoSelecionado['ID'] } })
+  const funcId = String(funcPgtoSelecionado['ID'])
+  const res  = await chamarGAS({ acao: 'listar_pagamentos', dados: { func_id: funcId } })
+  // Resposta atrasada de um funcionário não pode pintar a tela de outro.
+  if (!funcPgtoSelecionado || String(funcPgtoSelecionado['ID']) !== funcId) return
   const el   = document.getElementById('historico-pagamentos')
   const card = document.getElementById('card-hist-pagamentos')
   if (!el) return
-  if (!res || !res.ok || !res.data?.length) {
+  // Falha de rede não é "nenhum salário": dizer que não há registro quando
+  // não deu para perguntar faria alguém sair procurando um problema na
+  // planilha que não existe.
+  if (!res || !res.ok) {
+    el.innerHTML = `<p class="lista-vazia">Não consegui carregar os salários${
+      res && res.erro ? ': ' + esc(res.erro) : ''}</p>`
+    return
+  }
+  if (!res.data?.length) {
     el.innerHTML = '<p class="lista-vazia">Nenhum salário registrado</p>'
     return
   }
@@ -3727,8 +3748,8 @@ async function carregarHistoricoPagamentos() {
         ${getIniciais(p['NOME_FUNC']||'?')}
       </div>
       <div class="lista-item-info">
-        <div class="lista-item-nome">${compNorm}${valor?' · '+valor:''}</div>
-        <div class="lista-item-sub">${p['DATA_GERACAO']||p['DATA_ASSINATURA']||''}</div>
+        <div class="lista-item-nome">${esc(compNorm)}${valor?' · '+valor:''}</div>
+        <div class="lista-item-sub">${esc(soDia(p['DATA_GERACAO']||p['DATA_ASSINATURA']||''))}</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:2px">
           ${p['LINK_HOLERITE']
             ? `<a href="${esc(String(p['LINK_HOLERITE']))}" target="_blank" rel="noopener" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px">
@@ -3736,16 +3757,16 @@ async function carregarHistoricoPagamentos() {
                </a>`
             : ''}
           ${p['COMPROVANTE_LINK']
-            ? `<a href="${p['COMPROVANTE_LINK']}" target="_blank" rel="noopener" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px">
+            ? `<a href="${esc(String(p['COMPROVANTE_LINK']))}" target="_blank" rel="noopener" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px">
                  <i class="ti ti-receipt" style="font-size:10px"></i> Ver comprovante
                </a>`
             : ''}
         </div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
-        <span class="badge ${pago?'badge-verde':'badge-amarelo'}">${p['STATUS']||'—'}</span>
+        <span class="badge ${pago?'badge-verde':'badge-amarelo'}">${esc(p['STATUS']||'—')}</span>
         ${!pago && p['WA_LINK_EMPREGADOR']
-          ? `<a href="${p['WA_LINK_EMPREGADOR']}" target="_blank"
+          ? `<a href="${esc(String(p['WA_LINK_EMPREGADOR']))}" target="_blank" rel="noopener"
                style="background:#22C55E;color:#fff;border-radius:6px;padding:3px 7px;font-size:10px;text-decoration:none;display:flex;align-items:center;gap:3px">
                <i class="ti ti-brand-whatsapp" style="font-size:10px"></i> Reenviar
              </a>`
@@ -3755,41 +3776,65 @@ async function carregarHistoricoPagamentos() {
   }).join('')
 }
 
+// A planilha grava data como dd/MM/yyyy — e new Date() lê isso como formato
+// AMERICANO: '05/01/2026' vira 1º de maio e '25/12/2026' vira Invalid Date.
+// No filtro do extrato, o resultado era pagamento depois do dia 12 SUMINDO
+// e pagamento até o dia 12 caindo no mês errado. O parser certo (parseDataCal)
+// já existia no próprio app; o extrato é que não o usava.
+function dataDoLancamento(s) {
+  const d = parseDataCal(s)
+  return d && !isNaN(d) ? d : null
+}
+
 // FIX #7: gerarExtrato agora também reage à troca de ano via sel-ano-pgto
 async function gerarExtrato() {
   if (!funcPgtoSelecionado) return
+  const funcId = String(funcPgtoSelecionado['ID'])
   const ini  = document.getElementById('ext-inicio')?.value
   const fim  = document.getElementById('ext-fim')?.value
   if (!ini || !fim) return
 
   const anoLabel = document.getElementById('ext-ano-label')
-  if (anoLabel) anoLabel.textContent = new Date(ini).getFullYear()
+  // new Date('2026-01-01') é meia-noite UTC — no Brasil ainda é 31/12/2025,
+  // e o rótulo (e o ano pedido ao servidor) saía um ano para trás sempre
+  // que o período começava em 1º de janeiro. Que é o padrão da tela.
+  if (anoLabel) anoLabel.textContent = ini.slice(0, 4)
 
   mostrarLoading('Gerando extrato...')
 
   const [resPag, resAdiant] = await Promise.all([
-    chamarGAS({ acao: 'listar_pagamentos',   dados: { func_id: funcPgtoSelecionado['ID'] } }),
-    chamarGAS({ acao: 'resumo_comissao',     dados: { func_id: funcPgtoSelecionado['ID'], ano: new Date(ini).getFullYear() } }),
+    chamarGAS({ acao: 'listar_pagamentos', dados: { func_id: funcId } }),
+    // Sem `ano`: vêm todos os adiantamentos e o período é aplicado aqui,
+    // pela data real. Filtrar por ano no servidor perdia lançamentos de
+    // período que cruza a virada (dez–jan) — e o ano ainda chegava errado
+    // pelo fuso, como acima.
+    chamarGAS({ acao: 'resumo_comissao', dados: { func_id: funcId } }),
   ])
   esconderLoading()
+
+  // Resposta atrasada de um funcionário não pode pintar a tela de outro.
+  if (!funcPgtoSelecionado || String(funcPgtoSelecionado['ID']) !== funcId) return
 
   const corpo  = document.getElementById('extrato-corpo')
   const lista  = document.getElementById('extrato-lista')
   const totais = document.getElementById('extrato-totais')
   if (!corpo || !lista || !totais) return
 
-  const iniDate = new Date(ini)
-  const fimDate = new Date(fim + 'T23:59:59')
+  const iniDate = parseDataCal(ini)
+  const fimDate = parseDataCal(fim)
+  if (!iniDate || !fimDate) return
+  fimDate.setHours(23, 59, 59)
 
-  const salarios = (resPag?.data || []).filter(p => {
-    const d = new Date(p['DATA_GERACAO'] || p['DATA_ASSINATURA'] || '2000-01-01')
-    return d >= iniDate && d <= fimDate
-  })
+  const noPeriodo = s => {
+    const d = dataDoLancamento(s)
+    return d && d >= iniDate && d <= fimDate
+  }
 
-  const adiantamentos = (resAdiant?.data?.adiantamentos || []).filter(a => {
-    const d = new Date(a['DATA_PAGTO'] || '2000-01-01')
-    return d >= iniDate && d <= fimDate
-  })
+  const salarios = (resPag?.data || []).filter(p =>
+    noPeriodo(p['DATA_GERACAO'] || p['DATA_ASSINATURA']))
+
+  const adiantamentos = (resAdiant?.data?.adiantamentos || []).filter(a =>
+    noPeriodo(a['DATA_PAGTO']))
 
   const itens = [
     ...salarios.map(p => {
@@ -3815,7 +3860,7 @@ async function gerarExtrato() {
       status: 'Pago',
       link:  '',
     })),
-  ].sort((a, b) => new Date(a.data) - new Date(b.data))
+  ].sort((a, b) => (dataDoLancamento(a.data) || 0) - (dataDoLancamento(b.data) || 0))
 
   if (!itens.length) {
     lista.innerHTML = '<p class="lista-vazia">Nenhum lançamento no período</p>'
@@ -3838,13 +3883,13 @@ async function gerarExtrato() {
         ${it.tipo==='salario'?'💼':it.tipo==='ferias'?'🌴':'💰'}
       </div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.desc}</div>
-        <div style="font-size:10px;color:var(--text-secondary)">${it.data ? new Date(it.data).toLocaleDateString('pt-BR') : '—'}</div>
+        <div style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.desc)}</div>
+        <div style="font-size:10px;color:var(--text-secondary)">${(d => d ? d.toLocaleDateString('pt-BR') : '—')(dataDoLancamento(it.data))}</div>
       </div>
       <div style="text-align:right;flex-shrink:0">
         <div style="font-size:12px;font-weight:600;color:${it.tipo==='salario'?'var(--verde-text)':it.tipo==='ferias'?'var(--amber-text)':'var(--blue-text)'}">R$ ${formatarValor(it.valor)}</div>
-        <div style="font-size:9px;color:var(--text-secondary)">${it.status}</div>
-        ${it.link ? `<a href="${it.link}" target="_blank" style="font-size:9px;color:var(--blue-text)">comprovante</a>` : ''}
+        <div style="font-size:9px;color:var(--text-secondary)">${esc(it.status || '')}</div>
+        ${it.link ? `<a href="${esc(String(it.link))}" target="_blank" rel="noopener" style="font-size:9px;color:var(--blue-text)">comprovante</a>` : ''}
       </div>
     </div>`).join('')
 
@@ -3917,7 +3962,7 @@ async function carregarNotifPendentes() {
                title="Ver o documento desta ordem"><i class="ti ti-file-text"></i> Ver</a>`
           : ''}
         ${p['WA_LINK_EMPREGADOR']
-          ? `<a href="${p['WA_LINK_EMPREGADOR']}" target="_blank" class="np-wa" title="${avisado ? 'Cobrar' : 'Avisar'} pelo WhatsApp">
+          ? `<a href="${esc(String(p['WA_LINK_EMPREGADOR']))}" target="_blank" rel="noopener" class="np-wa" title="${avisado ? 'Cobrar' : 'Avisar'} pelo WhatsApp">
                <i class="ti ti-brand-whatsapp"></i>
              </a>`
           : ''}
@@ -4428,7 +4473,7 @@ const ETAPA_IA = {
 // VERSÃO IMPLANTADA, que é um retrato do código, não o código atual. Sem
 // aviso, o usuário conserta, recarrega, vê o mesmo defeito e conclui que o
 // conserto não funcionou — quando na verdade ele nunca entrou no ar.
-const VERSAO_BACKEND_ESPERADA = '20260821'
+const VERSAO_BACKEND_ESPERADA = '20260822'
 
 function avisoServidorAntigo(versao) {
   if (!versao || String(versao) >= VERSAO_BACKEND_ESPERADA) return ''
