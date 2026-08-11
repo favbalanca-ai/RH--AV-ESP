@@ -139,7 +139,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260816'
+var VERSAO_BACKEND = '20260818'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -1074,6 +1074,43 @@ function chamarIA(pdfBase64, prompt) {
   }
 }
 
+// Listar modelos não gasta crédito nenhum — não é uma chamada de IA, é uma
+// consulta de catálogo. Por isso serve de prova: se ESTA passa e a leitura
+// falha por saldo, a chave está boa e o problema é só dinheiro na conta.
+// Sem essa separação, "trocar a chave" parece uma saída plausível — e não é.
+function pingModelos() {
+  var chave = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_KEY') || ''
+  if (!chave) return { http: 0, ok: false, erro: 'sem chave' }
+  var res
+  try {
+    res = UrlFetchApp.fetch('https://api.anthropic.com/v1/models', {
+      method: 'get',
+      headers: { 'x-api-key': chave, 'anthropic-version': '2023-06-01' },
+      muteHttpExceptions: true,
+    })
+  } catch (e) {
+    return { http: 0, ok: false, erro: 'não alcancei a Anthropic: ' + e.message }
+  }
+  var http = res.getResponseCode()
+  return { http: http, ok: http === 200,
+    erro: http === 200 ? '' : String(res.getContentText()).slice(0, 160) }
+}
+
+// Quando a leitura falha, a pergunta seguinte é sempre a mesma: "é a chave?".
+// Responde com um fato, não com um palpite.
+function anexarProvaDaChave(saida) {
+  var m = pingModelos()
+  saida.modelos_http  = m.http
+  saida.chave_valida  = m.ok
+  saida.veredito_chave = m.ok
+    ? 'A chave está boa: a Anthropic aceitou ela para listar os modelos, ' +
+      'e listar modelos não gasta crédito. Trocar de chave não resolve nada aqui.'
+    : (m.http === 401
+        ? 'A chave foi recusada de verdade (401). Essa sim precisa ser trocada.'
+        : 'Não deu para confirmar a chave (' + (m.http || 'sem resposta') + ').')
+  return saida
+}
+
 // Testa a leitura sem gravar nada: diz em que etapa parou e o que veio.
 // Serve para o usuário descobrir sozinho por que um PDF não é reconhecido.
 function diagnosticarIA(dados) {
@@ -1106,6 +1143,7 @@ function diagnosticarIA(dados) {
     saida.http  = ping.http || 0
     saida.erro  = ping.ok ? '' : ping.erro
     saida.resposta = ping.ok ? String(ping.texto).slice(0, 60) : ''
+    if (!ping.ok) anexarProvaDaChave(saida)
     return saida
   }
 
@@ -1117,6 +1155,7 @@ function diagnosticarIA(dados) {
   if (!leitura.ok) {
     saida.etapa = leitura.etapa
     saida.erro  = leitura.erro
+    anexarProvaDaChave(saida)
     return saida
   }
 
