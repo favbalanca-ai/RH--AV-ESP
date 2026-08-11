@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260824'
+const APP_VERSION = '20260825'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -4108,6 +4108,130 @@ function renderCusto() {
 
 const rs = v => 'R$ ' + formatarValor(v || 0)
 
+// ─── Leituras gerenciais da série mensal ──────────────────────────
+// O total responde "quanto custou"; um gestor pergunta também "para onde
+// está indo". Estas funções olham a série de meses que o servidor já
+// manda e extraem direção, projeção e distorção — tudo no aparelho,
+// sem pesar mais uma chamada.
+
+function custoTendencia(meses) {
+  if (!meses || meses.length < 4) return null
+  const n = Math.min(3, Math.floor(meses.length / 2))
+  const media = l => l.reduce((s, m) => s + m.custo_total, 0) / l.length
+  const rec = media(meses.slice(-n))
+  const ant = media(meses.slice(-n * 2, -n))
+  if (!ant) return null
+  return { pct: Math.round((rec / ant - 1) * 100), n, mediaRec: rec }
+}
+
+// Fecha o ano no ritmo dos últimos meses. É estimativa de planejamento,
+// não promessa — 13º e férias concentrados no fim do ano ficam por conta
+// do leitor, e a tela diz isso.
+function custoProjecao(c) {
+  const meses = c.meses || []
+  if (!c.ano_filtro || meses.length < 2 || meses.length >= 12) return null
+  const ult = meses.slice(-Math.min(3, meses.length))
+  const ritmo = ult.reduce((s, m) => s + m.custo_total, 0) / ult.length
+  const realizado = meses.reduce((s, m) => s + m.custo_total, 0)
+  const faltam = 12 - meses.length
+  return { valor: realizado + ritmo * faltam, ritmo, faltam, lancados: meses.length }
+}
+
+const mesCurtoCusto = rotulo => normalizarComp(rotulo).slice(0, 3)
+
+// A série inteira num olhar. Clica e cai no mês a mês.
+function custoSpark(meses) {
+  if (!meses || meses.length < 2) return ''
+  const teto = Math.max(...meses.map(m => m.custo_total), 1)
+  return `
+    <div class="cst-spark" role="button" tabindex="0" title="Ver mês a mês"
+         onclick="verCusto('meses')" onkeydown="if(event.key==='Enter')verCusto('meses')">
+      ${meses.map((m, i) => `
+        <div class="cst-spark-col" title="${esc(normalizarComp(m.rotulo))} · ${rs(m.custo_total)}">
+          <div class="cst-spark-bar${i === meses.length - 1 ? ' ult' : ''}"
+               style="height:${Math.max(6, Math.round(m.custo_total / teto * 100))}%"></div>
+          <span>${esc(mesCurtoCusto(m.rotulo))}</span>
+        </div>`).join('')}
+    </div>`
+}
+
+// O que um gestor perguntaria olhando a série — respondido em frases,
+// não em tabela. Cada sinal só aparece quando há evidência para ele.
+function custoSinais(c) {
+  const meses = c.meses || []
+  const sinais = []
+  const sinal = (icone, cor, html) => sinais.push(
+    `<div class="cst-sinal ${cor || ''}"><i class="ti ti-${icone}" aria-hidden="true"></i><p>${html}</p></div>`)
+
+  const t = custoTendencia(meses)
+  if (t && Math.abs(t.pct) >= 5) {
+    const subiu = t.pct > 0
+    sinal(subiu ? 'trending-up' : 'trending-down', subiu ? 'ruim' : 'bom',
+      `Custo em ${subiu ? 'alta' : 'queda'}: a média dos últimos ${t.n} meses
+       (${rs(t.mediaRec)}/mês) está <strong>${Math.abs(t.pct)}% ${subiu ? 'acima' : 'abaixo'}</strong>
+       dos ${t.n} anteriores.`)
+  } else if (t) {
+    sinal('minus', '',
+      `Custo estável: últimos ${t.n} meses variaram ${t.pct >= 0 ? '+' : ''}${t.pct}%
+       sobre os ${t.n} anteriores.`)
+  }
+
+  if (meses.length >= 3) {
+    const porCusto = [...meses].sort((a, b) => a.custo_total - b.custo_total)
+    const tipico = porCusto[Math.floor(porCusto.length / 2)]
+    const caro = porCusto[porCusto.length - 1]
+    if (tipico.custo_total && caro.custo_total >= tipico.custo_total * 1.25) {
+      const dif = (comp) => (caro[comp] || 0) - (tipico[comp] || 0)
+      const motores = [
+        { nome: 'pela folha bruta (13º e férias pagos caem aqui)', peso: dif('proventos') - dif('he_valor') },
+        { nome: 'pela hora extra', peso: dif('he_valor') },
+        { nome: 'pelos encargos e provisões', peso: dif('encargos') + dif('provisoes') },
+      ].sort((a, b) => b.peso - a.peso)
+      sinal('flame', 'ruim',
+        `O mês mais pesado foi <strong>${esc(normalizarComp(caro.rotulo))}</strong>
+         (${rs(caro.custo_total)}, ${Math.round((caro.custo_total / tipico.custo_total - 1) * 100)}%
+         acima de um mês típico)${motores[0].peso > 0 ? ', puxado principalmente ' + motores[0].nome : ''}.`)
+    }
+  }
+
+  if (meses.length >= 4 && (c.total?.he_valor || 0) > 0) {
+    const n = Math.min(3, Math.floor(meses.length / 2))
+    const soma = l => l.reduce((s, m) => s + m.he_valor, 0)
+    const rec = soma(meses.slice(-n)), ant = soma(meses.slice(-n * 2, -n))
+    if (ant > 0 && rec >= ant * 1.3) {
+      sinal('clock', 'ruim',
+        `Hora extra em alta: ${rs(rec)} nos últimos ${n} meses contra ${rs(ant)}
+         nos ${n} anteriores (<strong>+${Math.round((rec / ant - 1) * 100)}%</strong>).`)
+    } else if (rec > 0 && ant >= rec * 1.3) {
+      sinal('clock', 'bom',
+        `Hora extra em queda: ${rs(rec)} nos últimos ${n} meses contra ${rs(ant)}
+         nos ${n} anteriores (−${Math.round((1 - rec / ant) * 100)}%).`)
+    }
+  }
+
+  const k = c.concentracao_he || {}
+  if (k.pessoas > 3 && k.top3 >= 60) {
+    sinal('users', 'ruim',
+      `<strong>${k.top3}%</strong> da hora extra está em só 3 pessoas — sinal de
+       equipe subdimensionada num ponto, e risco trabalhista.`)
+  }
+
+  // Mês com folha de só parte da equipe derruba a média sem avisar.
+  if (meses.length >= 3) {
+    const maxF = Math.max(...meses.map(m => m.funcionarios))
+    const capengas = meses.filter(m => m.funcionarios < maxF * 0.7)
+    if (maxF >= 3 && capengas.length && capengas.length < meses.length) {
+      sinal('alert-triangle', '',
+        `${capengas.slice(0, 3).map(m => `<strong>${esc(normalizarComp(m.rotulo))}</strong>
+           tem folha de só ${m.funcionarios}`).join(', ')} pessoa(s), contra ${maxF} nos
+         meses cheios — pode haver holerite faltando, e a média mensal fica distorcida.`)
+    }
+  }
+
+  if (!sinais.length) return ''
+  return `<div class="cst-secao">Sinais do período</div><div class="cst-sinais">${sinais.join('')}</div>`
+}
+
 function custoResumo(c) {
   const t = c.total
   const q = c.qualidade || {}
@@ -4141,6 +4265,9 @@ function custoResumo(c) {
                  os valores padrão. <a href="#" onclick="verCusto('aliquotas');return false">Ajustar</a>`)
   }
 
+  const tend = custoTendencia(c.meses)
+  const proj = custoProjecao(c)
+
   return `
     <div class="cst-cards">
       <div class="cst-card destaque">
@@ -4151,6 +4278,18 @@ function custoResumo(c) {
         <span>Por mês</span><strong>${rs(t.custo_mes)}</strong>
         <em>média do período</em>
       </div>
+      ${tend ? `
+      <div class="cst-card">
+        <span>Tendência</span>
+        <strong class="${tend.pct > 4 ? 'cst-alta' : tend.pct < -4 ? 'cst-queda' : ''}">
+          ${tend.pct > 0 ? '+' : ''}${tend.pct}%</strong>
+        <em>últimos ${tend.n} meses vs ${tend.n} anteriores</em>
+      </div>` : ''}
+      ${proj ? `
+      <div class="cst-card">
+        <span>Projeção ${esc(c.ano_filtro)}</span><strong>${rs(proj.valor)}</strong>
+        <em>${proj.lancados} lançado(s) + ritmo × ${proj.faltam} — sem contar 13º concentrado</em>
+      </div>` : ''}
       <div class="cst-card">
         <span>Multiplicador</span><strong>${(t.multiplicador || 0).toFixed(2)}×</strong>
         <em>cada R$ 1,00 de salário custa ${rs(t.multiplicador)}</em>
@@ -4161,7 +4300,11 @@ function custoResumo(c) {
       </div>
     </div>
 
+    ${custoSpark(c.meses)}
+
     ${alerta.length ? `<div class="cst-aviso">${alerta.map(a => `<p>${a}</p>`).join('')}</div>` : ''}
+
+    ${custoSinais(c)}
 
     ${custoEscada(t)}
     ${(c.empregadores || []).map(custoBlocoEmpregador).join('')}
@@ -4279,9 +4422,24 @@ function custoPessoas(c) {
   const gente = c.funcionarios || []
   if (!gente.length) return '<div class="af-nota">Nenhum funcionário com folha no período.</div>'
   const teto = Math.max(...gente.map(p => p.custo_total), 1)
+  const totalPeriodo = (c.total && c.total.custo_total) || gente.reduce((s, p) => s + p.custo_total, 0)
+  const fatia = p => totalPeriodo ? Math.round(p.custo_total / totalPeriodo * 100) : 0
+
+  // Onde o dinheiro se concentra: quantas pessoas somam 80% do custo.
+  // A lista já vem ordenada do servidor, do maior para o menor.
+  let pareto = ''
+  if (gente.length >= 5 && totalPeriodo) {
+    let acum = 0, n = 0
+    for (const p of gente) { acum += p.custo_total; n++; if (acum >= totalPeriodo * 0.8) break }
+    if (n < gente.length) {
+      pareto = ` As <strong>${n}</strong> pessoas mais caras concentram
+        ${Math.round(acum / totalPeriodo * 100)}% do custo do período.`
+    }
+  }
+
   return `
     <div class="af-nota">
-      Ordenado pelo custo total do período — folha bruta mais encargos e provisões.
+      Ordenado pelo custo total do período — folha bruta mais encargos e provisões.${pareto}
     </div>
     ${gente.map(p => `
       <div class="af-verba">
@@ -4294,6 +4452,7 @@ function custoPessoas(c) {
           ${esc(p.funcao || '—')}${p.unidade ? ' · ' + esc(p.unidade) : ''}
           · ${p.meses} ${p.meses === 1 ? 'mês' : 'meses'}
           · ${rs(p.custo_mes)}/mês
+          · ${fatia(p)}% do total
           · ${(p.multiplicador || 0).toFixed(2)}×
           ${p.he_horas ? ` · <strong>${formatarValor(p.he_horas)} h extra</strong> (${p.he_pct}%)` : ''}
         </div>
@@ -4331,21 +4490,47 @@ function custoMeses(c) {
   const meses = c.meses || []
   if (!meses.length) return '<div class="af-nota">Sem meses no período.</div>'
   const teto = Math.max(...meses.map(m => m.custo_total), 1)
+  const caro = meses.reduce((a, m) => m.custo_total > a.custo_total ? m : a)
+  const leve = meses.reduce((a, m) => m.custo_total < a.custo_total ? m : a)
+
+  // Variação sobre o mês anterior: subida de custo é vermelha de propósito —
+  // nesta tela, crescer é o que precisa de explicação.
+  const delta = (m, i) => {
+    const ant = meses[i - 1]
+    if (!ant || !ant.custo_total) return ''
+    const pct = Math.round((m.custo_total / ant.custo_total - 1) * 100)
+    if (!pct) return '<span class="cst-delta">=</span>'
+    return `<span class="cst-delta ${pct > 0 ? 'alta' : 'queda'}">${pct > 0 ? '▲ +' : '▼ '}${pct}%</span>`
+  }
+  const seg = v => Math.round(v / teto * 1000) / 10
+
   return `
     <div class="af-nota">
       Cada mês pelo que foi trabalhado (competência), não pela data do pagamento.
+      ${meses.length > 1 ? `Mais pesado: <strong>${esc(normalizarComp(caro.rotulo))}</strong>
+        (${rs(caro.custo_total)}) · mais leve: <strong>${esc(normalizarComp(leve.rotulo))}</strong>
+        (${rs(leve.custo_total)}).` : ''}
     </div>
-    ${meses.map(m => `
+    <div class="cst-legenda">
+      <span><i class="dot folha"></i> Folha bruta</span>
+      <span><i class="dot enc"></i> Encargos</span>
+      <span><i class="dot prov"></i> Provisões</span>
+    </div>
+    ${meses.map((m, i) => `
       <div class="af-verba">
         <div class="af-verba-topo">
-          <span class="af-verba-nome">${esc(normalizarComp(m.rotulo))}</span>
+          <span class="af-verba-nome">${esc(normalizarComp(m.rotulo))} ${delta(m, i)}</span>
           <span class="af-verba-valor">${rs(m.custo_total)}</span>
         </div>
-        <div class="af-barra"><div class="af-barra-in" style="width:${Math.round(m.custo_total / teto * 100)}%"></div></div>
+        <div class="cst-mbar">
+          <div class="seg folha" style="width:${seg(m.proventos)}%"></div>
+          <div class="seg enc" style="width:${seg(m.encargos)}%"></div>
+          <div class="seg prov" style="width:${seg(m.provisoes)}%"></div>
+        </div>
         <div class="af-verba-sub">
           ${m.funcionarios} pessoa(s) · folha ${rs(m.proventos)}
           · encargos ${rs(m.encargos)} · provisões ${rs(m.provisoes)}
-          ${m.he_horas ? ` · ${formatarValor(m.he_horas)} h extra` : ''}
+          ${m.he_valor ? ` · <strong>${formatarValor(m.he_horas)} h extra</strong> (${rs(m.he_valor)})` : ''}
         </div>
       </div>`).join('')}`
 }
