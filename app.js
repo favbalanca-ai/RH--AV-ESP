@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260818'
+const APP_VERSION = '20260819'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -3447,10 +3447,34 @@ function renderAnalise() {
   const a = analiseAtual
 
   if (!a.meses.length) {
-    corpo.innerHTML = analiseVazia(a)
+    corpo.innerHTML = analiseVazia(a) + analiseForaDaConta(a)
     return
   }
-  corpo.innerHTML = (analiseVista === 'resumo' ? analiseResumo(a) : analiseMeses(a)) + analiseRodape(a)
+  corpo.innerHTML = (analiseVista === 'resumo' ? analiseResumo(a) : analiseMeses(a))
+    + analiseRodape(a) + analiseForaDaConta(a)
+}
+
+const ROTULO_TIPO_DOC = { Ferias: 'férias', Ponto: 'ponto', EPI: 'EPI' }
+
+// A análise usa só a folha de pagamento. Os outros documentos existem e
+// continuam no histórico — some-los da conta sem dizer nada faria a média
+// mudar sozinha, e o número errado é o que não avisa que está errado.
+function analiseForaDaConta(a) {
+  const fora = a.fora_da_analise || {}
+  const tipos = Object.keys(fora).filter(t => fora[t] > 0)
+  if (!tipos.length) return ''
+  const total = tipos.reduce((s, t) => s + fora[t], 0)
+  const nomes = tipos.map(t => `${fora[t]} de ${ROTULO_TIPO_DOC[t] || esc(t)}`)
+  const lista = nomes.length > 1
+    ? nomes.slice(0, -1).join(', ') + ' e ' + nomes[nomes.length - 1]
+    : nomes[0]
+  return `
+    <div class="af-nota">
+      ${total === 1 ? '1 documento deste funcionário está' : total + ' documentos deste funcionário estão'}
+      fora desta conta (${lista}). A análise compara mês com mês, e só a
+      folha de pagamento é comparável assim — férias e ponto entrariam na
+      média como se fossem salário. Eles continuam no histórico.
+    </div>`
 }
 
 // Quando nenhum holerite passou pela extração, o card não pode só ficar
@@ -3491,11 +3515,11 @@ function analiseVazia(a) {
   return `
     <div class="af-pendente">
       <div>
-        <strong>Nenhuma folha registrada para ${esc(a.nome || 'este funcionário')}</strong>
-        <div>A análise sai das folhas enviadas pela aba <strong>Folha de Pagamento</strong>.
+        <strong>Nenhuma folha de pagamento registrada para ${esc(a.nome || 'este funcionário')}</strong>
+        <div>A análise sai dos documentos enviados como <strong>Folha de Pagamento</strong>.
           Se você já enviou, confira na planilha se a linha tem o
           <strong>ID FUNC.</strong> deste funcionário e se o <strong>TIPO</strong>
-          não ficou como "Ponto".</div>
+          ficou como <strong>Folha</strong> — ponto, férias e EPI não entram.</div>
       </div>
     </div>`
 }
@@ -4397,7 +4421,7 @@ const ETAPA_IA = {
 // VERSÃO IMPLANTADA, que é um retrato do código, não o código atual. Sem
 // aviso, o usuário conserta, recarrega, vê o mesmo defeito e conclui que o
 // conserto não funcionou — quando na verdade ele nunca entrou no ar.
-const VERSAO_BACKEND_ESPERADA = '20260818'
+const VERSAO_BACKEND_ESPERADA = '20260819'
 
 function avisoServidorAntigo(versao) {
   if (!versao || String(versao) >= VERSAO_BACKEND_ESPERADA) return ''
