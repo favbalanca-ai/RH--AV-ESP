@@ -139,7 +139,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260818'
+var VERSAO_BACKEND = '20260819'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -2889,13 +2889,30 @@ function historicoFolha(dados) {
   var func = lerAbaComoObjetos(CONFIG.ABAS.FUNCIONARIOS)
     .find(function (f) { return String(f['ID']) === funcId })
 
+  var doFunc = lerAbaComoObjetos(CONFIG.ABAS.FOLHA).filter(function (f) {
+    return String(f['ID FUNC.']).trim() === funcId
+  })
+
+  // A análise compara mês com mês: média, o que é fixo, o que é eventual.
+  // Só a FOLHA DE PAGAMENTO é comparável assim. Férias, ponto e EPI têm
+  // outra natureza e, somados como se fossem salário, distorcem a média
+  // sem aparecer em lugar nenhum. Lista do que entra, não do que sai:
+  // um tipo novo amanhã fica de fora até alguém decidir que entra.
+  //
   // Todas as folhas dele, sem filtro de ano: é daqui que sai a lista de anos
   // disponíveis. Calcular os anos DEPOIS do filtro daria lista vazia
   // justamente quando ela importa — quando o ano escolhido não tem nada.
-  var todas = lerAbaComoObjetos(CONFIG.ABAS.FOLHA).filter(function (f) {
-    if (String(f['ID FUNC.']).trim() !== funcId) return false
-    var tipo = String(f['TIPO'] || 'Folha')
-    return tipo !== 'Ponto' && tipo !== 'EPI'
+  var todas = doFunc.filter(function (f) {
+    // Linha sem TIPO é holerite: a coluna nasceu depois delas.
+    return String(f['TIPO'] || 'Folha').trim() === 'Folha'
+  })
+
+  // Quantos ficaram de fora, e de que tipo. Sumir com documento em silêncio
+  // é como o número da média muda sozinho e ninguém descobre por quê.
+  var forasPorTipo = {}
+  doFunc.forEach(function (f) {
+    var t = String(f['TIPO'] || 'Folha').trim()
+    if (t !== 'Folha') forasPorTipo[t] = (forasPorTipo[t] || 0) + 1
   })
 
   var anos = {}
@@ -3000,6 +3017,9 @@ function historicoFolha(dados) {
     anos:       Object.keys(anos).sort().reverse(),
     anos_qtd:   anos,
     total_folhas: todas.length,
+    // { 'Ferias': 2, 'Ponto': 11 } — o que existe do funcionário mas não
+    // entra nesta análise, para a tela poder dizer em vez de omitir.
+    fora_da_analise: forasPorTipo,
     ano_filtro: ano || '',
     meses:      meses,
     categorias: categorias,
