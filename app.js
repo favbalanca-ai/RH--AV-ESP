@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260822'
+const APP_VERSION = '20260823'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -1965,6 +1965,11 @@ function enviarComAssinaturaPropria_epi(){ document.getElementById('modal-envio'
 async function enviarPaginaAssinaturaPropria(idx, tipo) {
   const p = paginasFracionadas[idx]
   if (!p.funcId) return toast('❌ Selecione o funcionário primeiro', 'erro')
+  // Mesma trava do envio ZapSign: entre o toque e a resposta o modal reabria
+  // e um segundo toque criava documento e ordem duplicados.
+  if (p.status === 'enviado')  return toast('Este documento já foi enviado', 'aviso')
+  if (p.status === 'enviando') return toast('Envio em andamento — aguarde', 'aviso')
+  p.status = 'enviando'
   const tipoDoc = tipo || p.tipoDoc || 'Folha'
   const btn = document.getElementById('btn-zap-' + idx)
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>' }
@@ -1998,6 +2003,7 @@ async function enviarPaginaAssinaturaPropria(idx, tipo) {
     toast('✅ Link gerado para ' + p.nome.split(' ')[0], 'sucesso')
     carregarEntregasFolha()
   } else {
+    p.status = 'pronto'
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> Enviar' }
     toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
   }
@@ -2794,6 +2800,12 @@ async function enviarPaginaZapSign(idx) {
   // Cinto e suspensório: o botão é desabilitado, mas um redesenho da lista já
   // o reativou uma vez. Reenviar custa uma assinatura e gera ordem duplicada.
   if (p.status === 'enviado') return toast('Este documento já foi enviado', 'aviso')
+  // 'enviado' só chega DEPOIS da resposta, e o envio leva vários segundos.
+  // Nesse meio tempo o modal reabria e um segundo toque passava pela guarda
+  // — no log: duas folhas do mesmo funcionário com 8 segundos de diferença,
+  // dois documentos no ZapSign, duas ordens de pagamento.
+  if (p.status === 'enviando') return toast('Envio em andamento — aguarde', 'aviso')
+  p.status = 'enviando'
   const btn = document.getElementById('btn-zap-' + idx)
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>'
   mostrarLoading('Enviando para ' + p.nome.split(' ')[0] + '...')
@@ -2822,6 +2834,9 @@ async function enviarPaginaZapSign(idx) {
     toast('✅ ' + p.nome.split(' ')[0] + ' — enviado!', 'sucesso')
     carregarEntregasFolha()
   } else {
+    // O envio falhou de verdade: volta para 'pronto' para permitir tentar
+    // de novo — deixar em 'enviando' trancaria a página para sempre.
+    p.status = 'pronto'
     btn.disabled = false; btn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> Enviar'
     toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
   }
@@ -4473,7 +4488,7 @@ const ETAPA_IA = {
 // VERSÃO IMPLANTADA, que é um retrato do código, não o código atual. Sem
 // aviso, o usuário conserta, recarrega, vê o mesmo defeito e conclui que o
 // conserto não funcionou — quando na verdade ele nunca entrou no ar.
-const VERSAO_BACKEND_ESPERADA = '20260822'
+const VERSAO_BACKEND_ESPERADA = '20260823'
 
 function avisoServidorAntigo(versao) {
   if (!versao || String(versao) >= VERSAO_BACKEND_ESPERADA) return ''

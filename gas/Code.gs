@@ -139,7 +139,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260822'
+var VERSAO_BACKEND = '20260823'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -3356,8 +3356,19 @@ function definirOrigemUltimaOrdem(origem, refDoc) {
   if (idx.refDoc >= 0) sheet.getRange(linha, idx.refDoc + 1).setValue(refDoc || '')
 }
 
-// Já existe ordem para este documento? Procura pelo token do documento e,
-// se ele não estiver disponível, cai para funcionário + competência + origem.
+// Já existe ordem ATIVA para este mês? Mesmo funcionário + mesma competência
+// + mesma origem = mesmo pagamento, não importa por qual documento a
+// assinatura chegou. Duas ordens para o mesmo salário é o empregador sendo
+// cobrado duas vezes.
+//
+// Dois defeitos conviviam aqui:
+// 1. Com ref_doc presente, SÓ o token era comparado — a folha reenviada
+//    (outro documento, mesmo mês) passava direto e virava segunda ordem.
+// 2. A ordem grava a competência normalizada ('Julho/2026') e a folha manda
+//    a data crua ('01/07/2026'). Comparar o texto nunca batia, então o
+//    dedup por funcionário+competência não funcionava para NENHUMA ordem
+//    criada pela sincronização. O comentário "não duplica" era mentira.
+//    Compara pela chave numérica (202607), que os dois formatos produzem.
 function jaExisteOrdemPagamento(funcId, competencia, origem, refDoc) {
   var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_PAGAMENTOS)
   if (!sheet) return false
@@ -3369,13 +3380,23 @@ function jaExisteOrdemPagamento(funcId, competencia, origem, refDoc) {
   var iCanc = hdrs.indexOf('CANCELADO')
   var alvo  = String(refDoc || '').trim()
 
+  var chaveComp = ordemCompetencia(competencia).chave
+  // chave sem mês (só ano, ou nada) não identifica competência — aí a
+  // comparação honesta é o texto cru, não um empate em "ano*100".
+  var compTemMes = chaveComp % 100 !== 0
+
   for (var i = 1; i < vals.length; i++) {
     if (iCanc >= 0 && String(vals[i][iCanc]).trim() === 'Sim') continue
     if (alvo && iRef >= 0 && String(vals[i][iRef]).trim() === alvo) return true
-    if (!alvo && iFunc >= 0 && iComp >= 0) {
+    if (iFunc >= 0 && iComp >= 0 && String(vals[i][iFunc]) === String(funcId)) {
       var mesmaOrigem = iOrig < 0 || String(vals[i][iOrig] || 'Folha') === String(origem || 'Folha')
-      if (String(vals[i][iFunc]) === String(funcId) &&
-          String(vals[i][iComp]) === String(competencia) && mesmaOrigem) return true
+      if (!mesmaOrigem) continue
+      // valorDeCelula: célula que o Sheets converteu em data volta como texto
+      var compRow = valorDeCelula(vals[i][iComp])
+      var mesmaComp = compTemMes
+        ? ordemCompetencia(compRow).chave === chaveComp
+        : String(compRow).trim() === String(competencia).trim()
+      if (mesmaComp) return true
     }
   }
   return false
@@ -3519,16 +3540,32 @@ function confirmarPagamentoEmpregador(dados) {
 // Marca a ordem como paga direto do app. Existe porque nem todo pagamento
 // passa pelo link: dinheiro, transferência feita na mão, Pix pelo banco.
 // Sem isto a ordem ficava "aguardando" para sempre no painel.
+// Acha a coluna ignorando acento, caixa e espaço: 'Status ', 'STATUS' e
+// 'status' são a mesma coluna para quem digitou o cabeçalho, e têm que ser
+// para o código também.
+function acharColuna(hdrs, nome) {
+  var alvo = semAcento(nome).replace(/[\s_]+/g, '')
+  for (var i = 0; i < hdrs.length; i++) {
+    if (semAcento(hdrs[i]).replace(/[\s_]+/g, '') === alvo) return i
+  }
+  return -1
+}
+
 function marcarPago(dados, usuario) {
   var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_PAGAMENTOS)
   if (!sheet) throw new Error('Aba PAGAMENTOS não encontrada')
   var vals = sheet.getDataRange().getValues()
   var hdrs = vals[0]
-  var iId     = hdrs.indexOf('ID')
-  var iStatus = hdrs.indexOf('STATUS')
-  var iData   = hdrs.indexOf('DATA_PAGAMENTO')
-  var iConf   = hdrs.indexOf('DATA_CONFIRMACAO')
-  if (iId < 0 || iStatus < 0) throw new Error('Aba PAGAMENTOS sem as colunas ID/STATUS')
+  var iId     = acharColuna(hdrs, 'ID')
+  var iStatus = acharColuna(hdrs, 'STATUS')
+  var iData   = acharColuna(hdrs, 'DATA_PAGAMENTO')
+  var iConf   = acharColuna(hdrs, 'DATA_CONFIRMACAO')
+  // O erro tem que mostrar o que a aba TEM, não só o que falta — "sem as
+  // colunas" apareceu duas vezes no log e não dava para saber o porquê.
+  if (iId < 0 || iStatus < 0) {
+    throw new Error('Aba PAGAMENTOS sem as colunas ID/STATUS. Cabeçalho ' +
+      'encontrado na linha 1: ' + hdrs.filter(String).join(' | '))
+  }
 
   var agora = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm')
   for (var i = 1; i < vals.length; i++) {
