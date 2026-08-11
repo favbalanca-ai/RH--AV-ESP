@@ -139,7 +139,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260814'
+var VERSAO_BACKEND = '20260815'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -182,6 +182,20 @@ function lerAbaComoObjetos(nomeAba) {
       headers.forEach((h, i) => { obj[h] = valorDeCelula(row[i]) })
       return obj
     })
+}
+
+// Grava um valor por NOME de coluna na última linha da aba, criando a coluna
+// se ela ainda não existir. Serve para completar uma linha que acabou de ser
+// acrescentada por appendRow — que é posicional e não conhece nomes.
+function definirNaUltimaLinha(nomeAba, coluna, valor) {
+  var sheet = getSheet(nomeAba)
+  var ultima = sheet.getLastRow()
+  if (ultima < 2) return
+  var hdrs = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0]
+    .map(function (h) { return String(h).trim() })
+  var i = hdrs.indexOf(coluna)
+  if (i < 0) { i = hdrs.length; sheet.getRange(1, i + 1).setValue(coluna) }
+  sheet.getRange(ultima, i + 1).setValue(valor)
 }
 
 function adicionarLinha(nomeAba, valores) {
@@ -344,8 +358,13 @@ function entregarEpi(dados, usuario) {
       dados.motivo, usarZapSign ? 'Pendente' : 'Aguardando Assinatura', '', zap.token || '', '', usarZapSign ? 'Signer: ' + (zap.signerToken || '') : 'Assinatura Própria',
     ])
     numeros.push(num)
-    try { salvarPdfNoDrive(dados.func_id, func['NOME_COMPLETO'], 'EPI_RECIBOS', nomeDoc + '_PENDENTE.pdf', pdfBase64) }
-    catch(e) { logAcao(usuario, 'ERRO_DRIVE', e.message) }
+    // O recibo pendente já ia para o Drive; o link é que se perdia aqui, e
+    // sem ele não havia como abrir o documento antes de assinado.
+    try {
+      const linkPendente = salvarPdfNoDrive(dados.func_id, func['NOME_COMPLETO'],
+        'EPI_RECIBOS', nomeDoc + '_PENDENTE.pdf', pdfBase64)
+      if (linkPendente) definirNaUltimaLinha(CONFIG.ABAS.EPI_ENTREGAS, 'LINK PDF ORIGINAL', linkPendente)
+    } catch(e) { logAcao(usuario, 'ERRO_DRIVE', e.message) }
   })
 
   logAcao(usuario, 'ENTREGA_EPI', 'Func ' + dados.func_id + ' | ' + dados.itens.map(i=>i.cod).join(',') + ' | ZapSign: ' + zap.token)

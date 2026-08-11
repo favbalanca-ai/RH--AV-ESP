@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260815'
+const APP_VERSION = '20260816'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -1839,6 +1839,21 @@ function filtrarEntregas() {
   renderEntregas(entregasCache)
 }
 
+// O documento existe desde o envio, não desde a assinatura: fica no Drive
+// esperando. Mostrar só o assinado escondia metade da vida do papel — e é
+// justamente antes de assinar que se quer conferir o que foi mandado.
+function linkDocumento(linkAssinado, linkOriginal) {
+  const assinado = String(linkAssinado || '').trim()
+  const enviado  = String(linkOriginal || '').trim()
+  const url = assinado || enviado
+  if (!url) return ''
+  const rotulo = assinado ? 'Ver assinado' : 'Ver enviado'
+  const icone  = assinado ? 'ti-file-check' : 'ti-file-search'
+  return `<a href="${esc(url)}" target="_blank" rel="noopener"
+    style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px;margin-top:2px">
+    <i class="ti ${icone}" style="font-size:10px"></i> ${rotulo}</a>`
+}
+
 function itemEntregaHTML(e) {
   const assinado = e['ASSINADO?'] === 'Sim'
   const func  = funcionarios.find(f => f['NOME_COMPLETO'] === e['FUNCIONÁRIO'])
@@ -1850,7 +1865,7 @@ function itemEntregaHTML(e) {
       <div class="lista-item-info">
         <div class="lista-item-nome">${esc(e['FUNCIONÁRIO']||'—')}</div>
         <div class="lista-item-sub">${esc(e['DESCRIÇÃO DO EPI']||'')} · ${esc(e['DATA ENTREGA']||'')} · ${esc(e['MOTIVO ENTREGA']||'')}</div>
-        ${e['LINK DOC ASSINADO'] ? `<a href="${e['LINK DOC ASSINADO']}" target="_blank" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px;margin-top:2px"><i class="ti ti-file-check" style="font-size:10px"></i> Ver documento assinado</a>` : ''}
+        ${linkDocumento(e['LINK DOC ASSINADO'], e['LINK PDF ORIGINAL'])}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
         ${badge(e['ASSINADO?'])}
@@ -2147,7 +2162,7 @@ function itemFolhaHTML(f) {
       <div class="lista-item-info">
         <div class="lista-item-nome">${esc(f['FUNCIONÁRIO'])}</div>
         <div class="lista-item-sub">${esc(f['COMPETÊNCIA'])} · ${esc(f['DATA ENVIO'])}</div>
-        ${f['LINK DOC ASSINADO'] ? `<a href="${f['LINK DOC ASSINADO']}" target="_blank" style="font-size:10px;color:var(--blue-text);display:flex;align-items:center;gap:2px;margin-top:2px"><i class="ti ti-file-check" style="font-size:10px"></i> Ver assinado</a>` : ''}
+        ${linkDocumento(f['LINK DOC ASSINADO'], f['LINK PDF ORIGINAL'])}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
         ${badge(f['STATUS'])}
