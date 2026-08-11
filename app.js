@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260816'
+const APP_VERSION = '20260817'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -4421,7 +4421,9 @@ function renderDiagIA(d) {
     ${linha('Versão do servidor', d.versao_backend)}
     ${linha('Modelo', d.modelo)}
     ${linha('Limite de resposta', d.max_tokens + ' tokens')}
-    ${linha('Chave configurada', d.chave_configurada ? `sim (${d.chave_tamanho} caracteres, começa com ${d.chave_comeco})` : 'NÃO')}
+    ${linha('Chave configurada', d.chave_configurada
+      ? `sim (${d.chave_tamanho} caracteres, termina em ${d.chave_final || d.chave_comeco || '?'})`
+      : 'NÃO')}
     ${d.http ? linha('Resposta HTTP', d.http) : ''}
     ${d.stop_reason ? linha('Motivo da parada', d.stop_reason) : ''}
     ${d.tamanho_resposta ? linha('Tamanho da resposta', d.tamanho_resposta + ' caracteres') : ''}
