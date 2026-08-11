@@ -139,7 +139,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260819'
+var VERSAO_BACKEND = '20260820'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -150,6 +150,23 @@ function verificarLogin(usuario, senha) {
 
 function getSheet(nomeAba) {
   return SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(nomeAba)
+}
+
+// Aba que não existe volta como null, e o null só aparece na linha seguinte,
+// como "Cannot read properties of null (reading 'getDataRange')" — que não
+// diz qual aba, nem que o problema é a planilha e não o código.
+//
+// Não cria a aba sozinho de propósito: uma aba nova e vazia faria a leitura
+// devolver "nenhum funcionário" e a gravação dar certo contra a planilha
+// errada. Um erro com nome é mais barato que um dado no lugar errado.
+function abaObrigatoria(nomeAba) {
+  var sheet = getSheet(nomeAba)
+  if (!sheet) {
+    throw new Error('A aba "' + nomeAba + '" não existe na planilha. ' +
+      'Confira se ela foi renomeada ou apagada — e se o SHEET_ID aponta ' +
+      'para a planilha certa.')
+  }
+  return sheet
 }
 
 // Célula de data vira texto dd/MM/yyyy. Sem isto o objeto sai com um Date,
@@ -165,13 +182,21 @@ function ehData(v) {
 function valorDeCelula(v) {
   if (ehData(v)) {
     // 1899 é a data-zero do Sheets: célula de hora sem data, ou vazia.
-    return v.getFullYear() === 1899 ? '' : Utilities.formatDate(v, 'America/Sao_Paulo', 'dd/MM/yyyy')
+    if (v.getFullYear() === 1899) return ''
+    // O log grava dd/MM/yyyy HH:mm:ss, mas o Sheets converte a célula em Date
+    // e aqui a hora era jogada fora. Dezesseis erros carimbados só com
+    // "11/08/2026" não dizem o que importa: se aconteceram antes ou depois
+    // da correção. Meia-noite exata é data pura (competência, nascimento) e
+    // continua sem hora — pôr 00:00 em tudo seria ruído em toda a tela.
+    var temHora = v.getHours() || v.getMinutes() || v.getSeconds()
+    return Utilities.formatDate(v, 'America/Sao_Paulo',
+      temHora ? 'dd/MM/yyyy HH:mm:ss' : 'dd/MM/yyyy')
   }
   return v ?? ''
 }
 
 function lerAbaComoObjetos(nomeAba) {
-  const sheet = getSheet(nomeAba)
+  const sheet = abaObrigatoria(nomeAba)
   const dados = sheet.getDataRange().getValues()
   if (dados.length < 2) return []
   const headers = dados[0]
@@ -203,7 +228,7 @@ function adicionarLinha(nomeAba, valores) {
 }
 
 function atualizarCelulasPorId(nomeAba, colunaId, valorId, atualizacoes) {
-  const sheet = getSheet(nomeAba)
+  const sheet = abaObrigatoria(nomeAba)
   const dados = sheet.getDataRange().getValues()
   const headers = dados[0]
   const idIdx = headers.indexOf(colunaId)
@@ -223,7 +248,7 @@ function atualizarCelulasPorId(nomeAba, colunaId, valorId, atualizacoes) {
 // Igual a atualizarCelulasPorId, mas atualiza TODAS as linhas com o mesmo valor
 // (usado quando vários registros compartilham um doc, ex.: recibo mensal de EPI).
 function atualizarTodasCelulasPorId(nomeAba, colunaId, valorId, atualizacoes) {
-  const sheet = getSheet(nomeAba)
+  const sheet = abaObrigatoria(nomeAba)
   const dados = sheet.getDataRange().getValues()
   const headers = dados[0]
   const idIdx = headers.indexOf(colunaId)
@@ -869,7 +894,7 @@ function recuperarPdfsAssinados() {
 
 function criarTodasPastas() {
   const funcionarios = lerAbaComoObjetos(CONFIG.ABAS.FUNCIONARIOS)
-  const sheet = getSheet(CONFIG.ABAS.FUNCIONARIOS)
+  const sheet = abaObrigatoria(CONFIG.ABAS.FUNCIONARIOS)
   const headers = sheet.getDataRange().getValues()[0]
   const idxLink = headers.indexOf('LINK_DRIVE')
   let criadas = 0, erros = 0
@@ -1593,7 +1618,7 @@ function confirmarAssinatura(token, assinaturaBase64, pdfAssinadoExterno) {
 
   try {
     if (tipo === 'EPI') {
-      var sheetEpi  = getSheet(CONFIG.ABAS.EPI_ENTREGAS)
+      var sheetEpi  = abaObrigatoria(CONFIG.ABAS.EPI_ENTREGAS)
       var valsEpi   = sheetEpi.getDataRange().getValues()
       var hdrsEpi   = valsEpi[0]
       var idFuncIdx = hdrsEpi.indexOf('ID FUNC.')
@@ -1610,7 +1635,7 @@ function confirmarAssinatura(token, assinaturaBase64, pdfAssinadoExterno) {
         }
       }
     } else {
-      var sheetFolha  = getSheet(CONFIG.ABAS.FOLHA)
+      var sheetFolha  = abaObrigatoria(CONFIG.ABAS.FOLHA)
       var valsFolha   = sheetFolha.getDataRange().getValues()
       var hdrsFolha   = valsFolha[0]
       var fIdIdx      = hdrsFolha.indexOf('ID FUNC.')
@@ -3155,7 +3180,7 @@ function preencherLinkDocumento(lista) {
 }
 
 function confirmarNotificacao(dados, usuario) {
-  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_PAGAMENTOS)
+  var sheet = abaObrigatoria(ABA_PAGAMENTOS)
   var vals  = sheet.getDataRange().getValues()
   var hdrs  = vals[0]
   var idIdx = hdrs.indexOf('ID')
@@ -3193,7 +3218,7 @@ function confirmarNotificacao(dados, usuario) {
 }
 
 function cancelarNotificacao(dados, usuario) {
-  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_PAGAMENTOS)
+  var sheet = abaObrigatoria(ABA_PAGAMENTOS)
   var vals  = sheet.getDataRange().getValues()
   var hdrs  = vals[0]
   for (var i = 1; i < vals.length; i++) {
@@ -3441,7 +3466,7 @@ function registrarComprovante(dados) {
 }
 
 function confirmarPagamentoEmpregador(dados) {
-  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_PAGAMENTOS)
+  var sheet = abaObrigatoria(ABA_PAGAMENTOS)
   var vals  = sheet.getDataRange().getValues()
   var hdrs  = vals[0]
   // Por NOME de cabeçalho: é esta gravação que tira a ordem do painel de
@@ -3518,7 +3543,7 @@ function reanalisarFolhas(dados, usuario) {
   var limite = Math.max(1, Math.min(parseInt(dados && dados.limite) || 4, 10))
 
   var hdrs  = garantirColunasFolha()
-  var sheet = getSheet(CONFIG.ABAS.FOLHA)
+  var sheet = abaObrigatoria(CONFIG.ABAS.FOLHA)
   var vals  = sheet.getDataRange().getValues()
   var iFunc = hdrs.indexOf('ID FUNC.')
   var iTipo = hdrs.indexOf('TIPO')
