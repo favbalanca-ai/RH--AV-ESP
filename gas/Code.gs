@@ -139,7 +139,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260815'
+var VERSAO_BACKEND = '20260816'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -1083,10 +1083,13 @@ function diagnosticarIA(dados) {
     modelo:            MODELO_IA,
     max_tokens:        MAX_TOKENS_IA,
     chave_configurada: !!chave,
-    // Só o tamanho e o começo: o suficiente para ver que é a chave certa,
-    // longe do suficiente para vazar a chave num print de tela.
     chave_tamanho:     chave.length,
-    chave_comeco:      chave ? chave.slice(0, 8) + '…' : '',
+    // O COMEÇO não identifica nada: toda chave da Anthropic começa com
+    // 'sk-ant-api03-'. Mostrar o começo dizia "é uma chave", não "é ESTA
+    // chave" — e quem trocou de chave via o mesmo texto de antes.
+    // O fim distingue, e é como o próprio console da Anthropic lista as
+    // chaves, então dá para casar as duas telas a olho.
+    chave_final:       chave ? '…' + chave.slice(-4) : '',
   }
 
   var pdf = dados && dados.pdf_base64 ? dados.pdf_base64 : ''
