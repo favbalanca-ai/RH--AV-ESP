@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260819'
+const APP_VERSION = '20260820'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -392,6 +392,13 @@ function filtrarLog() {
   const b = (document.getElementById('inp-log-busca')?.value||'').toLowerCase()
   renderLog(logCache.filter(l => (!u||l['USUARIO']===u) && (!b||JSON.stringify(l).toLowerCase().includes(b))))
 }
+// O código lia só 'DATA_HORA'. A planilha de quem chamou a coluna de 'DATA'
+// mostrava o log inteiro sem carimbo de hora nenhum — e ninguém percebe a
+// falta de um campo que simplesmente não aparece.
+function quandoDoLog(l) {
+  return l['DATA_HORA'] || l['DATA'] || l['DATA/HORA'] || l['data'] || ''
+}
+
 function renderLog(lista) {
   const el = document.getElementById('lista-log')
   if (!el) return
@@ -400,7 +407,7 @@ function renderLog(lista) {
     <div class="log-item">
       <div class="log-acao">${esc(l['ACAO']||'—')}</div>
       <div class="log-detalhe">${esc(l['DETALHE']||l['DETALHES']||'')}</div>
-      <div class="log-meta">${esc(l['USUARIO']||'—')} · ${esc(l['DATA_HORA']||'')}</div>
+      <div class="log-meta">${esc(l['USUARIO']||'—')} · ${esc(quandoDoLog(l))}</div>
     </div>`).join('')
 }
 
@@ -1131,7 +1138,7 @@ async function carregarErrosBackend() {
   const lista = (res && res.ok && Array.isArray(res.data) ? res.data : [])
     .filter(l => String(l['ACAO'] || '').toUpperCase().includes('ERRO'))
     .slice(0, 40)
-    .map(l => ({ tipo: l['ACAO'], extra: l['USUARIO'], msg: l['DETALHE'] || l['DETALHES'], quando: l['DATA_HORA'] }))
+    .map(l => ({ tipo: l['ACAO'], extra: l['USUARIO'], msg: l['DETALHE'] || l['DETALHES'], quando: quandoDoLog(l) }))
   renderListaErros(el, lista, 'Nenhum erro no servidor')
 }
 
@@ -4421,7 +4428,7 @@ const ETAPA_IA = {
 // VERSÃO IMPLANTADA, que é um retrato do código, não o código atual. Sem
 // aviso, o usuário conserta, recarrega, vê o mesmo defeito e conclui que o
 // conserto não funcionou — quando na verdade ele nunca entrou no ar.
-const VERSAO_BACKEND_ESPERADA = '20260819'
+const VERSAO_BACKEND_ESPERADA = '20260820'
 
 function avisoServidorAntigo(versao) {
   if (!versao || String(versao) >= VERSAO_BACKEND_ESPERADA) return ''
