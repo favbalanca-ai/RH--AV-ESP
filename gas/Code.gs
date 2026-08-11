@@ -139,7 +139,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260820'
+var VERSAO_BACKEND = '20260821'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -1013,6 +1013,15 @@ var MODELO_IA = 'claude-sonnet-4-6'
 // leitura inteira se perde — sem dizer por quê.
 var MAX_TOKENS_IA = 8000
 
+// Os 4 últimos caracteres, que é como o console da Anthropic lista as chaves.
+// Todo erro de chave/saldo carrega isso agora: "a conta está sem crédito" não
+// diz QUAL conta, e é a pergunta inteira quando existe mais de uma. O log
+// guarda a resposta junto com o erro, sem depender de rodar o diagnóstico
+// depois — o erro de ontem também precisa ser legível.
+function fimDaChave(chave) {
+  return chave ? '…' + String(chave).slice(-4) : '(nenhuma)'
+}
+
 // Uma chamada, um lugar para errar. Devolve o motivo em vez de estourar:
 // quem chama decide se transforma em erro ou em diagnóstico.
 function chamarIA(pdfBase64, prompt) {
@@ -1059,8 +1068,8 @@ function chamarIA(pdfBase64, prompt) {
     // Cada código erra por um motivo diferente, e a correção é diferente.
     // "Erro na IA" mandava o usuário adivinhar qual dos quatro era.
     var explica = {
-      401: 'A chave da Anthropic foi recusada. Confira ANTHROPIC_KEY nas Propriedades do script.',
-      403: 'A chave não tem permissão para este modelo.',
+      401: 'A chave ' + fimDaChave(chave) + ' foi recusada. Confira ANTHROPIC_KEY nas Propriedades do script.',
+      403: 'A chave ' + fimDaChave(chave) + ' não tem permissão para este modelo.',
       404: 'O modelo ' + MODELO_IA + ' não foi encontrado nesta conta.',
       429: 'Limite de uso da Anthropic atingido. Espere um pouco e tente de novo.',
       529: 'A Anthropic está sobrecarregada agora. Tente de novo em alguns minutos.',
@@ -1072,7 +1081,9 @@ function chamarIA(pdfBase64, prompt) {
     // mexendo no código. Sem separar, o usuário procura defeito onde não há.
     if (http === 400 && /credit balance|too low|billing/i.test(msg)) {
       return { ok: false, etapa: 'saldo', http: http, erro:
-        'A conta da Anthropic está sem crédito. O app está funcionando — é só ' +
+        'A conta da chave ' + fimDaChave(chave) + ' está sem crédito. ' +
+        'Confira no console da Anthropic se é ESTA a chave que tem saldo. ' +
+        'O app está funcionando — é só ' +
         'recarregar em console.anthropic.com → Plans & Billing e tentar de novo.' }
     }
 
