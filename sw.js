@@ -1,7 +1,7 @@
 // Service Worker — FAV Pgto
 // Necessário para Web Share Target API
 
-const CACHE = 'fav-pgto-v1'
+const CACHE = 'fav-pgto-v2'
 const ASSETS = ['/RH--AV-ESP/pagar.html', '/RH--AV-ESP/manifest.json']
 
 self.addEventListener('install', e => {
@@ -10,7 +10,14 @@ self.addEventListener('install', e => {
 })
 
 self.addEventListener('activate', e => {
-  e.waitUntil(clients.claim())
+  // Cache velho com nome velho fica servindo página velha para sempre.
+  e.waitUntil(
+    caches.keys()
+      .then(nomes => Promise.all(
+        nomes.filter(n => n !== CACHE && n !== 'share-target-temp')
+             .map(n => caches.delete(n))))
+      .then(() => clients.claim())
+  )
 })
 
 // Web Share Target — recebe o arquivo compartilhado
@@ -42,8 +49,22 @@ self.addEventListener('fetch', e => {
     return
   }
 
-  // Fetch normal
+  // Só GET passa pelo cache. POST/PUT nunca são cacheáveis.
+  if (e.request.method !== 'GET') return
+
+  // Cache primeiro guarda a página velha para sempre: o app corrigido nunca
+  // chega ao usuário e ele fica olhando um defeito já consertado. Rede
+  // primeiro, cache só quando a rede falha — aí o cache vira o que devia
+  // ser desde o começo: o modo offline, não a fonte da verdade.
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request)).catch(() => fetch(e.request))
+    fetch(e.request)
+      .then(resp => {
+        if (resp && resp.ok && resp.type === 'basic') {
+          const copia = resp.clone()
+          caches.open(CACHE).then(c => c.put(e.request, copia)).catch(() => {})
+        }
+        return resp
+      })
+      .catch(() => caches.match(e.request).then(r => r || Promise.reject(new Error('offline'))))
   )
 })

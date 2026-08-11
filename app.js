@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260817'
+const APP_VERSION = '20260818'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -4393,6 +4393,26 @@ const ETAPA_IA = {
   ok:      ['Leitura funcionou', ''],
 }
 
+// Colar o Code.gs no editor não muda o que o /exec serve: o app roda a
+// VERSÃO IMPLANTADA, que é um retrato do código, não o código atual. Sem
+// aviso, o usuário conserta, recarrega, vê o mesmo defeito e conclui que o
+// conserto não funcionou — quando na verdade ele nunca entrou no ar.
+const VERSAO_BACKEND_ESPERADA = '20260818'
+
+function avisoServidorAntigo(versao) {
+  if (!versao || String(versao) >= VERSAO_BACKEND_ESPERADA) return ''
+  return `<div class="cst-aviso">
+    <p><strong>⚠️ O servidor está rodando uma versão antiga
+      (${esc(String(versao))}; o app espera ${VERSAO_BACKEND_ESPERADA}).</strong></p>
+    <p>Colar o Code.gs e salvar não basta — o endereço do app serve a
+      <em>versão implantada</em>. No Apps Script:</p>
+    <p><strong>Implantar → Gerenciar implantações → ✏️ (lápis) →
+      Versão: <em>Nova versão</em> → Implantar.</strong></p>
+    <p>Use o lápis na implantação que já existe. “Nova implantação” cria
+      outro endereço, que o app não usa — e nada muda.</p>
+  </div>`
+}
+
 function renderDiagIA(d) {
   const [titulo, dica] = ETAPA_IA[d.etapa] || ['Resultado', '']
   const bom = d.etapa === 'ok' && !d.erro
@@ -4412,10 +4432,12 @@ function renderDiagIA(d) {
     ${linha('Casou com o cadastro', d.casou_no_cadastro ? 'sim — ' + d.func_encontrado : 'NÃO')}` : ''
 
   return `
+    ${avisoServidorAntigo(d.versao_backend)}
     <div class="${bom ? 'cst-escada' : 'cst-aviso'}">
       <p><strong>${bom ? '✅ ' : '❌ '}${titulo}</strong></p>
       ${d.erro ? `<p>${esc(d.erro)}</p>` : ''}
       ${dica && !bom ? `<p>${esc(dica)}</p>` : ''}
+      ${d.veredito_chave ? `<p>${esc(d.veredito_chave)}</p>` : ''}
     </div>
     <div class="cst-secao">Configuração</div>
     ${linha('Versão do servidor', d.versao_backend)}
@@ -4424,6 +4446,11 @@ function renderDiagIA(d) {
     ${linha('Chave configurada', d.chave_configurada
       ? `sim (${d.chave_tamanho} caracteres, termina em ${d.chave_final || d.chave_comeco || '?'})`
       : 'NÃO')}
+    ${d.chave_valida != null
+      ? linha('Chave aceita pela Anthropic', d.chave_valida
+          ? 'sim (teste grátis, sem gastar crédito)'
+          : 'NÃO' + (d.modelos_http ? ' — HTTP ' + d.modelos_http : ''))
+      : ''}
     ${d.http ? linha('Resposta HTTP', d.http) : ''}
     ${d.stop_reason ? linha('Motivo da parada', d.stop_reason) : ''}
     ${d.tamanho_resposta ? linha('Tamanho da resposta', d.tamanho_resposta + ' caracteres') : ''}
