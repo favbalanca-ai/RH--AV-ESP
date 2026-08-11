@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260823'
+const APP_VERSION = '20260824'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -2263,9 +2263,15 @@ async function enviarNotificacaoComLink(funcId, competencia, valorLiquido) {
   esconderLoading()
   if (res && res.ok && res.data.wa_link) {
     window.open(res.data.wa_link, '_blank')
-    toast('✅ WhatsApp aberto com link de confirmação!', 'sucesso')
+    // ja_existia: a ordem do mês já estava criada (pela sincronização ou por
+    // um aviso anterior) e o link é o MESMO — nada foi duplicado.
+    toast(res.data.ja_existia
+      ? '✅ Este mês já tinha ordem — reaproveitei o mesmo link!'
+      : '✅ WhatsApp aberto com link de confirmação!', 'sucesso')
     document.getElementById('modal-notif-pgto')?.remove()
     carregarNotifPendentes()
+  } else if (res && res.ok && res.data.ja_existia && !res.data.wa_link) {
+    toast('⚠️ A ordem deste mês já existe, mas sem WhatsApp do empregador cadastrado', 'erro')
   } else {
     toast('❌ ' + ((res&&res.erro)||'Erro ao gerar link'), 'erro')
   }
@@ -4488,7 +4494,7 @@ const ETAPA_IA = {
 // VERSÃO IMPLANTADA, que é um retrato do código, não o código atual. Sem
 // aviso, o usuário conserta, recarrega, vê o mesmo defeito e conclui que o
 // conserto não funcionou — quando na verdade ele nunca entrou no ar.
-const VERSAO_BACKEND_ESPERADA = '20260823'
+const VERSAO_BACKEND_ESPERADA = '20260824'
 
 function avisoServidorAntigo(versao) {
   if (!versao || String(versao) >= VERSAO_BACKEND_ESPERADA) return ''
