@@ -139,7 +139,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260823'
+var VERSAO_BACKEND = '20260824'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -3125,21 +3125,29 @@ function inicializarAbaPagamentos() {
   return 'OK'
 }
 
-function salvarNotificacaoPendente(funcId, funcNome, competencia, waLink, mensagem, linkHolerite, valorLiquido) {
-  inicializarAbaPagamentos()
-  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_PAGAMENTOS)
-  var hoje  = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm')
-  var id    = 'PAG-' + new Date().getTime()
+// A coluna que falta tem que dizer o próprio nome E o que a aba tem — foi a
+// diferença entre "sem as colunas ID/STATUS" (duas vezes no log, sem pista)
+// e um erro que se conserta olhando para ele.
+function colunaObrigatoria(hdrs, nome) {
+  var i = acharColuna(hdrs, nome)
+  if (i < 0) {
+    throw new Error('Aba PAGAMENTOS sem a coluna ' + nome + '. Cabeçalho ' +
+      'encontrado na linha 1: ' + hdrs.filter(String).join(' | '))
+  }
+  return i
+}
 
-  sheet.appendRow([
-    id, funcId, funcNome, String(competencia), valorLiquido || '',
-    hoje, 'Aguardando Notificação',
-    waLink, mensagem,
-    '', '',
-    '', '', '',
-    linkHolerite, ''
-  ])
-  return id
+// Monta a linha na ordem REAL do cabeçalho. appendRow posicional assume as
+// colunas na ordem canônica — uma coluna inserida no meio da aba desalinharia
+// todas as gravações seguintes, em silêncio, campo a campo no lugar errado.
+function linhaPorNome(hdrs, valores) {
+  var linha = []
+  for (var i = 0; i < hdrs.length; i++) linha.push('')
+  Object.keys(valores).forEach(function (nome) {
+    var c = acharColuna(hdrs, nome)
+    if (c >= 0) linha[c] = valores[nome]
+  })
+  return linha
 }
 
 function listarPagamentos(dados) {
@@ -3194,35 +3202,41 @@ function confirmarNotificacao(dados, usuario) {
   var sheet = abaObrigatoria(ABA_PAGAMENTOS)
   var vals  = sheet.getDataRange().getValues()
   var hdrs  = vals[0]
-  var idIdx = hdrs.indexOf('ID')
+  // Mesma classe do bug do botão Pago: indexOf exato em cabeçalho com
+  // espaço/caixa diferente devolvia -1, e getRange(coluna 0) estourava com
+  // um erro que não dizia nada. Busca tolerante + erro que lista o cabeçalho.
+  var idIdx = colunaObrigatoria(hdrs, 'ID')
+  var iSt   = colunaObrigatoria(hdrs, 'STATUS')
+  var iVal  = acharColuna(hdrs, 'VALOR_LIQUIDO')
+  var iMsg  = acharColuna(hdrs, 'MSG_EMPREGADOR')
+  var iWa   = acharColuna(hdrs, 'WA_LINK_EMPREGADOR')
+  var iConf = acharColuna(hdrs, 'DATA_CONFIRMACAO')
 
   for (var i = 1; i < vals.length; i++) {
     if (String(vals[i][idIdx]) === String(dados.id)) {
       var hoje = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm')
 
+      var msgAtual = iMsg >= 0 ? String(vals[i][iMsg] || '') : ''
+      var waAtual  = iWa  >= 0 ? String(vals[i][iWa]  || '') : ''
+
       var valorNum = valorNumerico(dados.valor_liquido)
       if (valorNum !== '') {
-        sheet.getRange(i+1, hdrs.indexOf('VALOR_LIQUIDO')+1).setValue(valorNum)
-        var msgAtual = String(vals[i][hdrs.indexOf('MSG_EMPREGADOR')] || '')
+        if (iVal >= 0) sheet.getRange(i+1, iVal+1).setValue(valorNum)
         var valorFmt = 'R$ ' + Number(valorNum).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})
         msgAtual = msgAtual.replace('(consultar holerite)', valorFmt)
                            .replace('(verificar holerite)', valorFmt)
-        sheet.getRange(i+1, hdrs.indexOf('MSG_EMPREGADOR')+1).setValue(msgAtual)
-
-        var waLink = String(vals[i][hdrs.indexOf('WA_LINK_EMPREGADOR')] || '')
-        var newWaLink = waLink.split('?text=')[0] + '?text=' + encodeURIComponent(msgAtual)
-        sheet.getRange(i+1, hdrs.indexOf('WA_LINK_EMPREGADOR')+1).setValue(newWaLink)
+        if (iMsg >= 0) sheet.getRange(i+1, iMsg+1).setValue(msgAtual)
+        if (iWa >= 0 && waAtual) {
+          waAtual = waAtual.split('?text=')[0] + '?text=' + encodeURIComponent(msgAtual)
+          sheet.getRange(i+1, iWa+1).setValue(waAtual)
+        }
       }
 
-      sheet.getRange(i+1, hdrs.indexOf('STATUS')+1).setValue('Notificado')
-      var dataNotifIdx = hdrs.indexOf('DATA_CONFIRMACAO')
-      if (dataNotifIdx >= 0) sheet.getRange(i+1, dataNotifIdx+1).setValue(hoje)
+      sheet.getRange(i+1, iSt+1).setValue('Notificado')
+      if (iConf >= 0) sheet.getRange(i+1, iConf+1).setValue(hoje)
       logAcao(usuario, 'NOTIFICACAO_ENVIADA', 'ID: ' + dados.id)
 
-      return {
-        wa_link: sheet.getRange(i+1, hdrs.indexOf('WA_LINK_EMPREGADOR')+1).getValue(),
-        mensagem: sheet.getRange(i+1, hdrs.indexOf('MSG_EMPREGADOR')+1).getValue()
-      }
+      return { wa_link: waAtual, mensagem: msgAtual }
     }
   }
   throw new Error('Pagamento não encontrado: ' + dados.id)
@@ -3232,11 +3246,13 @@ function cancelarNotificacao(dados, usuario) {
   var sheet = abaObrigatoria(ABA_PAGAMENTOS)
   var vals  = sheet.getDataRange().getValues()
   var hdrs  = vals[0]
+  var idIdx = colunaObrigatoria(hdrs, 'ID')
+  var iSt   = colunaObrigatoria(hdrs, 'STATUS')
+  var iCanc = acharColuna(hdrs, 'CANCELADO')
   for (var i = 1; i < vals.length; i++) {
-    if (String(vals[i][hdrs.indexOf('ID')]) === String(dados.id)) {
-      sheet.getRange(i+1, hdrs.indexOf('STATUS')+1).setValue('Cancelado')
-      var canceladoIdx = hdrs.indexOf('CANCELADO')
-      if (canceladoIdx >= 0) sheet.getRange(i+1, canceladoIdx+1).setValue('Sim')
+    if (String(vals[i][idIdx]) === String(dados.id)) {
+      sheet.getRange(i+1, iSt+1).setValue('Cancelado')
+      if (iCanc >= 0) sheet.getRange(i+1, iCanc+1).setValue('Sim')
       logAcao(usuario, 'NOTIFICACAO_CANCELADA', 'ID: ' + dados.id)
       return { ok: true }
     }
@@ -3302,22 +3318,22 @@ function gerarLinkConfirmacaoPagamento(dados, usuario) {
   var waLink = waTelRaw ? 'https://wa.me/55' + waTelRaw + '?text=' + encodeURIComponent(msg) : ''
 
   var id = 'PAG-' + new Date().getTime()
-  var compStr = String(dados.competencia || '')
-  var mesesStr = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-                  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
-  if (compStr.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-    var pp = compStr.split('/')
-    compStr = mesesStr[parseInt(pp[1])-1] + '/' + pp[2]
-  }
 
-  sheet.appendRow([
-    id, func['ID'], func['NOME_COMPLETO'], compStr, valorNum,
-    hoje, 'Aguardando Pagamento',
-    waLink, msg,
-    '', '',
-    '', '', '',
-    '', token
-  ])
+  // Pela ordem REAL do cabeçalho, não pela posição: uma coluna inserida no
+  // meio da aba mandava valor para o campo errado em toda ordem seguinte.
+  var hdrs = garantirColunasPagamento().hdrs
+  sheet.appendRow(linhaPorNome(hdrs, {
+    ID: id,
+    ID_FUNC: func['ID'],
+    NOME_FUNC: func['NOME_COMPLETO'],
+    COMPETENCIA: compNorm,
+    VALOR_LIQUIDO: valorNum,
+    DATA_GERACAO: hoje,
+    STATUS: 'Aguardando Pagamento',
+    WA_LINK_EMPREGADOR: waLink,
+    MSG_EMPREGADOR: msg,
+    TOKEN_CONFIRMACAO: token,
+  }))
 
   logAcao(usuario, 'LINK_PAGAMENTO_GERADO', 'Func ' + func['ID'] + ' | ' + dados.competencia + ' | Token: ' + token)
   return { token: token, link: link, wa_link: waLink, mensagem: msg }
@@ -3330,20 +3346,29 @@ function gerarLinkConfirmacaoPagamento(dados, usuario) {
 // token do documento assinado, que serve de chave contra duplicidade:
 // o webhook do ZapSign e a sincronização manual podem detectar a mesma
 // assinatura, e sem isso o funcionário ganharia duas ordens.
+// Todas as colunas que o fluxo de pagamento grava e lê. A checagem usa
+// acharColuna, então 'Id ' ou ' status' já existentes são ADOTADAS, não
+// duplicadas — só cria o que falta de verdade.
+var COLUNAS_PAGAMENTOS = ['ID', 'ID_FUNC', 'NOME_FUNC', 'COMPETENCIA',
+  'VALOR_LIQUIDO', 'DATA_GERACAO', 'STATUS', 'WA_LINK_EMPREGADOR',
+  'MSG_EMPREGADOR', 'DATA_CONFIRMACAO', 'CANCELADO', 'DATA_PAGAMENTO',
+  'COMPROVANTE_FILEID', 'COMPROVANTE_LINK', 'LINK_HOLERITE',
+  'TOKEN_CONFIRMACAO', 'ORIGEM', 'REF_DOC']
+
 function garantirColunasPagamento() {
   inicializarAbaPagamentos()
   var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_PAGAMENTOS)
   if (!sheet) return {}
   var ultima = Math.max(1, sheet.getLastColumn())
   var hdrs   = sheet.getRange(1, 1, 1, ultima).getValues()[0]
-  ;['ORIGEM', 'REF_DOC'].forEach(function (nome) {
-    if (hdrs.indexOf(nome) === -1) {
-      sheet.getRange(1, sheet.getLastColumn() + 1).setValue(nome)
+  COLUNAS_PAGAMENTOS.forEach(function (nome) {
+    if (acharColuna(hdrs, nome) === -1) {
+      sheet.getRange(1, hdrs.length + 1).setValue(nome)
       hdrs.push(nome)
       Logger.log('Coluna ' + nome + ' criada na aba ' + ABA_PAGAMENTOS)
     }
   })
-  return { origem: hdrs.indexOf('ORIGEM'), refDoc: hdrs.indexOf('REF_DOC') }
+  return { hdrs: hdrs, origem: acharColuna(hdrs, 'ORIGEM'), refDoc: acharColuna(hdrs, 'REF_DOC') }
 }
 
 // Grava ORIGEM/REF_DOC na última linha inserida, pela coluna certa. O
@@ -3369,15 +3394,18 @@ function definirOrigemUltimaOrdem(origem, refDoc) {
 //    dedup por funcionário+competência não funcionava para NENHUMA ordem
 //    criada pela sincronização. O comentário "não duplica" era mentira.
 //    Compara pela chave numérica (202607), que os dois formatos produzem.
-function jaExisteOrdemPagamento(funcId, competencia, origem, refDoc) {
+// Devolve a ordem ativa (não cancelada) inteira, não só "existe": quem avisa
+// o empregador de novo precisa do link e da mensagem que JÁ estão na linha —
+// criar outra ordem para reobter o link era a terceira porta para duplicata.
+function ordemAtivaPagamento(funcId, competencia, origem, refDoc) {
   var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_PAGAMENTOS)
-  if (!sheet) return false
+  if (!sheet) return null
   var vals = sheet.getDataRange().getValues()
-  if (vals.length < 2) return false
+  if (vals.length < 2) return null
   var hdrs = vals[0]
-  var iFunc = hdrs.indexOf('ID_FUNC'), iComp = hdrs.indexOf('COMPETENCIA')
-  var iOrig = hdrs.indexOf('ORIGEM'),  iRef  = hdrs.indexOf('REF_DOC')
-  var iCanc = hdrs.indexOf('CANCELADO')
+  var iFunc = acharColuna(hdrs, 'ID_FUNC'), iComp = acharColuna(hdrs, 'COMPETENCIA')
+  var iOrig = acharColuna(hdrs, 'ORIGEM'),  iRef  = acharColuna(hdrs, 'REF_DOC')
+  var iCanc = acharColuna(hdrs, 'CANCELADO')
   var alvo  = String(refDoc || '').trim()
 
   var chaveComp = ordemCompetencia(competencia).chave
@@ -3385,9 +3413,15 @@ function jaExisteOrdemPagamento(funcId, competencia, origem, refDoc) {
   // comparação honesta é o texto cru, não um empate em "ano*100".
   var compTemMes = chaveComp % 100 !== 0
 
+  var comoObjeto = function (row) {
+    var obj = {}
+    hdrs.forEach(function (h, c) { obj[h] = valorDeCelula(row[c]) })
+    return obj
+  }
+
   for (var i = 1; i < vals.length; i++) {
     if (iCanc >= 0 && String(vals[i][iCanc]).trim() === 'Sim') continue
-    if (alvo && iRef >= 0 && String(vals[i][iRef]).trim() === alvo) return true
+    if (alvo && iRef >= 0 && String(vals[i][iRef]).trim() === alvo) return comoObjeto(vals[i])
     if (iFunc >= 0 && iComp >= 0 && String(vals[i][iFunc]) === String(funcId)) {
       var mesmaOrigem = iOrig < 0 || String(vals[i][iOrig] || 'Folha') === String(origem || 'Folha')
       if (!mesmaOrigem) continue
@@ -3396,10 +3430,14 @@ function jaExisteOrdemPagamento(funcId, competencia, origem, refDoc) {
       var mesmaComp = compTemMes
         ? ordemCompetencia(compRow).chave === chaveComp
         : String(compRow).trim() === String(competencia).trim()
-      if (mesmaComp) return true
+      if (mesmaComp) return comoObjeto(vals[i])
     }
   }
-  return false
+  return null
+}
+
+function jaExisteOrdemPagamento(funcId, competencia, origem, refDoc) {
+  return !!ordemAtivaPagamento(funcId, competencia, origem, refDoc)
 }
 
 // Ponto único de entrada: chamado pelos três caminhos que detectam uma
@@ -3435,29 +3473,44 @@ function buscarPagamento(token) {
   if (!sheet) throw new Error('Aba PAGAMENTOS não encontrada')
 
   var vals = sheet.getDataRange().getValues()
+  var hdrs = vals[0]
+
+  // Por nome, com queda para a posição histórica. Esta leitura é a página do
+  // empregador (pagar.html): era a última do fluxo lendo por número de
+  // coluna, e uma coluna inserida no meio da aba quebrava o link de TODO
+  // pagamento pendente — "Pagamento não encontrado" sem nada errado no token.
+  var col = function (nome, posLegada) {
+    var c = acharColuna(hdrs, nome)
+    return c >= 0 ? c : posLegada
+  }
+  var iTok  = col('TOKEN_CONFIRMACAO', 15)
+  var iId   = col('ID', 0),            iFunc = col('ID_FUNC', 1)
+  var iNome = col('NOME_FUNC', 2),     iComp = col('COMPETENCIA', 3)
+  var iVal  = col('VALOR_LIQUIDO', 4), iSt   = col('STATUS', 6)
+  var iDtPg = col('DATA_PAGAMENTO', 11)
 
   for (var i = 1; i < vals.length; i++) {
-    if (String(vals[i][15]) === String(token)) {
+    if (String(vals[i][iTok]) === String(token)) {
       var row      = vals[i]
-      var funcId   = row[1]
-      var funcNome = row[2]
+      var funcId   = row[iFunc]
+      var funcNome = row[iNome]
       var func     = listarFuncionarios().find(function(f) { return String(f['ID']) === String(funcId) }) || {}
 
       return {
         token:        token,
-        id:           row[0],
+        id:           row[iId],
         func_id:      funcId,
         nome_func:    funcNome,
         funcao:       func['FUNCAO']   || '',
-        competencia:  String(row[3]),
+        competencia:  String(valorDeCelula(row[iComp])),
         valor_liquido: (function(v) {
           if (!v) return null
           var s = String(v).trim()
           if (s.indexOf(',') === -1) return parseFloat(s) || null
           return parseFloat(s.replace(/\./g,'').replace(',','.')) || null
-        })(row[4]),
-        status:       row[6],
-        data_pagamento: row[11] || '',
+        })(row[iVal]),
+        status:       row[iSt],
+        data_pagamento: valorDeCelula(row[iDtPg]) || '',
         pix:     func['PIX']     || '',
         banco:   func['BANCO']   || '',
         agencia: func['AGENCIA'] || '',
@@ -3474,21 +3527,22 @@ function registrarComprovante(dados) {
   if (!shPag) return { erro: 'Aba PAGAMENTOS não encontrada' }
   var rows  = shPag.getDataRange().getValues()
   var hdrs  = rows[0]
-  var iToken = hdrs.indexOf('TOKEN_CONFIRMACAO')
-  var iCompFile = hdrs.indexOf('COMPROVANTE_FILEID')
-  var iCompLink = hdrs.indexOf('COMPROVANTE_LINK')
-  var iIdFunc   = hdrs.indexOf('ID_FUNC')
-  var iNomeFunc = hdrs.indexOf('NOME_FUNC')
+  var iToken = acharColuna(hdrs, 'TOKEN_CONFIRMACAO')
+  var iCompFile = acharColuna(hdrs, 'COMPROVANTE_FILEID')
+  var iCompLink = acharColuna(hdrs, 'COMPROVANTE_LINK')
+  var iIdFunc   = acharColuna(hdrs, 'ID_FUNC')
+  var iNomeFunc = acharColuna(hdrs, 'NOME_FUNC')
+  if (iToken < 0) return { erro: 'Aba PAGAMENTOS sem a coluna TOKEN_CONFIRMACAO' }
   for (var r = 1; r < rows.length; r++) {
     if (String(rows[r][iToken]) === String(dados.token)) {
-      var funcId   = rows[r][iIdFunc]
-      var funcNome = rows[r][iNomeFunc]
+      var funcId   = iIdFunc   >= 0 ? rows[r][iIdFunc]   : ''
+      var funcNome = iNomeFunc >= 0 ? rows[r][iNomeFunc] : ''
       if (dados.comprovante_base64) {
         var ext      = dados.extensao || 'jpg'
         var nomeArq  = 'Comprovante_' + Utilities.formatDate(new Date(),'America/Sao_Paulo','dd-MM-yyyy') + '.' + ext
         var linkDrive = salvarPdfNoDrive(funcId, funcNome, 'FOLHA_PAGAMENTO', nomeArq, dados.comprovante_base64)
-        shPag.getRange(r+1, iCompFile+1).setValue((linkDrive.split('/d/')[1] || '').split('/')[0] || '')
-        shPag.getRange(r+1, iCompLink+1).setValue(linkDrive)
+        if (iCompFile >= 0) shPag.getRange(r+1, iCompFile+1).setValue((linkDrive.split('/d/')[1] || '').split('/')[0] || '')
+        if (iCompLink >= 0) shPag.getRange(r+1, iCompLink+1).setValue(linkDrive)
       }
       logAcao('EMPREGADOR', 'COMPROVANTE_REGISTRADO', funcNome + ' — via pagar.html')
       return { mensagem: 'Comprovante registrado com sucesso' }
@@ -3504,18 +3558,24 @@ function confirmarPagamentoEmpregador(dados) {
   // Por NOME de cabeçalho: é esta gravação que tira a ordem do painel de
   // "aguardando". Escrita por posição, uma coluna a mais na planilha faria
   // o status nunca virar "Pago" e a pendência ficaria eterna.
-  var iTok  = hdrs.indexOf('TOKEN_CONFIRMACAO')
-  var iSt   = hdrs.indexOf('STATUS')
-  var iDtPg = hdrs.indexOf('DATA_PAGAMENTO')
-  var iComp = hdrs.indexOf('COMPROVANTE_LINK')
-  var iConf = hdrs.indexOf('DATA_CONFIRMACAO')
+  var iTok  = acharColuna(hdrs, 'TOKEN_CONFIRMACAO')
+  // STATUS obrigatória, com erro nomeado: o `if (iSt >= 0)` de antes fazia a
+  // confirmação do empregador "dar certo" sem gravar o Pago — a ordem ficava
+  // pendente para sempre e ninguém via nada de errado.
+  var iSt   = colunaObrigatoria(hdrs, 'STATUS')
+  var iDtPg = acharColuna(hdrs, 'DATA_PAGAMENTO')
+  var iComp = acharColuna(hdrs, 'COMPROVANTE_LINK')
+  var iConf = acharColuna(hdrs, 'DATA_CONFIRMACAO')
   if (iTok < 0) iTok = 15
+
+  var iFun2 = acharColuna(hdrs, 'ID_FUNC'),  iNom2 = acharColuna(hdrs, 'NOME_FUNC')
+  var iCmp2 = acharColuna(hdrs, 'COMPETENCIA')
 
   for (var i = 1; i < vals.length; i++) {
     if (String(vals[i][iTok]) === String(dados.token)) {
-      var funcId   = vals[i][hdrs.indexOf('ID_FUNC') >= 0 ? hdrs.indexOf('ID_FUNC') : 1]
-      var funcNome = vals[i][hdrs.indexOf('NOME_FUNC') >= 0 ? hdrs.indexOf('NOME_FUNC') : 2]
-      var comp     = vals[i][hdrs.indexOf('COMPETENCIA') >= 0 ? hdrs.indexOf('COMPETENCIA') : 3]
+      var funcId   = vals[i][iFun2 >= 0 ? iFun2 : 1]
+      var funcNome = vals[i][iNom2 >= 0 ? iNom2 : 2]
+      var comp     = valorDeCelula(vals[i][iCmp2 >= 0 ? iCmp2 : 3])
       var hoje     = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm')
 
       var linkDrive = ''
@@ -3525,7 +3585,7 @@ function confirmarPagamentoEmpregador(dados) {
         linkDrive  = salvarPdfNoDrive(funcId, funcNome, 'FOLHA_PAGAMENTO', nome, dados.comprovante_base64)
       } catch(e) { Logger.log('Erro Drive comprovante: ' + e.message) }
 
-      if (iSt   >= 0) sheet.getRange(i+1, iSt   + 1).setValue('Pago')
+      sheet.getRange(i+1, iSt + 1).setValue('Pago')
       if (iDtPg >= 0) sheet.getRange(i+1, iDtPg + 1).setValue(dados.data_pagamento || hoje.split(' ')[0])
       if (iComp >= 0) sheet.getRange(i+1, iComp + 1).setValue(linkDrive)
       if (iConf >= 0) sheet.getRange(i+1, iConf + 1).setValue(hoje)
@@ -3651,7 +3711,25 @@ function reanalisarFolhas(dados, usuario) {
   }
 }
 
+// O botão de avisar o empregador passava direto para a criação de ordem —
+// sem dedup nenhum. A sincronização já tinha criado a do mês? Criava-se a
+// segunda. Tocou duas vezes? A terceira. Reaproveitar devolve o MESMO link
+// que já está na linha; ordem nova só quando não existe nenhuma ativa.
 function liquidarSalario(dados, usuario) {
+  garantirColunasPagamento()
+  var existente = ordemAtivaPagamento(dados.func_id, dados.competencia, dados.origem || 'Folha', '')
+  if (existente) {
+    var tok = String(existente['TOKEN_CONFIRMACAO'] || '').trim()
+    logAcao(usuario, 'LINK_PAGAMENTO_REUSADO',
+      'Func ' + dados.func_id + ' | ' + dados.competencia + ' | Token: ' + (tok || '(sem token)'))
+    return {
+      token:      tok,
+      link:       tok ? GITHUB_PAGES_URL_PAGTO + '/pagar.html?t=' + tok : '',
+      wa_link:    String(existente['WA_LINK_EMPREGADOR'] || ''),
+      mensagem:   String(existente['MSG_EMPREGADOR'] || ''),
+      ja_existia: true,
+    }
+  }
   return gerarLinkConfirmacaoPagamento(dados, usuario)
 }
 
