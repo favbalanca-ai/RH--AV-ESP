@@ -139,7 +139,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260824'
+var VERSAO_BACKEND = '20260826'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -921,7 +921,10 @@ function processarPaginaFolha(dados, usuario) {
   const subpasta = subpastaDoTipo(tipo)
   const func = encontrarFuncionarioPorNome(dados.nome_funcionario, funcionarios)
   if (!func) throw new Error('Funcionário não encontrado: ' + dados.nome_funcionario)
-  const nomeArq = nomeDocumentoAssinatura(tipo, comp, func['NOME_COMPLETO']) + '_PENDENTE.pdf'
+  // Sem assinatura o arquivo nunca deixará de ser "pendente" — o sufixo
+  // REGISTRADO diz no próprio Drive que ninguém está devendo assinatura.
+  const sufixo = dados.enviar_zapsign ? '_PENDENTE' : '_REGISTRADO'
+  const nomeArq = nomeDocumentoAssinatura(tipo, comp, func['NOME_COMPLETO']) + sufixo + '.pdf'
   let linkDrive = ''
   try { linkDrive = salvarPdfNoDrive(func['ID'], func['NOME_COMPLETO'], subpasta, nomeArq, dados.pdf_base64) }
   catch(e) { logAcao(usuario, 'ERRO_DRIVE', e.message) }
@@ -940,7 +943,9 @@ function processarPaginaFolha(dados, usuario) {
     'STATUS':            zapToken ? 'Pendente' : 'Salvo',
     'ZAPSIGN_DOC':       zapToken,
     'LINK PDF ORIGINAL': linkDrive,
-    'OBSERVAÇÕES':       (zapSignerToken ? 'Signer: ' + zapSignerToken : 'Fracionado') +
+    'OBSERVAÇÕES':       (zapSignerToken ? 'Signer: ' + zapSignerToken
+                          : dados.enviar_zapsign ? 'Fracionado'
+                          : 'Registrado sem assinatura') +
                          (dados.inclui_ponto ? ' | Ponto junto' : ''),
     'VALOR_LIQUIDO':     valorNumerico(dados.valor_liquido),
     'TIPO':              tipo,
@@ -948,8 +953,12 @@ function processarPaginaFolha(dados, usuario) {
     'BASES':             basesParaCelula(normalizarBases(dados.bases)),
     'PARAMETROS':        parametrosParaCelula(normalizarParametros(dados.parametros)),
   })
-  if (tipo === 'Ferias' && zapToken) registrarFeriasPendente(func['ID'], func['NOME_COMPLETO'], dados.ferias_inicio, dados.ferias_fim, comp, zapToken)
-  logAcao(usuario, 'FOLHA_INDIVIDUAL', 'Func ' + func['ID'] + ' | ' + comp)
+  if (tipo === 'Ferias') {
+    if (zapToken) registrarFeriasPendente(func['ID'], func['NOME_COMPLETO'], dados.ferias_inicio, dados.ferias_fim, comp, zapToken)
+    else if (!dados.enviar_zapsign) registrarFeriasLida(func['ID'], func['NOME_COMPLETO'], dados.ferias_inicio, dados.ferias_fim, comp)
+  }
+  logAcao(usuario, 'FOLHA_INDIVIDUAL', 'Func ' + func['ID'] + ' | ' + comp +
+    (dados.enviar_zapsign ? '' : ' | registrado sem assinatura'))
   return { func_id: func['ID'], nome: func['NOME_COMPLETO'], link_drive: linkDrive, zapsign: zapToken, sign_url: zapSignUrl }
 }
 
@@ -3862,6 +3871,19 @@ function registrarFeriasPendente(funcId, nome, inicio, fim, competencia, refToke
   var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_FERIAS)
   var hoje  = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy')
   sheet.appendRow([funcId, nome, inicio || '', fim || '', competencia || '', hoje, 'Pendente', refToken || '', ''])
+}
+
+// Férias registradas sem assinatura digital (holerite já assinado no papel,
+// ou mês antigo entrando no histórico). O período vale para o calendário,
+// mas não pode nascer 'Pendente': ninguém vai assinar nada, e a pendência
+// ficaria acesa para sempre no resumo. Entra como 'Assinado' sem token e
+// sem evento no Google Calendar — férias do passado não são compromisso.
+function registrarFeriasLida(funcId, nome, inicio, fim, competencia) {
+  if (!inicio) return
+  inicializarAbaFerias()
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(ABA_FERIAS)
+  var hoje  = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy')
+  sheet.appendRow([funcId, nome, inicio, fim || '', competencia || '', hoje, 'Assinado', '', ''])
 }
 
 // Marca as férias como Assinadas e cria o evento no Google Calendar
