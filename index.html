@@ -10,11 +10,11 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
-<link rel="stylesheet" href="style.css?v=20260825">
+<link rel="stylesheet" href="style.css?v=20260826">
 <script src="https://apis.google.com/js/api.js"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
-<meta name="app-version" content="20260825">
+<meta name="app-version" content="20260826">
 <title>SST — Fazenda Água Viva</title>
 </head>
 <body>
@@ -378,7 +378,7 @@
           </div>
           <p id="frac-resumo" style="font-size:11px;color:var(--text-secondary);text-align:center;margin-top:4px"></p>
         </div>
-        <div style="display:flex;gap:8px;margin-bottom:10px">
+        <div style="display:flex;gap:8px;margin-bottom:8px">
           <button onclick="enviarTodasPendentes('zapsign')" class="btn-primario" id="btn-enviar-todos" style="flex:1;font-size:12px">
             <i class="ti ti-brand-whatsapp" aria-hidden="true"></i> <span id="btn-todos-label">ZapSign</span>
           </button>
@@ -386,6 +386,9 @@
             <i class="ti ti-writing" aria-hidden="true"></i> Assinatura Própria
           </button>
         </div>
+        <button onclick="enviarTodasPendentes('registrar')" class="btn-secundario" id="btn-registrar-todos" style="width:100%;font-size:12px;margin-bottom:10px">
+          <i class="ti ti-archive" aria-hidden="true"></i> Só registrar todos — sem assinatura
+        </button>
         <div class="card">
           <div class="card-titulo"><i class="ti ti-files" aria-hidden="true"></i> Páginas separadas</div>
           <div id="frac-lista"></div>
@@ -636,7 +639,7 @@
   </nav>
 </div>
 
-<script src="app.js?v=20260825"></script>
+<script src="app.js?v=20260826"></script>
 <script>
   // Registra o Service Worker (necessário para Web Share Target e cache offline)
   if ('serviceWorker' in navigator) {

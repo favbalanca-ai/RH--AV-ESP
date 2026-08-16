@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260825'
+const APP_VERSION = '20260826'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -2793,6 +2793,10 @@ function abrirModalEnvioFolha(idx) {
           <span style="font-size:20px">✍️</span>
           <div style="text-align:left"><div>Assinatura própria — sem ZapSign</div><div style="font-size:10px;opacity:0.7;font-weight:400">Gera link para assinar com o dedo</div></div>
         </button>
+        <button onclick="document.getElementById('modal-envio-folha-${idx}').remove();registrarPaginaSemAssinatura(${idx})" style="background:#FAEEDA;color:#854F0B;border:0.5px solid rgba(133,79,11,0.2);border-radius:12px;padding:14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">📥</span>
+          <div style="text-align:left"><div>Só registrar — sem assinatura</div><div style="font-size:10px;opacity:0.7;font-weight:400">Lê o holerite e guarda no histórico; não envia nada ao funcionário</div></div>
+        </button>
         <button onclick="document.getElementById('modal-envio-folha-${idx}').remove()" style="background:none;border:none;color:#6B7280;font-size:13px;padding:10px;cursor:pointer">Cancelar</button>
       </div>
     </div>`
@@ -2848,10 +2852,79 @@ async function enviarPaginaZapSign(idx) {
   }
 }
 
+// Holerite que só precisa entrar no histórico — já foi assinado no papel,
+// ou é de mês antigo. Lê as verbas, guarda o PDF no Drive e registra a
+// folha/férias SEM criar documento de assinatura, link ou ordem de
+// pagamento. Vale para Folha e Férias; férias entram no calendário direto.
+async function registrarPaginaSemAssinatura(idx) {
+  const p = paginasFracionadas[idx]
+  if (!p.funcId) return toast('❌ Selecione o funcionário primeiro', 'erro')
+  // Mesma trava dos envios: entre o toque e a resposta, um segundo toque
+  // criaria a mesma folha duas vezes.
+  if (p.status === 'enviado')  return toast('Esta página já foi processada', 'aviso')
+  if (p.status === 'enviando') return toast('Processamento em andamento — aguarde', 'aviso')
+  p.status = 'enviando'
+  const btn = document.getElementById('btn-zap-' + idx)
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>' }
+  mostrarLoading('Registrando ' + p.nome.split(' ')[0] + '...')
+  const res = await chamarGAS({ acao: 'processar_pagina_folha', dados: {
+    pdf_base64:    p.pdfEnvio || p.pdfBase64,
+    inclui_ponto:  !!p.ponto,
+    verbas:        p.verbas || null,
+    bases:         p.bases || null,
+    parametros:    p.parametros || null,
+    competencia:   p.competencia,
+    nome_funcionario: p.nome,
+    pagina:        p.pagina,
+    enviar_zapsign: false,
+    tipo:          p.tipoDoc || tipoDocAtual,
+    valor_liquido: p.valorLiquido || null,
+    ferias_inicio: p.feriasInicio || null,
+    ferias_fim:    p.feriasFim || null,
+  } })
+  esconderLoading()
+  if (res && res.ok) {
+    p.status = 'enviado'
+    const card = document.getElementById('fpc-' + idx)
+    if (card) card.className = 'frac-page-card enviado'
+    const numEl = document.getElementById('fpc-num-' + idx)
+    if (numEl) { numEl.className = 'fpc-num enviado'; numEl.innerHTML = `<i class="ti ti-archive" style="font-size:11px;vertical-align:-1px"></i> Pág. ${p.pagina} — Registrado` }
+    const actionEl = document.getElementById('fpc-action-' + idx)
+    if (actionEl) {
+      actionEl.innerHTML = `<div class="fpc-links">
+        <span class="btn-enviado-frac"><i class="ti ti-check"></i></span>
+        ${res.data && res.data.link_drive ? `<a href="${esc(res.data.link_drive)}" target="_blank" class="btn-link-frac"><i class="ti ti-brand-google-drive"></i> Drive</a>` : ''}
+      </div>`
+    }
+    salvarMapeamento(p.competencia)
+    atualizarBtnTodos()
+    toast('✅ ' + p.nome.split(' ')[0] + ' — registrado, sem assinatura', 'sucesso')
+    carregarEntregasFolha()
+  } else {
+    p.status = 'pronto'
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> Enviar' }
+    toast('❌ ' + ((res&&res.erro)||'Erro'), 'erro')
+  }
+}
+
 async function enviarTodasPendentes(metodo) {
   metodo = metodo || 'zapsign'
   const pendentes = paginasFracionadas.filter(p => p.funcId && p.status === 'pronto')
   if (!pendentes.length) return toast('⚠️ Nenhum pronto para enviar', 'erro')
+
+  if (metodo === 'registrar') {
+    // Registrar em lote é silencioso — ninguém recebe nada. A confirmação
+    // evita arquivar um mês inteiro por um toque no botão errado.
+    if (!confirm('Registrar ' + pendentes.length + ' página(s) no histórico SEM enviar para assinatura?')) return
+    for (let i = 0; i < paginasFracionadas.length; i++) {
+      const p = paginasFracionadas[i]
+      if (!p.funcId || p.status !== 'pronto') continue
+      await registrarPaginaSemAssinatura(i)
+    }
+    atualizarBtnTodos()
+    carregarEntregasFolha()
+    return
+  }
 
   if (metodo === 'proprio') {
     mostrarLoading('Gerando links de assinatura para ' + pendentes.length + ' funcionários...')
@@ -2937,6 +3010,8 @@ function atualizarBtnTodos() {
   if (!btn || !lbl) return
   lbl.textContent = pendentes > 0 ? 'Enviar ' + pendentes + ' pendente(s) via WhatsApp' : 'Todos enviados ✅'
   btn.disabled = pendentes === 0
+  const btnReg = document.getElementById('btn-registrar-todos')
+  if (btnReg) btnReg.disabled = pendentes === 0
 
   // Aviso de valor faltando: sem ele a ordem de pagamento sai sem o líquido,
   // e o empregador só descobre na hora de pagar.
@@ -4679,7 +4754,7 @@ const ETAPA_IA = {
 // VERSÃO IMPLANTADA, que é um retrato do código, não o código atual. Sem
 // aviso, o usuário conserta, recarrega, vê o mesmo defeito e conclui que o
 // conserto não funcionou — quando na verdade ele nunca entrou no ar.
-const VERSAO_BACKEND_ESPERADA = '20260824'
+const VERSAO_BACKEND_ESPERADA = '20260826'
 
 function avisoServidorAntigo(versao) {
   if (!versao || String(versao) >= VERSAO_BACKEND_ESPERADA) return ''
