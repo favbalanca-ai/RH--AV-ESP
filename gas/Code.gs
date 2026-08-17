@@ -139,7 +139,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260826'
+var VERSAO_BACKEND = '20260827'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -4202,8 +4202,18 @@ var COLUNAS_ENCARGOS = ['EMPREGADOR', 'REGIME', 'INSS_PATRONAL', 'RAT', 'TERCEIR
 // Chave de comparação de empregador: o cadastro escreve "Joaquim Gatto" e o
 // holerite "JOAQUIM GATTO COSSUL". Sem normalizar, cada grafia vira um
 // empregador diferente e o custo aparece dividido.
+// 'Jovane Gatto Cossul' e 'Jovane Gatto Cossul - 980.357.541-49' são o
+// MESMO empregador escrito de dois jeitos no cadastro. O CPF/CNPJ no fim
+// não muda quem paga a folha — sai do rótulo e da chave, senão o custo
+// aparece dividido em dois blocos e as alíquotas valem só para metade.
+function rotuloEmpregador(nome) {
+  var s = String(nome || '').trim()
+  var limpo = s.replace(/[\s\-–—]*\d[\d.\/\-]{6,}\s*$/, '').trim()
+  return limpo || s
+}
+
 function chaveEmpregador(nome) {
-  return semAcento(String(nome || '')).replace(/[^A-Z0-9]/g, '')
+  return semAcento(rotuloEmpregador(nome)).replace(/[^A-Z0-9]/g, '')
 }
 
 function garantirAbaEncargos() {
@@ -4242,7 +4252,7 @@ function semearEncargos() {
     vistos[k] = true
     var linha = COLUNAS_ENCARGOS.map(function (c) {
       switch (c) {
-        case 'EMPREGADOR':      return emp
+        case 'EMPREGADOR':      return rotuloEmpregador(emp)
         case 'REGIME':          return ENCARGOS_PADRAO.regime
         case 'INSS_PATRONAL':   return ENCARGOS_PADRAO.inss_patronal
         case 'RAT':             return ENCARGOS_PADRAO.rat
@@ -4283,6 +4293,9 @@ function lerEncargos() {
   linhas.forEach(function (l) {
     var k = chaveEmpregador(l['EMPREGADOR'])
     if (!k) return
+    // Duas linhas com a mesma chave (grafias antigas do mesmo empregador):
+    // vale a PRIMEIRA — é nela que salvarEncargos escreve as correções.
+    if (porChave[k]) return
     var regime = String(l['REGIME'] || ENCARGOS_PADRAO.regime).trim()
     if (REGIMES_ENCARGO.indexOf(regime) < 0) regime = ENCARGOS_PADRAO.regime
     porChave[k] = {
@@ -4580,7 +4593,7 @@ function custoMdo(dados) {
     if (m.sem_verbas && !m.proventos) {
       geral.sem_verbas++
       var ke0 = chaveEmpregador(func.empregador) || 'SEM'
-      if (!porEmp[ke0]) porEmp[ke0] = novoBalde(func.empregador || 'Sem empregador')
+      if (!porEmp[ke0]) porEmp[ke0] = novoBalde(rotuloEmpregador(func.empregador) || 'Sem empregador')
       porEmp[ke0].sem_verbas++
       return
     }
@@ -4591,7 +4604,7 @@ function custoMdo(dados) {
     porTipoFolha[m.tipo_folha] = (porTipoFolha[m.tipo_folha] || 0) + 1
 
     var ke = chaveEmpregador(func.empregador) || 'SEM'
-    if (!porEmp[ke]) porEmp[ke] = novoBalde(func.empregador || 'Sem empregador')
+    if (!porEmp[ke]) porEmp[ke] = novoBalde(rotuloEmpregador(func.empregador) || 'Sem empregador')
     comEncargo[ke] = enc
     acumularBalde(porEmp[ke], m, c)
 

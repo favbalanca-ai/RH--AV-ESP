@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260826'
+const APP_VERSION = '20260827'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -3131,10 +3131,20 @@ function normalizarComp(comp) {
   const m = s.match(/([A-Z][a-z]{2})\s+\d{2}\s+(\d{4})/)
   const eng = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11}
   if (m && eng[m[1]] !== undefined) return MESES[eng[m[1]]] + '/' + m[2]
-  const d1 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
-  if (d1) return MESES[parseInt(d1[2])-1] + '/' + d1[3]
-  const d2 = s.match(/^(\d{2})\/(\d{4})$/)
-  if (d2) return MESES[parseInt(d2[1])-1] + '/' + d2[2]
+  // Data por extenso numérico, tolerante ao que a planilha devolve: dia e
+  // mês com 1 ou 2 dígitos, ano com 2 ou 4, e hora atrás ('01/12/2025
+  // 07:00:00') — era isso que deixava o mês sem nome na tela de custo.
+  const d1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(\s|$)/)
+  if (d1) {
+    const mes = parseInt(d1[2])
+    const ano = d1[3].length === 2 ? '20' + d1[3] : d1[3]
+    if (mes >= 1 && mes <= 12) return MESES[mes-1] + '/' + ano
+  }
+  const d2 = s.match(/^(\d{1,2})\/(\d{4})(\s|$)/)
+  if (d2) {
+    const mes = parseInt(d2[1])
+    if (mes >= 1 && mes <= 12) return MESES[mes-1] + '/' + d2[2]
+  }
   return s
 }
 
@@ -4212,7 +4222,16 @@ function custoProjecao(c) {
   return { valor: realizado + ritmo * faltam, ritmo, faltam, lancados: meses.length }
 }
 
-const mesCurtoCusto = rotulo => normalizarComp(rotulo).slice(0, 3)
+// O texto da competência na planilha varia ('01/12/25', ISO, extenso, data
+// com hora). O servidor já resolveu tudo isso na chave numérica do mês
+// (202512) — nomear por ela é imune ao formato; o texto fica de reserva.
+function nomeMesCusto(m) {
+  const o = Number(m && m.ordem) || 0
+  const mes = o % 100
+  if (mes >= 1 && mes <= 12) return MESES[mes - 1] + '/' + Math.floor(o / 100)
+  return normalizarComp(m && m.rotulo)
+}
+const mesCurtoCusto = m => nomeMesCusto(m).slice(0, 3)
 
 // A série inteira num olhar. Clica e cai no mês a mês.
 function custoSpark(meses) {
@@ -4222,10 +4241,10 @@ function custoSpark(meses) {
     <div class="cst-spark" role="button" tabindex="0" title="Ver mês a mês"
          onclick="verCusto('meses')" onkeydown="if(event.key==='Enter')verCusto('meses')">
       ${meses.map((m, i) => `
-        <div class="cst-spark-col" title="${esc(normalizarComp(m.rotulo))} · ${rs(m.custo_total)}">
+        <div class="cst-spark-col" title="${esc(nomeMesCusto(m))} · ${rs(m.custo_total)}">
           <div class="cst-spark-bar${i === meses.length - 1 ? ' ult' : ''}"
                style="height:${Math.max(6, Math.round(m.custo_total / teto * 100))}%"></div>
-          <span>${esc(mesCurtoCusto(m.rotulo))}</span>
+          <span>${esc(mesCurtoCusto(m))}</span>
         </div>`).join('')}
     </div>`
 }
@@ -4263,7 +4282,7 @@ function custoSinais(c) {
         { nome: 'pelos encargos e provisões', peso: dif('encargos') + dif('provisoes') },
       ].sort((a, b) => b.peso - a.peso)
       sinal('flame', 'ruim',
-        `O mês mais pesado foi <strong>${esc(normalizarComp(caro.rotulo))}</strong>
+        `O mês mais pesado foi <strong>${esc(nomeMesCusto(caro))}</strong>
          (${rs(caro.custo_total)}, ${Math.round((caro.custo_total / tipico.custo_total - 1) * 100)}%
          acima de um mês típico)${motores[0].peso > 0 ? ', puxado principalmente ' + motores[0].nome : ''}.`)
     }
@@ -4297,7 +4316,7 @@ function custoSinais(c) {
     const capengas = meses.filter(m => m.funcionarios < maxF * 0.7)
     if (maxF >= 3 && capengas.length && capengas.length < meses.length) {
       sinal('alert-triangle', '',
-        `${capengas.slice(0, 3).map(m => `<strong>${esc(normalizarComp(m.rotulo))}</strong>
+        `${capengas.slice(0, 3).map(m => `<strong>${esc(nomeMesCusto(m))}</strong>
            tem folha de só ${m.funcionarios}`).join(', ')} pessoa(s), contra ${maxF} nos
          meses cheios — pode haver holerite faltando, e a média mensal fica distorcida.`)
     }
@@ -4582,8 +4601,8 @@ function custoMeses(c) {
   return `
     <div class="af-nota">
       Cada mês pelo que foi trabalhado (competência), não pela data do pagamento.
-      ${meses.length > 1 ? `Mais pesado: <strong>${esc(normalizarComp(caro.rotulo))}</strong>
-        (${rs(caro.custo_total)}) · mais leve: <strong>${esc(normalizarComp(leve.rotulo))}</strong>
+      ${meses.length > 1 ? `Mais pesado: <strong>${esc(nomeMesCusto(caro))}</strong>
+        (${rs(caro.custo_total)}) · mais leve: <strong>${esc(nomeMesCusto(leve))}</strong>
         (${rs(leve.custo_total)}).` : ''}
     </div>
     <div class="cst-legenda">
@@ -4594,7 +4613,7 @@ function custoMeses(c) {
     ${meses.map((m, i) => `
       <div class="af-verba">
         <div class="af-verba-topo">
-          <span class="af-verba-nome">${esc(normalizarComp(m.rotulo))} ${delta(m, i)}</span>
+          <span class="af-verba-nome">${esc(nomeMesCusto(m))} ${delta(m, i)}</span>
           <span class="af-verba-valor">${rs(m.custo_total)}</span>
         </div>
         <div class="cst-mbar">
@@ -4754,7 +4773,7 @@ const ETAPA_IA = {
 // VERSÃO IMPLANTADA, que é um retrato do código, não o código atual. Sem
 // aviso, o usuário conserta, recarrega, vê o mesmo defeito e conclui que o
 // conserto não funcionou — quando na verdade ele nunca entrou no ar.
-const VERSAO_BACKEND_ESPERADA = '20260826'
+const VERSAO_BACKEND_ESPERADA = '20260827'
 
 function avisoServidorAntigo(versao) {
   if (!versao || String(versao) >= VERSAO_BACKEND_ESPERADA) return ''
