@@ -139,7 +139,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260827'
+var VERSAO_BACKEND = '20260828'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -704,11 +704,130 @@ function salvarPdfNoDrive(funcId, nomeCompleto, subpasta, nomeArquivo, pdfBase64
   return arq.getUrl()
 }
 
+// ═══ RECIBO DE ENTREGA DE EPI ══════════════════════════════════════
+// Um layout só, para o recibo pendente E o assinado — os dois saem da
+// mesma função e nunca mais divergem. O que muda é o bloco de
+// assinatura: vazio para assinar, com a imagem quando a assinatura
+// própria conclui.
+
+function escapeHtmlPdf(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  })
+}
+
+function htmlReciboEpi(func, itens, motivo, opcoes) {
+  var o = opcoes || {}
+  var e = escapeHtmlPdf
+  var hoje = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy')
+  var lista = itens || []
+
+  var totalUnidades = 0
+  var linhas = lista.map(function (item, i) {
+    var qtd = Number(item.quantidade) || 0
+    totalUnidades += qtd
+    return '<tr' + (i % 2 ? ' class="zebra"' : '') + '>' +
+      '<td class="cod">' + e(item.cod) + '</td>' +
+      '<td>' + e(item.descricao) + '</td>' +
+      '<td class="centro">' + (e(item.ca) || '&mdash;') + '</td>' +
+      '<td class="centro">' + e(item.quantidade) + '</td></tr>'
+  }).join('')
+
+  // Identificação completa: um recibo de NR-6 precisa dizer QUEM recebeu
+  // e DE QUEM — sem CPF e empregador o documento vale pouco numa fiscalização.
+  var dado = function (rot, val) {
+    return '<td class="rot">' + rot + '</td><td class="val">' + (e(val) || '&mdash;') + '</td>'
+  }
+  var empregador = typeof rotuloEmpregador === 'function'
+    ? rotuloEmpregador(func['EMPREGADOR']) : String(func['EMPREGADOR'] || '')
+
+  var blocoAssinatura = o.assinaturaBase64
+    ? '<div class="sig-img"><img src="data:image/png;base64,' + o.assinaturaBase64 + '" alt="Assinatura"></div>'
+    : '<div class="sig-img"></div>'
+  var carimbo = o.assinaturaBase64
+    ? '<div class="carimbo">Assinado digitalmente em ' +
+      Utilities.formatDate(new Date(), 'America/Sao_Paulo', "dd/MM/yyyy 'às' HH:mm") +
+      ' — Sistema SST Fazenda Água Viva</div>'
+    : ''
+
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' +
+    'body{font-family:Arial,Helvetica,sans-serif;font-size:11px;margin:26px 30px;color:#1F2937}' +
+    '.header{background:#1A5C2A;color:#fff;border-radius:8px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center}' +
+    '.header h1{margin:0;font-size:17px;letter-spacing:.02em}' +
+    '.header .sub{margin:3px 0 0;font-size:9px;opacity:.85}' +
+    '.header .doc{text-align:right}' +
+    '.header .doc strong{display:block;font-size:12px}' +
+    '.header .doc span{font-size:9px;opacity:.85}' +
+    'h2{color:#1A5C2A;font-size:11px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1.5px solid #1A5C2A;padding-bottom:3px;margin:18px 0 6px}' +
+    'table{width:100%;border-collapse:collapse}' +
+    '.ident td{padding:4px 6px;font-size:10.5px;vertical-align:top}' +
+    '.ident .rot{color:#6B7280;font-weight:bold;width:88px;white-space:nowrap}' +
+    '.ident .val{width:auto}' +
+    '.itens th{background:#1A5C2A;color:#fff;padding:6px 8px;font-size:9.5px;text-align:left;text-transform:uppercase;letter-spacing:.04em}' +
+    '.itens td{padding:5px 8px;border-bottom:1px solid #E5E7EB;font-size:10.5px}' +
+    '.itens .zebra td{background:#F4F6F4}' +
+    '.itens .centro{text-align:center}' +
+    '.itens .cod{white-space:nowrap}' +
+    '.itens tfoot td{border-bottom:none;border-top:1.5px solid #1A5C2A;font-weight:bold;font-size:10px;color:#1A5C2A}' +
+    '.termo{background:#F0F9F0;border:1px solid #C8E6C9;border-radius:8px;padding:11px 14px;margin-top:14px;font-size:9.8px;line-height:1.55}' +
+    '.termo strong{color:#1A5C2A}' +
+    '.termo ol{margin:6px 0 0;padding-left:18px}' +
+    '.termo li{margin-bottom:3px}' +
+    '.assinaturas{display:flex;gap:40px;margin-top:44px}' +
+    '.assinatura{flex:1;text-align:center}' +
+    '.sig-img{height:64px;display:flex;align-items:flex-end;justify-content:center}' +
+    '.sig-img img{max-height:60px;max-width:280px;object-fit:contain;display:block}' +
+    '.linha-ass{border-top:1.5px solid #374151;margin-bottom:5px}' +
+    '.assinatura strong{font-size:10.5px}' +
+    '.assinatura .papel{font-size:9px;color:#6B7280}' +
+    '.carimbo{font-size:8px;color:#2E7D32;margin-top:5px;font-style:italic}' +
+    '.rodape{margin-top:26px;font-size:8px;color:#9CA3AF;text-align:center;border-top:1px solid #E5E7EB;padding-top:8px}' +
+    '</style></head><body>' +
+
+    '<div class="header"><div><h1>Fazenda Água Viva</h1>' +
+    '<p class="sub">Sistema de Gestão SST — Segurança e Saúde no Trabalho</p></div>' +
+    '<div class="doc"><strong>RECIBO DE ENTREGA DE EPI</strong>' +
+    '<span>NR-6 &middot; ' + hoje + '</span></div></div>' +
+
+    '<h2>Identificação</h2>' +
+    '<table class="ident"><tr>' +
+    dado('Funcionário', func['NOME_COMPLETO']) + dado('CPF', func['CPF']) + '</tr><tr>' +
+    dado('Função', func['FUNCAO']) + dado('Unidade', func['UNIDADE']) + '</tr><tr>' +
+    dado('Empregador', empregador) + dado('Data', hoje) + '</tr><tr>' +
+    dado('Motivo', motivo) + dado('Entregue por', o.adm) + '</tr></table>' +
+
+    '<h2>Equipamentos entregues</h2>' +
+    '<table class="itens"><thead><tr><th>Código</th><th>Descrição do EPI</th>' +
+    '<th style="text-align:center">CA</th><th style="text-align:center">Qtd.</th></tr></thead>' +
+    '<tbody>' + linhas + '</tbody>' +
+    '<tfoot><tr><td colspan="3">' + lista.length + ' item(ns)</td>' +
+    '<td class="centro">' + totalUnidades + '</td></tr></tfoot></table>' +
+
+    '<div class="termo"><strong>DECLARAÇÃO DO FUNCIONÁRIO — NR-6</strong>' +
+    '<ol>' +
+    '<li>Recebi <strong>gratuitamente</strong> os equipamentos de proteção individual listados acima, em perfeitas condições de uso e dentro do prazo de validade do CA.</li>' +
+    '<li>Fui orientado sobre o uso correto, a guarda e a conservação de cada equipamento.</li>' +
+    '<li>Comprometo-me a usá-los apenas para a finalidade a que se destinam, durante todo o trabalho.</li>' +
+    '<li>Comunicarei imediatamente qualquer dano, extravio ou necessidade de substituição.</li>' +
+    '<li>Devolverei o equipamento substituído e, no desligamento, os que estiverem em meu poder.</li>' +
+    '</ol></div>' +
+
+    '<div class="assinaturas">' +
+    '<div class="assinatura">' + blocoAssinatura + '<div class="linha-ass"></div>' +
+    '<strong>' + e(func['NOME_COMPLETO']) + '</strong>' +
+    '<div class="papel">Assinatura do funcionário</div>' + carimbo + '</div>' +
+    '<div class="assinatura"><div class="sig-img"></div><div class="linha-ass"></div>' +
+    '<strong>' + (e(o.adm) || '&nbsp;') + '</strong>' +
+    '<div class="papel">Responsável pela entrega</div></div>' +
+    '</div>' +
+
+    '<div class="rodape">Documento gerado em ' + hoje +
+    ' pelo Sistema SST — Fazenda Água Viva &middot; Recibo de entrega de EPI conforme NR-6</div>' +
+    '</body></html>'
+}
+
 function gerarReciboEpiPdf(func, itens, motivo, adm) {
-  const hoje = Utilities.formatDate(new Date(), 'America/Sao_Paulo', "dd 'de' MMMM 'de' yyyy")
-  let tabelaItens = ''
-  itens.forEach(item => { tabelaItens += '<tr><td>' + item.cod + '</td><td>' + item.descricao + '</td><td>' + (item.ca||'') + '</td><td style="text-align:center">' + item.quantidade + '</td></tr>' })
-  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial,sans-serif;font-size:11px;margin:30px;color:#222}.header{background:#1A5C2A;color:white;padding:16px 20px;border-radius:6px}.header h1{margin:0;font-size:18px}.header p{margin:4px 0 0;font-size:10px;opacity:.85}h2{color:#1A5C2A;font-size:13px;border-bottom:2px solid #1A5C2A;padding-bottom:4px;margin-top:24px}table{width:100%;border-collapse:collapse;margin-top:8px}th{background:#1A5C2A;color:white;padding:6px 8px;font-size:10px;text-align:left}td{padding:5px 8px;border-bottom:1px solid #ddd;font-size:10px}.campo{display:flex;gap:8px;margin:4px 0}.label{font-weight:bold;min-width:120px}.termo{background:#f0f9f0;border:1px solid #c8e6c9;border-radius:6px;padding:12px;margin-top:16px;font-size:10px;line-height:1.6}.assinaturas{display:flex;justify-content:center;margin-top:48px}.assinatura{text-align:center}.sig-img{height:72px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:4px}.linha-ass{border-top:1px solid #333;margin-bottom:6px}.rodape{margin-top:32px;font-size:8px;color:#999;text-align:center}</style></head><body><div class="header"><h1>Fazenda Agua Viva</h1><p>Sistema SST - Recibo de Entrega de EPI</p></div><h2>RECIBO DE ENTREGA DE EPI</h2><h2>Dados do Funcionario</h2><div class="campo"><span class="label">Funcionario:</span>' + func['NOME_COMPLETO'] + '</div><div class="campo"><span class="label">Data da Entrega:</span>' + hoje + '</div><div class="campo"><span class="label">Motivo:</span>' + motivo + '</div><h2>Itens Entregues</h2><table><thead><tr><th>Codigo</th><th>Descricao</th><th>Nr CA</th><th>Qtd.</th></tr></thead><tbody>' + tabelaItens + '</tbody></table><div class="termo"><strong>DECLARACAO DO FUNCIONARIO</strong><br><br>Declaro que recebi os equipamentos listados acima em perfeitas condicoes, que fui orientado quanto ao uso correto e que e de minha responsabilidade a conservacao, higienizacao e comunicacao em caso de danos ou necessidade de substituicao, conforme determina a NR-6.</div><div class="assinaturas"><div class="assinatura"><div class="sig-img"></div><div class="linha-ass"></div><strong>' + func['NOME_COMPLETO'] + '</strong><br>Assinatura do Funcionario</div></div><div class="rodape">Documento gerado em ' + hoje + ' pelo Sistema SST - Fazenda Agua Viva</div></body></html>'
+  var html = htmlReciboEpi(func, itens, motivo, { adm: adm })
   return Utilities.base64Encode(HtmlService.createHtmlOutput(html).getAs('application/pdf').setName('recibo_epi.pdf').getBytes())
 }
 
@@ -1700,59 +1819,7 @@ function confirmarAssinatura(token, assinaturaBase64, pdfAssinadoExterno) {
 }
 
 function gerarReciboEpiPdfAssinado(func, itens, motivo, assinaturaBase64) {
-  const hoje = Utilities.formatDate(new Date(), 'America/Sao_Paulo', "dd/MM/yyyy 'às' HH:mm")
-
-  var tabelaItens = ''
-  if (itens && itens.length) {
-    itens.forEach(function(item) {
-      tabelaItens += '<tr><td>' + item.cod + '</td><td>' + item.descricao + '</td><td>' + (item.ca||'') + '</td><td style="text-align:center">' + item.quantidade + '</td></tr>'
-    })
-  }
-
-  var html =
-    '<!DOCTYPE html><html><head><meta charset="UTF-8">' +
-    '<style>' +
-    'body{font-family:Arial,sans-serif;font-size:11px;margin:30px;color:#222}' +
-    '.header{background:#1A5C2A;color:white;padding:16px 20px;border-radius:6px}' +
-    '.header h1{margin:0;font-size:18px}' +
-    '.header p{margin:4px 0 0;font-size:10px;opacity:.85}' +
-    'h2{color:#1A5C2A;font-size:13px;border-bottom:2px solid #1A5C2A;padding-bottom:4px;margin-top:24px}' +
-    'table{width:100%;border-collapse:collapse;margin-top:8px}' +
-    'th{background:#1A5C2A;color:white;padding:6px 8px;font-size:10px;text-align:left}' +
-    'td{padding:5px 8px;border-bottom:1px solid #ddd;font-size:10px}' +
-    '.campo{display:flex;gap:8px;margin:4px 0}' +
-    '.label{font-weight:bold;min-width:120px}' +
-    '.termo{background:#f0f9f0;border:1px solid #c8e6c9;border-radius:6px;padding:12px;margin-top:16px;font-size:10px;line-height:1.6}' +
-    '.assinaturas{display:flex;justify-content:center;margin-top:40px}' +
-    '.assinatura{text-align:center;width:340px}' +
-    '.sig-img{height:80px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:0}' +
-    '.sig-img img{max-height:76px;max-width:300px;object-fit:contain;display:block}' +
-    '.linha-ass{border-top:2px solid #333;margin-bottom:6px;margin-top:2px}' +
-    '.carimbo{font-size:8px;color:#2E7D32;margin-top:6px;font-style:italic}' +
-    '.rodape{margin-top:32px;font-size:8px;color:#999;text-align:center}' +
-    '</style></head><body>' +
-    '<div class="header"><h1>Fazenda Agua Viva</h1><p>Sistema SST - Recibo de Entrega de EPI</p></div>' +
-    '<h2>RECIBO DE ENTREGA DE EPI</h2>' +
-    '<h2>Dados do Funcionario</h2>' +
-    '<div class="campo"><span class="label">Funcionario:</span>' + func['NOME_COMPLETO'] + '</div>' +
-    '<div class="campo"><span class="label">Data da Entrega:</span>' + Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy') + '</div>' +
-    '<div class="campo"><span class="label">Motivo:</span>' + motivo + '</div>' +
-    '<h2>Itens Entregues</h2>' +
-    '<table><thead><tr><th>Codigo</th><th>Descricao</th><th>Nr CA</th><th>Qtd.</th></tr></thead>' +
-    '<tbody>' + tabelaItens + '</tbody></table>' +
-    '<div class="termo"><strong>DECLARACAO DO FUNCIONARIO</strong><br><br>' +
-    'Declaro que recebi os equipamentos listados acima em perfeitas condicoes, que fui orientado quanto ao ' +
-    'uso correto e que e de minha responsabilidade a conservacao, higienizacao e comunicacao em caso de ' +
-    'danos ou necessidade de substituicao, conforme determina a NR-6.</div>' +
-    '<div class="assinaturas"><div class="assinatura">' +
-    '<div class="sig-img"><img src="data:image/png;base64,' + assinaturaBase64 + '" alt="Assinatura"></div>' +
-    '<div class="linha-ass"></div>' +
-    '<strong>' + func['NOME_COMPLETO'] + '</strong><br>Assinatura do Funcionario' +
-    '<div class="carimbo">Assinado digitalmente em ' + hoje + ' — Sistema SST Fazenda Agua Viva</div>' +
-    '</div></div>' +
-    '<div class="rodape">Documento gerado pelo Sistema SST — Fazenda Agua Viva</div>' +
-    '</body></html>'
-
+  var html = htmlReciboEpi(func, itens, motivo, { assinaturaBase64: assinaturaBase64 })
   var blob = HtmlService.createHtmlOutput(html).getAs('application/pdf').setName('recibo_epi_assinado.pdf')
   return Utilities.base64Encode(blob.getBytes())
 }
