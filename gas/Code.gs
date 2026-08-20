@@ -139,7 +139,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260828'
+var VERSAO_BACKEND = '20260829'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -773,8 +773,8 @@ function htmlReciboEpi(func, itens, motivo, opcoes) {
     '.termo strong{color:#1A5C2A}' +
     '.termo ol{margin:6px 0 0;padding-left:18px}' +
     '.termo li{margin-bottom:3px}' +
-    '.assinaturas{display:flex;gap:40px;margin-top:44px}' +
-    '.assinatura{flex:1;text-align:center}' +
+    '.assinaturas{display:flex;justify-content:center;margin-top:44px}' +
+    '.assinatura{width:340px;text-align:center}' +
     '.sig-img{height:64px;display:flex;align-items:flex-end;justify-content:center}' +
     '.sig-img img{max-height:60px;max-width:280px;object-fit:contain;display:block}' +
     '.linha-ass{border-top:1.5px solid #374151;margin-bottom:5px}' +
@@ -794,7 +794,7 @@ function htmlReciboEpi(func, itens, motivo, opcoes) {
     dado('Funcionário', func['NOME_COMPLETO']) + dado('CPF', func['CPF']) + '</tr><tr>' +
     dado('Função', func['FUNCAO']) + dado('Unidade', func['UNIDADE']) + '</tr><tr>' +
     dado('Empregador', empregador) + dado('Data', hoje) + '</tr><tr>' +
-    dado('Motivo', motivo) + dado('Entregue por', o.adm) + '</tr></table>' +
+    '<td class="rot">Motivo</td><td class="val" colspan="3">' + (e(motivo) || '&mdash;') + '</td></tr></table>' +
 
     '<h2>Equipamentos entregues</h2>' +
     '<table class="itens"><thead><tr><th>Código</th><th>Descrição do EPI</th>' +
@@ -816,9 +816,6 @@ function htmlReciboEpi(func, itens, motivo, opcoes) {
     '<div class="assinatura">' + blocoAssinatura + '<div class="linha-ass"></div>' +
     '<strong>' + e(func['NOME_COMPLETO']) + '</strong>' +
     '<div class="papel">Assinatura do funcionário</div>' + carimbo + '</div>' +
-    '<div class="assinatura"><div class="sig-img"></div><div class="linha-ass"></div>' +
-    '<strong>' + (e(o.adm) || '&nbsp;') + '</strong>' +
-    '<div class="papel">Responsável pela entrega</div></div>' +
     '</div>' +
 
     '<div class="rodape">Documento gerado em ' + hoje +
@@ -827,7 +824,7 @@ function htmlReciboEpi(func, itens, motivo, opcoes) {
 }
 
 function gerarReciboEpiPdf(func, itens, motivo, adm) {
-  var html = htmlReciboEpi(func, itens, motivo, { adm: adm })
+  var html = htmlReciboEpi(func, itens, motivo, {})
   return Utilities.base64Encode(HtmlService.createHtmlOutput(html).getAs('application/pdf').setName('recibo_epi.pdf').getBytes())
 }
 
