@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260828'
+const APP_VERSION = '20260829'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -4773,7 +4773,7 @@ const ETAPA_IA = {
 // VERSÃO IMPLANTADA, que é um retrato do código, não o código atual. Sem
 // aviso, o usuário conserta, recarrega, vê o mesmo defeito e conclui que o
 // conserto não funcionou — quando na verdade ele nunca entrou no ar.
-const VERSAO_BACKEND_ESPERADA = '20260828'
+const VERSAO_BACKEND_ESPERADA = '20260829'
 
 function avisoServidorAntigo(versao) {
   if (!versao || String(versao) >= VERSAO_BACKEND_ESPERADA) return ''
