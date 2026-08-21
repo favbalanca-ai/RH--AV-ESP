@@ -53,9 +53,10 @@ function doPost(e) {
       'os escopos foram autorizados e não há nada a corrigir.', 400)
   }
 
+  var acao = ''
   try {
     const body = JSON.parse(e.postData.contents)
-    const acao = body.acao
+    acao = body.acao
 
     // Rotas públicas — sem login (funcionário acessando)
     if (acao === 'buscar_doc_assinatura') return respOk(buscarDocAssinatura(body.token))
@@ -124,7 +125,17 @@ function doPost(e) {
       default: return respErro('Ação desconhecida: ' + acao)
     }
   } catch (err) {
-    logAcao('SISTEMA', 'ERRO', err.message)
+    // O log precisa dizer O QUE se tentava fazer e ONDE quebrou — "A aba
+    // 'undefined' não existe", sozinho, não aponta nem a ação nem a linha.
+    // O stack denuncia até arquivo antigo misturado no projeto: o nome do
+    // arquivo aparece antes do número da linha.
+    var onde = ''
+    try {
+      onde = String(err.stack || '').split('\n').slice(1, 3)
+        .map(function (l) { return l.trim().replace(/^at /, '') }).join(' < ')
+    } catch (ig) {}
+    logAcao('SISTEMA', 'ERRO',
+      (acao ? '[' + acao + '] ' : '') + err.message + (onde ? ' | em: ' + onde : ''))
     return respErro('Erro interno: ' + err.message)
   }
 }
@@ -139,7 +150,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260829'
+var VERSAO_BACKEND = '20260830'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -160,6 +171,17 @@ function getSheet(nomeAba) {
 // devolver "nenhum funcionário" e a gravação dar certo contra a planilha
 // errada. Um erro com nome é mais barato que um dado no lugar errado.
 function abaObrigatoria(nomeAba) {
+  // Nome vazio ou undefined NÃO é aba renomeada — é o código pedindo uma
+  // aba sem nome: uma constante que não existe nesta cópia. Sinal clássico
+  // de Code.gs desatualizado ou de arquivo antigo/duplicado convivendo no
+  // mesmo projeto do Apps Script (todos os arquivos dividem as funções, e
+  // a última definição vence).
+  if (nomeAba == null || String(nomeAba) === '' || String(nomeAba) === 'undefined') {
+    throw new Error('O código pediu uma aba sem nome (' + nomeAba + '). Isso não é ' +
+      'problema na planilha: é o Code.gs desatualizado ou um arquivo ' +
+      'antigo/duplicado no projeto do Apps Script. Deixe no projeto só o ' +
+      'Code.gs mais novo e publique de novo (✏️ → Nova versão).')
+  }
   var sheet = getSheet(nomeAba)
   if (!sheet) {
     throw new Error('A aba "' + nomeAba + '" não existe na planilha. ' +
