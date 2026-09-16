@@ -75,6 +75,8 @@ function doPost(e) {
       case 'listar_funcionarios':         return respOk(listarFuncionarios())
       case 'cadastrar_funcionario':       return respOk(cadastrarFuncionario(body.dados, usuario))
       case 'atualizar_funcionario':         return respOk(atualizarFuncionario(body.dados, usuario))
+      // Idempotente: cria só as pastas que faltam e preenche o LINK_DRIVE.
+      case 'criar_pastas_drive':          return respOk(criarTodasPastas())
       case 'listar_exames':               return respOk(listarExames())
       case 'listar_epi_estoque':          return respOk(listarEpiEstoque())
       case 'listar_epi_entregas':         return respOk(listarEpiEntregas())
@@ -150,7 +152,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260830'
+var VERSAO_BACKEND = '20260831'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -302,11 +304,17 @@ function cadastrarFuncionario(dados, usuario) {
   const hoje = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy')
   const nomePasta = String(novoId).padStart(3,'0') + '_' + dados.nome_completo.toUpperCase().replace(/\s+/g,'_')
 
-  let linkDrive = ''
+  let linkDrive = '', erroDrive = ''
   try {
     const pasta = criarPastaFuncionario(novoId, dados.nome_completo)
     linkDrive = 'https://drive.google.com/drive/folders/' + pasta.getId()
-  } catch(e) { logAcao(usuario, 'ERRO_DRIVE', e.message) }
+  } catch(e) {
+    // A pasta falhar não pode impedir o cadastro — mas também não pode
+    // fingir sucesso: o motivo volta na resposta, para o app avisar na
+    // hora, em vez de o problema só aparecer meses depois num envio.
+    erroDrive = e.message
+    logAcao(usuario, 'ERRO_DRIVE', 'Cadastro func ' + novoId + ': ' + e.message)
+  }
 
   adicionarLinha(CONFIG.ABAS.FUNCIONARIOS, [
     novoId, dados.status || 'Ativo', dados.nome_completo, dados.nome_curto || '',
@@ -323,7 +331,7 @@ function cadastrarFuncionario(dados, usuario) {
 
   cadastrarExamesAutomaticos(novoId, dados.nome_completo, dados.funcao, dados.unidade, dados.perfil_sst)
   logAcao(usuario, 'CADASTRO_FUNCIONARIO', 'ID ' + novoId + ' — ' + dados.nome_completo)
-  return { id: novoId, link_drive: linkDrive }
+  return { id: novoId, link_drive: linkDrive, erro_drive: erroDrive }
 }
 
 function listarExames() {
@@ -1035,7 +1043,7 @@ function criarTodasPastas() {
   const sheet = abaObrigatoria(CONFIG.ABAS.FUNCIONARIOS)
   const headers = sheet.getDataRange().getValues()[0]
   const idxLink = headers.indexOf('LINK_DRIVE')
-  let criadas = 0, erros = 0
+  let criadas = 0, erros = 0, motivo = ''
   funcionarios.forEach((func, i) => {
     if (!func['ID'] || !func['NOME_COMPLETO']) return
     try {
@@ -1043,9 +1051,16 @@ function criarTodasPastas() {
       const link = 'https://drive.google.com/drive/folders/' + pasta.getId()
       if (idxLink !== -1) sheet.getRange(i + 2, idxLink + 1).setValue(link)
       criadas++
-    } catch(e) { erros++; Logger.log('ERRO ' + func['ID'] + ': ' + e.message) }
+    } catch(e) {
+      // O primeiro motivo vai na resposta: "3 erros" sem o porquê obriga
+      // a caçar no log o que esta mensagem já podia dizer.
+      erros++
+      if (!motivo) motivo = e.message
+      Logger.log('ERRO ' + func['ID'] + ': ' + e.message)
+    }
   })
-  const msg = 'Concluido: ' + criadas + ' pastas processadas, ' + erros + ' erros.'
+  const msg = 'Concluído: ' + criadas + ' pasta(s) processada(s), ' + erros + ' erro(s).' +
+    (motivo ? ' Primeiro erro: ' + motivo : '')
   logAcao('SISTEMA', 'CRIAR_PASTAS', msg)
   return msg
 }
