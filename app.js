@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260830'
+const APP_VERSION = '20260831'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -1131,6 +1131,17 @@ async function testarConexao() {
   if (elL) renderListaErros(elL, lerErrosLocais(), 'Nenhum erro registrado no app 🎉')
 }
 
+// Conserta cadastros cuja pasta do Drive falhou na hora: o servidor cria
+// só o que falta e preenche o LINK_DRIVE. Rodar de novo não duplica nada.
+async function criarPastasDrive() {
+  if (!confirm('Criar no Drive as pastas de funcionários que estiverem faltando?')) return
+  mostrarLoading('Conferindo as pastas no Drive...')
+  const res = await chamarGAS({ acao: 'criar_pastas_drive' })
+  esconderLoading()
+  if (!res || !res.ok) return toast('❌ ' + ((res && res.erro) || 'Erro'), 'erro')
+  alert('📁 ' + res.data)
+}
+
 async function carregarErrosBackend() {
   const el = document.getElementById('diag-erros-backend'); if (!el) return
   el.innerHTML = '<p class="lista-vazia">Carregando...</p>'
@@ -1456,6 +1467,15 @@ async function salvarFuncionario(e) {
 
   if (res && res.ok) {
     toast(editandoId ? '✅ Dados atualizados!' : '✅ Cadastrado! ID: ' + res.data.id, 'sucesso')
+    // "Cadastrado!" com a pasta falhada em silêncio era sucesso de mentira:
+    // o problema só aparecia meses depois, na hora de enviar um documento.
+    if (!editandoId && !res.data.link_drive) {
+      alert('⚠️ O funcionário foi cadastrado, mas a pasta dele NÃO foi criada no Drive.\n\n' +
+        'Motivo: ' + (res.data.erro_drive || 'não informado pelo servidor') + '\n\n' +
+        'Confira o ID da pasta do Drive (linha 23 do Code.gs) e depois toque em ' +
+        '"Criar pastas que faltam no Drive", na tela de Diagnóstico — ' +
+        'não precisa recadastrar ninguém.')
+    }
     if (!editandoId) e.target.reset()
     e.target.dataset.editandoId = ''
     const r2 = await chamarGAS({ acao: 'listar_funcionarios' })
@@ -4773,7 +4793,7 @@ const ETAPA_IA = {
 // VERSÃO IMPLANTADA, que é um retrato do código, não o código atual. Sem
 // aviso, o usuário conserta, recarrega, vê o mesmo defeito e conclui que o
 // conserto não funcionou — quando na verdade ele nunca entrou no ar.
-const VERSAO_BACKEND_ESPERADA = '20260830'
+const VERSAO_BACKEND_ESPERADA = '20260831'
 
 function avisoServidorAntigo(versao) {
   if (!versao || String(versao) >= VERSAO_BACKEND_ESPERADA) return ''
