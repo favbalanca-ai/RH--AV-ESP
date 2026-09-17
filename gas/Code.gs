@@ -152,7 +152,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260901'
+var VERSAO_BACKEND = '20260902'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -358,6 +358,12 @@ function entregarEpi(dados, usuario) {
   const func = listarFuncionarios().find(f => String(f['ID']) === String(dados.func_id))
   if (!func) throw new Error('Funcionário não encontrado')
 
+  // Quantidade vem do app como número, mas já chegou como texto e como
+  // vazio — e um recibo de "3 camisas" com QTD errada é exatamente o tipo
+  // de documento que volta contra o empregador. Normaliza UMA vez, aqui,
+  // e todo o resto (estoque, planilha, recibo) usa o valor saneado.
+  ;(dados.itens || []).forEach(item => { item.quantidade = parseInt(item.quantidade) || 1 })
+
   dados.itens.forEach(item => {
     const sheet = getSheet(CONFIG.ABAS.EPI_ESTOQUE)
     const vals = sheet.getDataRange().getValues()
@@ -443,7 +449,7 @@ function listarEpiAcumulados() {
     if (!porFunc[id]) porFunc[id] = { func_id: id, nome: e['FUNCIONÁRIO'], itens: [] }
     porFunc[id].itens.push({
       cod: e['CÓD. EPI'] || '', descricao: e['DESCRIÇÃO DO EPI'] || '',
-      ca: e['Nº CA'] || '', quantidade: e['QUANTIDADE'] || 1,
+      ca: e['Nº CA'] || '', quantidade: Number(e['QUANTIDADE']) || 1,
       data: e['DATA ENTREGA'] || '', motivo: e['MOTIVO ENTREGA'] || '',
     })
   })
@@ -471,7 +477,8 @@ function fecharMesEpi(dados, usuario) {
   for (let r = 1; r < vals.length; r++) {
     if (String(vals[r][idFuncIdx]) === String(dados.func_id) && String(vals[r][statusIdx]).trim() === 'Acumulado') {
       rowsIdx.push(r)
-      itens.push({ cod: vals[r][codIdx], descricao: vals[r][descIdx], ca: vals[r][caIdx], quantidade: vals[r][qtdIdx] })
+      itens.push({ cod: vals[r][codIdx], descricao: vals[r][descIdx], ca: vals[r][caIdx],
+                   quantidade: Number(vals[r][qtdIdx]) || 1 })
     }
   }
   if (!itens.length) throw new Error('Nenhum EPI acumulado para este funcionário')
@@ -760,14 +767,15 @@ function htmlReciboEpi(func, itens, motivo, opcoes) {
 
   var totalUnidades = 0
   var linhas = lista.map(function (item, i) {
-    var qtd = Number(item.quantidade) || 0
+    // Vazio ou texto vira 1 — nenhum EPI é entregue em quantidade zero.
+    var qtd = Number(item.quantidade) || 1
     totalUnidades += qtd
     var bg = i % 2 ? ' bgcolor="#F4F6F4"' : ''
     return '<tr' + bg + '>' +
       '<td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;white-space:nowrap">' + e(item.cod) + '</td>' +
       '<td style="padding:6px 8px;border-bottom:1px solid #E5E7EB">' + e(item.descricao) + '</td>' +
       '<td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;text-align:center">' + (e(item.ca) || '&mdash;') + '</td>' +
-      '<td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;text-align:center">' + e(item.quantidade) + '</td></tr>'
+      '<td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;text-align:center">' + qtd + '</td></tr>'
   }).join('')
 
   // Identificação completa: um recibo de NR-6 precisa dizer QUEM recebeu

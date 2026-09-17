@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260901'
+const APP_VERSION = '20260902'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -1727,7 +1727,16 @@ function filtrarEpiBusca(q) {
 }
 
 function adicionarItemEpiBusca(cod) {
-  if (itensEpiSel.find(i => i.cod === cod)) { fecharBuscaEpi(); return }
+  // Tocar de novo no mesmo EPI é o jeito natural de dizer "mais um".
+  // Ignorar em silêncio deixava a 2ª e a 3ª camisa fora do recibo — o
+  // usuário achava que tinha adicionado três e o documento saía com uma.
+  const ja = itensEpiSel.find(i => i.cod === cod)
+  if (ja) {
+    ja.quantidade = (Number(ja.quantidade) || 1) + 1
+    renderItensEpi(); atualizarBtnEpi(); fecharBuscaEpi()
+    toast('➕ ' + (ja.descricao || cod) + ' — agora ' + ja.quantidade + ' unidades', 'sucesso')
+    return
+  }
   const epi = estoque.find(e => e['CÓD.'] === cod); if (!epi) return
   itensEpiSel.push({ cod, descricao: epi['DESCRIÇÃO DO EPI'], ca: epi['Nº CA'], quantidade: 1 })
   renderItensEpi(); atualizarBtnEpi(); fecharBuscaEpi()
@@ -1769,7 +1778,11 @@ function atualizarBtnEpi() {
   const btn = document.getElementById('btn-enviar-epi')
   const lbl = document.getElementById('btn-epi-label')
   const n   = itensEpiSel.length
-  if (n > 0) lbl.textContent = 'Gerar recibo e enviar (' + n + ' item' + (n > 1 ? 's' : '') + ')'
+  // O botão mostra as UNIDADES, não só os itens: é a última chance de ver
+  // "3 un" antes de gerar um recibo com quantidade errada.
+  const un  = itensEpiSel.reduce((s, i) => s + (Number(i.quantidade) || 1), 0)
+  if (n > 0) lbl.textContent = 'Gerar recibo e enviar (' + n + ' item' + (n > 1 ? 's' : '') +
+    (un > n ? ' · ' + un + ' unidades' : '') + ')'
   else lbl.textContent = 'Gerar recibo e enviar'
   btn.disabled = !funcEpiSelecionado || n === 0
 }
@@ -4793,7 +4806,7 @@ const ETAPA_IA = {
 // VERSÃO IMPLANTADA, que é um retrato do código, não o código atual. Sem
 // aviso, o usuário conserta, recarrega, vê o mesmo defeito e conclui que o
 // conserto não funcionou — quando na verdade ele nunca entrou no ar.
-const VERSAO_BACKEND_ESPERADA = '20260901'
+const VERSAO_BACKEND_ESPERADA = '20260902'
 
 function avisoServidorAntigo(versao) {
   if (!versao || String(versao) >= VERSAO_BACKEND_ESPERADA) return ''
