@@ -77,6 +77,8 @@ function doPost(e) {
       case 'atualizar_funcionario':         return respOk(atualizarFuncionario(body.dados, usuario))
       // Idempotente: cria só as pastas que faltam e preenche o LINK_DRIVE.
       case 'criar_pastas_drive':          return respOk(criarTodasPastas())
+      // Só leitura: diz quais abas o app usa, quais sobram e quais faltam.
+      case 'conferir_abas':               return respOk(conferirAbas())
       case 'listar_exames':               return respOk(listarExames())
       case 'listar_epi_estoque':          return respOk(listarEpiEstoque())
       case 'listar_epi_entregas':         return respOk(listarEpiEntregas())
@@ -152,7 +154,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260902'
+var VERSAO_BACKEND = '20260903'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -1076,6 +1078,36 @@ function criarTodasPastas() {
     (motivo ? ' Primeiro erro: ' + motivo : '')
   logAcao('SISTEMA', 'CRIAR_PASTAS', msg)
   return msg
+}
+
+// A lista OFICIAL das abas que o app usa — tirada do próprio código, não
+// de memória. É contra ela que a limpeza da planilha se decide.
+function abasDoSistema() {
+  return [
+    CONFIG.ABAS.FUNCIONARIOS, CONFIG.ABAS.EXAMES_CONFIG, CONFIG.ABAS.EXAMES,
+    CONFIG.ABAS.EPI_ESTOQUE, CONFIG.ABAS.EPI_ENTREGAS, CONFIG.ABAS.FOLHA,
+    CONFIG.ABAS.ENCARGOS, CONFIG.ABAS.LOG,
+    ABA_COMISSOES, ABA_ADIANTAMENTOS, ABA_AUTORIZACOES, ABA_PAGAMENTOS, ABA_FERIAS,
+  ]
+}
+
+// Só leitura, de propósito: apagar aba é decisão de gente, com backup
+// feito. O app diz O QUE pode sair; a tesoura fica na mão do usuário.
+function conferirAbas() {
+  var ss = SpreadsheetApp.openById(CONFIG.SHEET_ID)
+  var usadas = abasDoSistema()
+  var eUsada = {}
+  usadas.forEach(function (n) { eUsada[n] = true })
+  var existentes = ss.getSheets().map(function (s) {
+    return { nome: s.getName(), linhas: Math.max(s.getLastRow() - 1, 0) }
+  })
+  var nomes = existentes.map(function (s) { return s.nome })
+  return {
+    total: existentes.length,
+    em_uso: existentes.filter(function (s) { return eUsada[s.nome] }),
+    extras: existentes.filter(function (s) { return !eUsada[s.nome] }),
+    faltando: usadas.filter(function (n) { return nomes.indexOf(n) < 0 }),
+  }
 }
 
 function processarPaginaFolha(dados, usuario) {

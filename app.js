@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260902'
+const APP_VERSION = '20260903'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -1140,6 +1140,40 @@ async function criarPastasDrive() {
   esconderLoading()
   if (!res || !res.ok) return toast('❌ ' + ((res && res.erro) || 'Erro'), 'erro')
   alert('📁 ' + res.data)
+}
+
+// Diz o que a planilha tem a mais (pode sair), a menos (problema!) e em
+// uso. Só leitura — apagar aba é decisão de gente, com backup feito.
+async function conferirAbas() {
+  const el = document.getElementById('diag-abas')
+  if (el) el.innerHTML = '<div class="af-nota">Conferindo a planilha…</div>'
+  const res = await chamarGAS({ acao: 'conferir_abas' })
+  if (!res || !res.ok) {
+    if (el) el.innerHTML = `<div class="af-nota">Não consegui conferir: ${esc((res && res.erro) || 'sem resposta')}</div>`
+    return
+  }
+  const d = res.data
+  const linha = (icone, cor, nome, extra) => `
+    <div style="display:flex;gap:8px;align-items:center;font-size:12px;padding:4px 0;border-bottom:0.5px solid var(--border)">
+      <i class="ti ti-${icone}" style="color:${cor};font-size:14px"></i>
+      <span style="flex:1">${esc(nome)}</span>
+      <span style="color:var(--text-hint);font-size:10.5px">${extra}</span>
+    </div>`
+  let html = `<div class="af-nota">A planilha tem <strong>${d.total}</strong> aba(s); o app usa <strong>${d.em_uso.length}</strong>.</div>`
+  if (d.faltando.length) {
+    html += `<div class="cst-aviso"><p><strong>⚠️ Faltando (o app precisa delas):</strong> ${d.faltando.map(esc).join(', ')}</p></div>`
+  }
+  if (d.extras.length) {
+    html += `<div style="font-size:11px;font-weight:700;color:var(--text-secondary);margin:8px 0 2px">
+      Fora do sistema — podem ser removidas ou movidas para outra planilha
+      <em style="font-weight:400">(faça uma cópia da planilha antes: Arquivo → Fazer uma cópia)</em></div>`
+    html += d.extras.map(s => linha('trash', 'var(--amber-text)', s.nome, s.linhas + ' linha(s)')).join('')
+  } else {
+    html += `<div class="af-nota">Nenhuma aba sobrando — a planilha está limpa. 🎉</div>`
+  }
+  html += `<div style="font-size:11px;font-weight:700;color:var(--text-secondary);margin:10px 0 2px">Em uso pelo app — não renomear nem apagar</div>`
+  html += d.em_uso.map(s => linha('check', 'var(--verde-text)', s.nome, s.linhas + ' linha(s)')).join('')
+  el.innerHTML = html
 }
 
 async function carregarErrosBackend() {
@@ -4806,7 +4840,7 @@ const ETAPA_IA = {
 // VERSÃO IMPLANTADA, que é um retrato do código, não o código atual. Sem
 // aviso, o usuário conserta, recarrega, vê o mesmo defeito e conclui que o
 // conserto não funcionou — quando na verdade ele nunca entrou no ar.
-const VERSAO_BACKEND_ESPERADA = '20260902'
+const VERSAO_BACKEND_ESPERADA = '20260903'
 
 function avisoServidorAntigo(versao) {
   if (!versao || String(versao) >= VERSAO_BACKEND_ESPERADA) return ''
