@@ -152,7 +152,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260831'
+var VERSAO_BACKEND = '20260901'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -752,103 +752,108 @@ function htmlReciboEpi(func, itens, motivo, opcoes) {
   var hoje = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy')
   var lista = itens || []
 
+  // IMPORTANTE: o conversor de PDF do Apps Script NÃO entende flexbox nem
+  // vários recursos modernos — um layout que fica bonito no navegador sai
+  // desmontado no PDF real. Aqui é tudo tabela, borda e cor sólida, que
+  // renderizam igual nos dois. Não reintroduzir display:flex neste HTML.
+  var VERDE = '#1A5C2A', VERDE_CLARO = '#EAF3DE', CINZA = '#6B7280'
+
   var totalUnidades = 0
   var linhas = lista.map(function (item, i) {
     var qtd = Number(item.quantidade) || 0
     totalUnidades += qtd
-    return '<tr' + (i % 2 ? ' class="zebra"' : '') + '>' +
-      '<td class="cod">' + e(item.cod) + '</td>' +
-      '<td>' + e(item.descricao) + '</td>' +
-      '<td class="centro">' + (e(item.ca) || '&mdash;') + '</td>' +
-      '<td class="centro">' + e(item.quantidade) + '</td></tr>'
+    var bg = i % 2 ? ' bgcolor="#F4F6F4"' : ''
+    return '<tr' + bg + '>' +
+      '<td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;white-space:nowrap">' + e(item.cod) + '</td>' +
+      '<td style="padding:6px 8px;border-bottom:1px solid #E5E7EB">' + e(item.descricao) + '</td>' +
+      '<td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;text-align:center">' + (e(item.ca) || '&mdash;') + '</td>' +
+      '<td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;text-align:center">' + e(item.quantidade) + '</td></tr>'
   }).join('')
 
   // Identificação completa: um recibo de NR-6 precisa dizer QUEM recebeu
   // e DE QUEM — sem CPF e empregador o documento vale pouco numa fiscalização.
-  var dado = function (rot, val) {
-    return '<td class="rot">' + rot + '</td><td class="val">' + (e(val) || '&mdash;') + '</td>'
+  var rot = 'style="padding:4px 6px;color:' + CINZA + ';font-weight:bold;width:90px;white-space:nowrap"'
+  var val = 'style="padding:4px 6px"'
+  var dado = function (nome, v) {
+    return '<td ' + rot + '>' + nome + '</td><td ' + val + '>' + (e(v) || '&mdash;') + '</td>'
   }
   var empregador = typeof rotuloEmpregador === 'function'
     ? rotuloEmpregador(func['EMPREGADOR']) : String(func['EMPREGADOR'] || '')
 
-  var blocoAssinatura = o.assinaturaBase64
-    ? '<div class="sig-img"><img src="data:image/png;base64,' + o.assinaturaBase64 + '" alt="Assinatura"></div>'
-    : '<div class="sig-img"></div>'
+  var imgAssinatura = o.assinaturaBase64
+    ? '<img src="data:image/png;base64,' + o.assinaturaBase64 + '" alt="Assinatura" style="max-height:60px;max-width:280px">'
+    : '&nbsp;'
   var carimbo = o.assinaturaBase64
-    ? '<div class="carimbo">Assinado digitalmente em ' +
+    ? '<div style="font-size:8px;color:#2E7D32;margin-top:5px;font-style:italic">Assinado digitalmente em ' +
       Utilities.formatDate(new Date(), 'America/Sao_Paulo', "dd/MM/yyyy 'às' HH:mm") +
       ' — Sistema SST Fazenda Água Viva</div>'
     : ''
 
+  var titulo = function (t) {
+    return '<div style="color:' + VERDE + ';font-size:11px;font-weight:bold;text-transform:uppercase;' +
+      'border-bottom:2px solid ' + VERDE + ';padding-bottom:3px;margin:18px 0 6px">' + t + '</div>'
+  }
+
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' +
     'body{font-family:Arial,Helvetica,sans-serif;font-size:11px;margin:26px 30px;color:#1F2937}' +
-    '.header{background:#1A5C2A;color:#fff;border-radius:8px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center}' +
-    '.header h1{margin:0;font-size:17px;letter-spacing:.02em}' +
-    '.header .sub{margin:3px 0 0;font-size:9px;opacity:.85}' +
-    '.header .doc{text-align:right}' +
-    '.header .doc strong{display:block;font-size:12px}' +
-    '.header .doc span{font-size:9px;opacity:.85}' +
-    'h2{color:#1A5C2A;font-size:11px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1.5px solid #1A5C2A;padding-bottom:3px;margin:18px 0 6px}' +
-    'table{width:100%;border-collapse:collapse}' +
-    '.ident td{padding:4px 6px;font-size:10.5px;vertical-align:top}' +
-    '.ident .rot{color:#6B7280;font-weight:bold;width:88px;white-space:nowrap}' +
-    '.ident .val{width:auto}' +
-    '.itens th{background:#1A5C2A;color:#fff;padding:6px 8px;font-size:9.5px;text-align:left;text-transform:uppercase;letter-spacing:.04em}' +
-    '.itens td{padding:5px 8px;border-bottom:1px solid #E5E7EB;font-size:10.5px}' +
-    '.itens .zebra td{background:#F4F6F4}' +
-    '.itens .centro{text-align:center}' +
-    '.itens .cod{white-space:nowrap}' +
-    '.itens tfoot td{border-bottom:none;border-top:1.5px solid #1A5C2A;font-weight:bold;font-size:10px;color:#1A5C2A}' +
-    '.termo{background:#F0F9F0;border:1px solid #C8E6C9;border-radius:8px;padding:11px 14px;margin-top:14px;font-size:9.8px;line-height:1.55}' +
-    '.termo strong{color:#1A5C2A}' +
-    '.termo ol{margin:6px 0 0;padding-left:18px}' +
-    '.termo li{margin-bottom:3px}' +
-    '.assinaturas{display:flex;justify-content:center;margin-top:44px}' +
-    '.assinatura{width:340px;text-align:center}' +
-    '.sig-img{height:64px;display:flex;align-items:flex-end;justify-content:center}' +
-    '.sig-img img{max-height:60px;max-width:280px;object-fit:contain;display:block}' +
-    '.linha-ass{border-top:1.5px solid #374151;margin-bottom:5px}' +
-    '.assinatura strong{font-size:10.5px}' +
-    '.assinatura .papel{font-size:9px;color:#6B7280}' +
-    '.carimbo{font-size:8px;color:#2E7D32;margin-top:5px;font-style:italic}' +
-    '.rodape{margin-top:26px;font-size:8px;color:#9CA3AF;text-align:center;border-top:1px solid #E5E7EB;padding-top:8px}' +
+    'table{border-collapse:collapse;width:100%}' +
     '</style></head><body>' +
 
-    '<div class="header"><div><h1>Fazenda Água Viva</h1>' +
-    '<p class="sub">Sistema de Gestão SST — Segurança e Saúde no Trabalho</p></div>' +
-    '<div class="doc"><strong>RECIBO DE ENTREGA DE EPI</strong>' +
-    '<span>NR-6 &middot; ' + hoje + '</span></div></div>' +
+    // Cabeçalho: uma tabela verde, nome à esquerda, documento à direita.
+    '<table bgcolor="' + VERDE + '"><tr>' +
+    '<td style="padding:14px 18px;color:#ffffff">' +
+    '<div style="font-size:17px;font-weight:bold">Fazenda Água Viva</div>' +
+    '<div style="font-size:9px;color:#D8E8D8;margin-top:3px">Sistema de Gestão SST — Segurança e Saúde no Trabalho</div></td>' +
+    '<td style="padding:14px 18px;color:#ffffff;text-align:right;vertical-align:middle">' +
+    '<div style="font-size:12px;font-weight:bold">RECIBO DE ENTREGA DE EPI</div>' +
+    '<div style="font-size:9px;color:#D8E8D8;margin-top:3px">NR-6 &middot; ' + hoje + '</div></td>' +
+    '</tr></table>' +
 
-    '<h2>Identificação</h2>' +
-    '<table class="ident"><tr>' +
+    titulo('Identificação') +
+    '<table style="font-size:10.5px"><tr>' +
     dado('Funcionário', func['NOME_COMPLETO']) + dado('CPF', func['CPF']) + '</tr><tr>' +
     dado('Função', func['FUNCAO']) + dado('Unidade', func['UNIDADE']) + '</tr><tr>' +
     dado('Empregador', empregador) + dado('Data', hoje) + '</tr><tr>' +
-    '<td class="rot">Motivo</td><td class="val" colspan="3">' + (e(motivo) || '&mdash;') + '</td></tr></table>' +
+    '<td ' + rot + '>Motivo</td><td colspan="3" ' + val + '>' + (e(motivo) || '&mdash;') + '</td></tr></table>' +
 
-    '<h2>Equipamentos entregues</h2>' +
-    '<table class="itens"><thead><tr><th>Código</th><th>Descrição do EPI</th>' +
-    '<th style="text-align:center">CA</th><th style="text-align:center">Qtd.</th></tr></thead>' +
-    '<tbody>' + linhas + '</tbody>' +
-    '<tfoot><tr><td colspan="3">' + lista.length + ' item(ns)</td>' +
-    '<td class="centro">' + totalUnidades + '</td></tr></tfoot></table>' +
+    titulo('Equipamentos entregues') +
+    '<table style="font-size:10.5px">' +
+    '<tr bgcolor="' + VERDE + '">' +
+    '<th style="padding:6px 8px;color:#ffffff;font-size:9.5px;text-align:left">CÓDIGO</th>' +
+    '<th style="padding:6px 8px;color:#ffffff;font-size:9.5px;text-align:left">DESCRIÇÃO DO EPI</th>' +
+    '<th style="padding:6px 8px;color:#ffffff;font-size:9.5px;text-align:center">CA</th>' +
+    '<th style="padding:6px 8px;color:#ffffff;font-size:9.5px;text-align:center">QTD.</th></tr>' +
+    linhas +
+    '<tr><td colspan="3" style="padding:6px 8px;border-top:2px solid ' + VERDE + ';font-weight:bold;color:' + VERDE + ';font-size:10px">' +
+    lista.length + ' item(ns)</td>' +
+    '<td style="padding:6px 8px;border-top:2px solid ' + VERDE + ';font-weight:bold;color:' + VERDE + ';font-size:10px;text-align:center">' +
+    totalUnidades + '</td></tr></table>' +
 
-    '<div class="termo"><strong>DECLARAÇÃO DO FUNCIONÁRIO — NR-6</strong>' +
-    '<ol>' +
-    '<li>Recebi <strong>gratuitamente</strong> os equipamentos de proteção individual listados acima, em perfeitas condições de uso e dentro do prazo de validade do CA.</li>' +
-    '<li>Fui orientado sobre o uso correto, a guarda e a conservação de cada equipamento.</li>' +
-    '<li>Comprometo-me a usá-los apenas para a finalidade a que se destinam, durante todo o trabalho.</li>' +
-    '<li>Comunicarei imediatamente qualquer dano, extravio ou necessidade de substituição.</li>' +
+    // Termo da NR-6: caixa verde-clara feita de tabela, itens numerados.
+    '<table style="margin-top:14px"><tr><td bgcolor="' + VERDE_CLARO + '" ' +
+    'style="border:1px solid #C8E6C9;padding:11px 14px;font-size:9.8px;line-height:1.55">' +
+    '<strong style="color:' + VERDE + '">DECLARAÇÃO DO FUNCIONÁRIO — NR-6</strong>' +
+    '<ol style="margin:6px 0 0;padding-left:18px">' +
+    '<li style="margin-bottom:3px">Recebi <strong>gratuitamente</strong> os equipamentos de proteção individual listados acima, em perfeitas condições de uso e dentro do prazo de validade do CA.</li>' +
+    '<li style="margin-bottom:3px">Fui orientado sobre o uso correto, a guarda e a conservação de cada equipamento.</li>' +
+    '<li style="margin-bottom:3px">Comprometo-me a usá-los apenas para a finalidade a que se destinam, durante todo o trabalho.</li>' +
+    '<li style="margin-bottom:3px">Comunicarei imediatamente qualquer dano, extravio ou necessidade de substituição.</li>' +
     '<li>Devolverei o equipamento substituído e, no desligamento, os que estiverem em meu poder.</li>' +
-    '</ol></div>' +
+    '</ol></td></tr></table>' +
 
-    '<div class="assinaturas">' +
-    '<div class="assinatura">' + blocoAssinatura + '<div class="linha-ass"></div>' +
-    '<strong>' + e(func['NOME_COMPLETO']) + '</strong>' +
-    '<div class="papel">Assinatura do funcionário</div>' + carimbo + '</div>' +
-    '</div>' +
+    // Assinatura centralizada por colunas de tabela (nada de flex).
+    '<table style="margin-top:44px"><tr>' +
+    '<td style="width:25%">&nbsp;</td>' +
+    '<td style="text-align:center">' +
+    '<div style="height:64px;vertical-align:bottom">' + imgAssinatura + '</div>' +
+    '<div style="border-top:2px solid #374151;margin-bottom:5px">&nbsp;</div>' +
+    '<div style="font-size:10.5px;font-weight:bold">' + e(func['NOME_COMPLETO']) + '</div>' +
+    '<div style="font-size:9px;color:' + CINZA + '">Assinatura do funcionário</div>' + carimbo + '</td>' +
+    '<td style="width:25%">&nbsp;</td>' +
+    '</tr></table>' +
 
-    '<div class="rodape">Documento gerado em ' + hoje +
+    '<div style="margin-top:26px;font-size:8px;color:#9CA3AF;text-align:center;' +
+    'border-top:1px solid #E5E7EB;padding-top:8px">Documento gerado em ' + hoje +
     ' pelo Sistema SST — Fazenda Água Viva &middot; Recibo de entrega de EPI conforme NR-6</div>' +
     '</body></html>'
 }
