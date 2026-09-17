@@ -10,11 +10,11 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
-<link rel="stylesheet" href="style.css?v=20260902">
+<link rel="stylesheet" href="style.css?v=20260903">
 <script src="https://apis.google.com/js/api.js"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
-<meta name="app-version" content="20260902">
+<meta name="app-version" content="20260903">
 <title>SST — Fazenda Água Viva</title>
 </head>
 <body>
@@ -561,6 +561,10 @@
         <button onclick="criarPastasDrive()" class="btn-secundario w-full" style="margin-top:8px">
           <i class="ti ti-folder-plus" aria-hidden="true"></i> Criar pastas que faltam no Drive
         </button>
+        <button onclick="conferirAbas()" class="btn-secundario w-full" style="margin-top:8px">
+          <i class="ti ti-table" aria-hidden="true"></i> Conferir abas da planilha
+        </button>
+        <div id="diag-abas" style="margin-top:8px"></div>
         <div id="diag-conexao" style="display:none;margin-top:8px;font-size:12px;text-align:center"></div>
       </div>
       <div class="card">
@@ -642,7 +646,7 @@
   </nav>
 </div>
 
-<script src="app.js?v=20260902"></script>
+<script src="app.js?v=20260903"></script>
 <script>
   // Registra o Service Worker (necessário para Web Share Target e cache offline)
   if ('serviceWorker' in navigator) {
