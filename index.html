@@ -10,11 +10,11 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
-<link rel="stylesheet" href="style.css?v=20260903">
+<link rel="stylesheet" href="style.css?v=20260904">
 <script src="https://apis.google.com/js/api.js"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
-<meta name="app-version" content="20260903">
+<meta name="app-version" content="20260904">
 <title>SST — Fazenda Água Viva</title>
 </head>
 <body>
@@ -352,14 +352,15 @@
       <div class="card mb-3" id="card-ponto-junto">
         <div class="card-titulo"><i class="ti ti-clock-hour-4" aria-hidden="true"></i> Folha de ponto <span style="font-weight:400;color:var(--text-hint)">— opcional</span></div>
         <p style="font-size:11px;color:var(--text-secondary);margin:-4px 0 8px">
-          Suba também o PDF do ponto e o app junta cada funcionário num documento
-          só — <strong>1 assinatura em vez de 2</strong>. O pareamento é pelo
-          funcionário, então a ordem das páginas não precisa bater.
+          Suba o(s) PDF(s) do ponto — <strong>pode escolher vários de uma vez</strong>
+          (um por funcionário, como o Secullum exporta) ou um só com todos — e o app
+          junta cada funcionário num documento só: <strong>1 assinatura em vez de 2</strong>.
+          O pareamento é pelo funcionário, então a ordem das páginas não precisa bater.
         </p>
         <label style="display:block">
-          <input type="file" id="input-pdf-ponto" accept="application/pdf" style="display:none">
+          <input type="file" id="input-pdf-ponto" accept="application/pdf" multiple style="display:none">
           <div class="btn-primario w-full" style="font-size:12px;background:var(--surface);color:var(--text-primary);border:0.5px solid var(--border)">
-            <i class="ti ti-upload" aria-hidden="true"></i> Upload do ponto
+            <i class="ti ti-upload" aria-hidden="true"></i> Upload do ponto (1 ou vários PDFs)
           </div>
         </label>
         <div id="ponto-selecionado" style="display:none;margin-top:8px;font-size:11px;color:var(--verde-text);font-weight:600;padding:6px 10px;background:var(--verde-claro);border-radius:var(--radius-sm)"></div>
@@ -646,7 +647,7 @@
   </nav>
 </div>
 
-<script src="app.js?v=20260903"></script>
+<script src="app.js?v=20260904"></script>
 <script>
   // Registra o Service Worker (necessário para Web Share Target e cache offline)
   if ('serviceWorker' in navigator) {

@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260903'
+const APP_VERSION = '20260904'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -145,17 +145,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const inputPonto = document.getElementById('input-pdf-ponto')
   if (inputPonto) inputPonto.addEventListener('change', async e => {
-    const file = e.target.files[0]
+    // O Secullum exporta UM PDF por funcionário — por isso o campo aceita
+    // vários. Com um arquivo só, antes parecia que deu certo e 6 de 7
+    // folhas ficavam sem ponto, em silêncio.
+    const files = [...e.target.files]
     const el = document.getElementById('ponto-selecionado')
     if (!el) return
-    if (!file) { el.style.display = 'none'; return }
+    if (!files.length) { el.style.display = 'none'; return }
     el.style.display = 'block'
     el.textContent = '⏳ Lendo o ponto...'
     try {
       const PDFLib = await carregarPdfLib()
-      const doc = await PDFLib.PDFDocument.load(await file.arrayBuffer())
+      let total = 0
+      for (const f of files) {
+        const doc = await PDFLib.PDFDocument.load(await f.arrayBuffer())
+        total += doc.getPageCount()
+      }
       el.innerHTML = '<i class="ti ti-paperclip" style="vertical-align:-2px"></i> '
-        + file.name + ' — ' + doc.getPageCount() + ' página(s) para juntar na folha'
+        + (files.length === 1 ? esc(files[0].name) : files.length + ' arquivos de ponto')
+        + ' — ' + total + ' página(s) para juntar na folha'
     } catch(err) { el.textContent = '❌ Erro: ' + err.message }
   })
 })
@@ -2422,7 +2430,7 @@ function base64ParaArrayBuffer(b64) {
 
 async function processarFracionamento() {
   const file        = document.getElementById('input-pdf-frac').files[0]
-  const filePonto   = document.getElementById('input-pdf-ponto')?.files[0] || null
+  const filesPonto  = [...(document.getElementById('input-pdf-ponto')?.files || [])]
   const competencia = document.getElementById('sel-comp-frac').value
   if (!file) return toast('❌ Selecione o PDF', 'erro')
   if (!competencia) return toast('❌ Selecione a competência antes de separar', 'erro')
@@ -2446,12 +2454,17 @@ async function processarFracionamento() {
 
     // O ponto vira uma lista à parte; o pareamento com a folha só acontece
     // depois da identificação, porque a chave é o FUNCIONÁRIO — a ordem das
-    // páginas nos dois PDFs não precisa bater.
-    paginasPonto = filePonto
-      ? (await separarPaginas(filePonto, PDFLib, 'o ponto')).map(p => ({
-          pagina: p.pagina, pdfBase64: p.pdfBase64, funcId:'', nome:'', usada:false,
-        }))
-      : []
+    // páginas nos dois PDFs não precisa bater. Vários arquivos de ponto
+    // (um por funcionário, como o Secullum exporta) entram todos na mesma
+    // fila, com numeração corrida.
+    paginasPonto = []
+    for (const fp of filesPonto) {
+      const pags = await separarPaginas(fp, PDFLib, 'o ponto')
+      pags.forEach(p => paginasPonto.push({
+        pagina: paginasPonto.length + 1, pdfBase64: p.pdfBase64,
+        funcId: '', nome: '', usada: false,
+      }))
+    }
 
     esconderLoading()
     btn.disabled = false; btn.innerHTML = '<i class="ti ti-scissors"></i> Separar PDF'
@@ -2759,6 +2772,21 @@ async function parearPonto() {
   const juntados = paginasFracionadas.filter(p => p.ponto).length
   if (juntados) toast(`📎 ${juntados} ponto(s) juntado(s) — ${juntados} assinatura(s) economizada(s)`, 'sucesso')
   if (orfaos.length) toast(`⚠️ ${orfaos.length} página(s) de ponto sem folha correspondente`, 'aviso')
+
+  // O contrário também não pode ser silêncio: folha identificada que ficou
+  // SEM ponto quase sempre significa arquivo que faltou no upload — foi
+  // assim que 6 de 7 funcionários saíram sem cartão sem ninguém notar.
+  // O toast some em 3 segundos; o resumo fica na tela.
+  const semPonto = paginasFracionadas.filter(p =>
+    !p.soPonto && p.status !== 'enviado' && p.funcId && !p.ponto).length
+  const resumoEl = document.getElementById('frac-resumo')
+  if (resumoEl) {
+    let base = (resumoEl.dataset.base || resumoEl.textContent)
+      .replace(/ · ⚠️ \d+ folha\(s\) sem cartão de ponto.*$/, '')
+    if (semPonto) base += ` · ⚠️ ${semPonto} folha(s) sem cartão de ponto — confira se faltou arquivo no upload`
+    resumoEl.dataset.base = base
+    resumoEl.textContent = base
+  }
 }
 
 function renderCardIdentificado(i, func, metodo) {
