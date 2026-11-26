@@ -76,30 +76,43 @@ pre {
   <p>Versão <strong>${versao}</strong> · ${linhas.toLocaleString('pt-BR')} linhas · ${kb} KB</p>
 </div>
 <div class="aviso">
-  Depois de colar no Apps Script, recoloque os seus valores:
-  <strong>linha 22</strong> (SHEET_ID da planilha), <strong>linha 23</strong>
-  (ID da pasta do Drive) e <strong>linha 31</strong> (senha do admin).
-  Aí publique: <strong>Implantar → Gerenciar implantações → ✏️ → Versão:
+  <strong>Primeira vez:</strong> use "Copiar inteiro", cole no Apps Script e
+  preencha seus valores — <strong>linha 22</strong> (SHEET_ID), <strong>linha
+  23</strong> (pasta do Drive), <strong>linha 31</strong> (senha).<br>
+  <strong>Atualização:</strong> use "Copiar só do ✂️ corte para baixo". No
+  editor, ache a linha <strong>✂️ CORTE AQUI</strong> (~linha 35), clique no
+  comecinho dela, aperte <strong>Ctrl+Shift+End</strong> (seleciona até o fim)
+  e cole — seus valores ficam intactos.<br>
+  Depois publique: <strong>Implantar → Gerenciar implantações → ✏️ → Versão:
   Nova versão → Implantar</strong>.
 </div>
-<button id="btn-copiar">📋 Copiar o Code.gs inteiro</button>
+<button id="btn-copiar">📋 Copiar o Code.gs inteiro (primeira vez)</button>
+<button id="btn-corte" style="background:var(--verde-claro);color:var(--verde);border:1px solid var(--borda)">✂️ Copiar só do corte para baixo (atualização — mantém seus endereços)</button>
 <pre id="codigo"></pre>
 <script id="fonte" type="application/json">${json}</script>
 <script>
 const CODIGO = JSON.parse(document.getElementById('fonte').textContent)
 document.getElementById('codigo').textContent = CODIGO
-document.getElementById('btn-copiar').addEventListener('click', async () => {
-  const btn = document.getElementById('btn-copiar')
-  try {
-    await navigator.clipboard.writeText(CODIGO)
-  } catch (e) {
-    const ta = document.createElement('textarea')
-    ta.value = CODIGO; document.body.appendChild(ta); ta.select()
-    document.execCommand('copy'); ta.remove()
-  }
-  btn.textContent = 'Copiado ✓'
-  setTimeout(() => { btn.textContent = '📋 Copiar o Code.gs inteiro' }, 2500)
-})
+function ligaBotao(id, pegaTexto, rotulo) {
+  const btn = document.getElementById(id)
+  btn.addEventListener('click', async () => {
+    const texto = pegaTexto()
+    try {
+      await navigator.clipboard.writeText(texto)
+    } catch (e) {
+      const ta = document.createElement('textarea')
+      ta.value = texto; document.body.appendChild(ta); ta.select()
+      document.execCommand('copy'); ta.remove()
+    }
+    btn.textContent = 'Copiado ✓'
+    setTimeout(() => { btn.textContent = rotulo }, 2500)
+  })
+}
+ligaBotao('btn-copiar', () => CODIGO, '📋 Copiar o Code.gs inteiro (primeira vez)')
+ligaBotao('btn-corte', () => {
+  const i = CODIGO.indexOf('// ═══════════════ ✂️ CORTE AQUI')
+  return i >= 0 ? CODIGO.slice(i) : CODIGO
+}, '✂️ Copiar só do corte para baixo (atualização — mantém seus endereços)')
 </script>
 </body>
 </html>

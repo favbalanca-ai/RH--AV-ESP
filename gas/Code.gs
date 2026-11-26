@@ -30,16 +30,25 @@ const CONFIG = {
     // Defina os usuários/senhas reais aqui (não comitar senhas reais).
     'admin': 'TROCAR_SENHA',
   },
-  ABAS: {
-    FUNCIONARIOS:   'FUNCIONARIOS',
-    EXAMES_CONFIG:  'EXAMES_POR_FUNCAO',
-    EXAMES:         'CONTROLE_EXAMES',
-    EPI_ESTOQUE:    'EPI_ESTOQUE',
-    EPI_ENTREGAS:   'EPI_ENTREGAS',
-    FOLHA:          'FOLHA_PAGAMENTO',
-    ENCARGOS:       'ENCARGOS',
-    LOG:            'LOG_ACOES',
-  }
+}
+
+// ═══════════════ ✂️ CORTE AQUI — SUBSTITUA DAQUI PARA BAIXO ═══════════════
+// Acima desta linha ficam SÓ os seus valores: planilha (linha 22), pasta do
+// Drive (linha 23) e senhas (linha 31). Numa atualização, você pode manter o
+// bloco de cima e colar o código novo DESTA linha até o fim do arquivo:
+// clique no comecinho desta linha, aperte Ctrl+Shift+End e cole por cima.
+// Tudo abaixo do corte é do sistema — nunca edite à mão.
+// ══════════════════════════════════════════════════════════════════════════
+
+CONFIG.ABAS = {
+  FUNCIONARIOS:   'FUNCIONARIOS',
+  EXAMES_CONFIG:  'EXAMES_POR_FUNCAO',
+  EXAMES:         'CONTROLE_EXAMES',
+  EPI_ESTOQUE:    'EPI_ESTOQUE',
+  EPI_ENTREGAS:   'EPI_ENTREGAS',
+  FOLHA:          'FOLHA_PAGAMENTO',
+  ENCARGOS:       'ENCARGOS',
+  LOG:            'LOG_ACOES',
 }
 
 function doPost(e) {
@@ -154,7 +163,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260905'
+var VERSAO_BACKEND = '20260906'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
