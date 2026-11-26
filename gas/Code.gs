@@ -154,7 +154,7 @@ function doGet(e) {
 
 // Sobe junto com o deploy. Aberta a URL /exec, diz qual versão está no ar —
 // é como se confere que o deploy realmente pegou, sem depender de sintoma.
-var VERSAO_BACKEND = '20260903'
+var VERSAO_BACKEND = '20260905'
 
 function verificarLogin(usuario, senha) {
   if (!usuario || !senha) return null
@@ -658,6 +658,14 @@ function nomeDocumentoAssinatura(tipo, competencia, nomeCompleto) {
 
   var nome = String(nomeCompleto || '').toUpperCase().trim()
   if (idxMes < 0) {
+    // 13º salário: nome limpo e determinístico por parcela. O servidor de
+    // arquivos não conhece o padrão e manda para revisão — que é o certo.
+    var t13 = semAcento(comp)
+    if (t13.indexOf('13') >= 0 && (t13.indexOf('PARCELA') >= 0 || t13.indexOf('SALARIO') >= 0)) {
+      var a13 = comp.match(/(\d{4})/)
+      var parc = /2\s*ª?\s*PARC|PARCELA\s*2/.test(t13) ? '2Parcela' : '1Parcela'
+      return prefixo + '_13Salario-' + parc + (a13 ? '-' + a13[1] : '') + '_' + nome
+    }
     // Sem competência reconhecida não dá para montar <Mês>-<Ano>. Manda sem,
     // que o servidor manda para revisar — melhor do que inventar uma data.
     return prefixo + '_' + (comp.replace(/[\/\\]/g, '-') || 'SEM-COMPETENCIA') + '_' + nome
@@ -3232,6 +3240,17 @@ function historicoFolha(dados) {
 // "Julho/2026" e "07/2026" viram um número ordenável (202607).
 function ordemCompetencia(comp) {
   var c = String(comp || '').trim()
+  // "13º Salário 1ª Parcela/2026": o 13º não é um mês do calendário, mas
+  // precisa de chave própria — e DIFERENTE por parcela, senão a trava de
+  // ordem duplicada confundiria a 2ª com a 1ª e bloquearia o pagamento.
+  // Meses 13 e 14 ordenam depois de Dezembro, que é quando acontecem.
+  var t13 = semAcento(c)
+  if (t13.indexOf('13') >= 0 &&
+      (t13.indexOf('PARCELA') >= 0 || t13.indexOf('SALARIO') >= 0 || t13.indexOf('DECIMO') >= 0)) {
+    var a13 = c.match(/(\d{4})/)
+    var parc2 = /2\s*ª?\s*PARC|PARCELA\s*2|SEGUNDA/.test(t13)
+    return { chave: (a13 ? parseInt(a13[1]) : 0) * 100 + (parc2 ? 14 : 13), ano: a13 ? a13[1] : '' }
+  }
   // "2026-07-01T07:00:00.000Z" — lê os números do texto, não pela data: o
   // ISO vem em UTC e converter para o fuso local mudaria o mês na virada.
   var iso = c.match(/^(\d{4})-(\d{2})-(\d{2})/)

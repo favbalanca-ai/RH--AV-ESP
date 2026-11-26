@@ -48,7 +48,7 @@ const EPI_SUGERIDOS_PERFIL = {
 // e o HTML velho — aí um card novo simplesmente não existia no DOM e a tela
 // ficava faltando pedaço, sem erro nenhum. Esta versão é comparada com a do
 // <meta> do HTML: divergiu, o app avisa em vez de parecer quebrado.
-const APP_VERSION = '20260904'
+const APP_VERSION = '20260905'
 
 function conferirVersaoHtml() {
   const meta = document.querySelector('meta[name="app-version"]')
@@ -2218,6 +2218,12 @@ function preencherMesesFracionar() {
   const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
   const ano = new Date().getFullYear(), mesAtual = new Date().getMonth()
   let opts = '<option value="">Selecione a competência...</option>'
+  // 13º: cada parcela é uma competência própria — o servidor dá chave
+  // diferente a cada uma, para a trava de ordem duplicada não confundir
+  // a 2ª com a 1ª. No comecinho do ano ainda se envia o 13º do ano anterior.
+  const ano13 = mesAtual < 3 ? ano - 1 : ano
+  opts += `<option value="13º Salário 1ª Parcela/${ano13}">13º Salário — 1ª Parcela/${ano13}</option>`
+  opts += `<option value="13º Salário 2ª Parcela/${ano13}">13º Salário — 2ª Parcela/${ano13}</option>`
   for (let m = mesAtual; m >= 0; m--) opts += `<option value="${meses[m]}/${ano}">${meses[m]}/${ano}</option>`
   for (let m = 11; m > mesAtual; m--) opts += `<option value="${meses[m]}/${ano-1}">${meses[m]}/${ano-1}</option>`
   sel.innerHTML = opts
@@ -2597,7 +2603,12 @@ async function identificarFuncionariosAutomatico() {
       compIA = d.competencia    || ''
 
       if (tipoIA && paginasFracionadas[i].tipoDoc !== 'Ferias') paginasFracionadas[i].tipoDoc = tipoIA
-      if (compIA) paginasFracionadas[i].competencia  = compIA
+      // A IA lê a competência do holerite, mas o 13º escolhido à mão VENCE:
+      // o holerite da parcela costuma vir carimbado com o mês do pagamento
+      // (Novembro/Dezembro), e a sobrescrita jogaria a parcela no mês errado.
+      if (compIA && !/13/.test(String(paginasFracionadas[i].competencia || ''))) {
+        paginasFracionadas[i].competencia = compIA
+      }
       if (d.valor_liquido !== null && d.valor_liquido !== undefined && d.valor_liquido !== '') {
         paginasFracionadas[i].valorLiquido = d.valor_liquido
         paginasFracionadas[i].valorOrigem  = 'ia'
@@ -4868,7 +4879,7 @@ const ETAPA_IA = {
 // VERSÃO IMPLANTADA, que é um retrato do código, não o código atual. Sem
 // aviso, o usuário conserta, recarrega, vê o mesmo defeito e conclui que o
 // conserto não funcionou — quando na verdade ele nunca entrou no ar.
-const VERSAO_BACKEND_ESPERADA = '20260903'
+const VERSAO_BACKEND_ESPERADA = '20260905'
 
 function avisoServidorAntigo(versao) {
   if (!versao || String(versao) >= VERSAO_BACKEND_ESPERADA) return ''
